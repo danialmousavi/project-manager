@@ -8,7 +8,9 @@ import {
   FolderKanban,
   LayoutDashboard,
   ListTodo,
+  Columns3,
 } from "lucide-react";
+
 import { usePathname } from "next/navigation";
 
 type Props = {
@@ -41,6 +43,12 @@ export default function ProjectWorkspaceNav({
       description: "برنامه‌ریزی",
       icon: CalendarRange,
     },
+    {
+      href: `${base}/kanban`,
+      label: "برد کانبان",
+      description: "مدیریت بصری وظایف",
+      icon: Columns3,
+    },
   ];
 
   return (
@@ -69,7 +77,7 @@ export default function ProjectWorkspaceNav({
 
         <nav
           aria-label="بخش‌های پروژه"
-          className="grid grid-cols-3 gap-1 p-2 sm:gap-2"
+          className="grid grid-cols-4 gap-1 p-2 sm:gap-2"
         >
           {tabs.map((tab) => {
             const active = pathname === tab.href;
@@ -80,7 +88,8 @@ export default function ProjectWorkspaceNav({
                 key={tab.href}
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
-                className={`group flex min-w-0 items-center justify-center gap-2 rounded-xl px-2 py-3 transition sm:justify-start sm:px-4 ${
+                title={tab.label}
+                className={`group flex min-w-0 flex-col items-center justify-center gap-1.5 rounded-xl px-1 py-3 text-center transition sm:flex-row sm:justify-start sm:gap-2 sm:px-4 sm:text-right ${
                   active
                     ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/15"
                     : "text-slate-500 hover:bg-slate-50 hover:text-emerald-600"
@@ -91,8 +100,8 @@ export default function ProjectWorkspaceNav({
                   className="shrink-0"
                 />
 
-                <div className="min-w-0 text-right">
-                  <span className="block truncate text-xs font-bold sm:text-sm">
+                <div className="min-w-0">
+                  <span className="block text-[10px] font-bold leading-5 sm:truncate sm:text-sm">
                     {tab.label}
                   </span>
 
