@@ -9,11 +9,18 @@ import {
   getSessionCookieName,
   sessionCookieOptions,
 } from "@/lib/auth";
+import {
+  recordLoginResult,
+  trustedClientIp,
+} from "@/lib/login-rate-limit";
 
 const loginSchema = z.object({
   email: z.email().trim().toLowerCase(),
   password: z.string().min(1).max(1024),
 });
+
+const DUMMY_PASSWORD_HASH =
+  "$argon2id$v=19$m=65536,t=3,p=4$w/g2rYHwgN6KOhxPbHf3FQ$IPtVxYlJWVrDlu03i3QgrPtCqVnSVySC1KAxqAj3llQ";
 
 export async function POST(request: NextRequest) {
   // Only accept requests from the same origin.
@@ -39,24 +46,39 @@ export async function POST(request: NextRequest) {
     }
 
     const { email, password } = parsed.data;
+    const ip = trustedClientIp(request);
 
     const user = await prisma.user.findUnique({
       where: { email },
     });
 
-    if (!user || !user.isActive) {
-      return NextResponse.json(
-        { message: "ایمیل یا رمز عبور اشتباه است" },
-        { status: 401 }
-      );
-    }
-
     const isValid = await argon2.verify(
-      user.passwordHash,
+      user?.isActive
+        ? user.passwordHash
+        : DUMMY_PASSWORD_HASH,
       password
     );
 
-    if (!isValid) {
+    const limit = await recordLoginResult({
+      email,
+      ip,
+      succeeded: Boolean(user?.isActive && isValid),
+    });
+
+    if (limit.limited) {
+      return NextResponse.json(
+        { message: "تلاش‌های ورود بیش از حد مجاز است. کمی بعد دوباره تلاش کنید." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(limit.retryAfterSeconds),
+            "Cache-Control": "no-store",
+          },
+        }
+      );
+    }
+
+    if (!user || !user.isActive || !isValid) {
       return NextResponse.json(
         { message: "ایمیل یا رمز عبور اشتباه است" },
         { status: 401 }
@@ -83,7 +105,8 @@ export async function POST(request: NextRequest) {
     );
 
     return response;
-  } catch {
+  } catch (error) {
+    console.error("Login failed:", error);
     return NextResponse.json(
       { message: "خطایی در ورود رخ داد" },
       { status: 500 }

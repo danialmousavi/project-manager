@@ -13,6 +13,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { calculateProjectProgress } from "@/lib/project-progress";
 import ProjectDetails from "@/components/projects/project-details";
 
 type Props = {
@@ -24,13 +25,6 @@ type TaskStatus =
   | "IN_PROGRESS"
   | "IN_REVIEW"
   | "DONE";
-
-const taskWeights: Record<TaskStatus, number> = {
-  TODO: 0,
-  IN_PROGRESS: 50,
-  IN_REVIEW: 90,
-  DONE: 100,
-};
 
 export default function ProjectDetailsPage({
   params,
@@ -101,7 +95,7 @@ async function Content({ params }: Props) {
 
       _count: {
         select: {
-          tasks: true,
+          tasks: { where: { deletedAt: null } },
           sprints: true,
         },
       },
@@ -129,6 +123,7 @@ async function Content({ params }: Props) {
     by: ["status"],
     where: {
       projectId: project.id,
+      deletedAt: null,
     },
     _count: {
       _all: true,
@@ -153,24 +148,12 @@ async function Content({ params }: Props) {
     }
   }
 
-  const totalTasks =
-    taskStats.TODO +
-    taskStats.IN_PROGRESS +
-    taskStats.IN_REVIEW +
-    taskStats.DONE;
-
-  const weightedProgress =
-    taskStats.TODO * taskWeights.TODO +
-    taskStats.IN_PROGRESS *
-      taskWeights.IN_PROGRESS +
-    taskStats.IN_REVIEW *
-      taskWeights.IN_REVIEW +
-    taskStats.DONE * taskWeights.DONE;
-
-  const automaticProgress =
-    totalTasks === 0
-      ? 0
-      : Math.round(weightedProgress / totalTasks);
+  const automaticProgress = calculateProjectProgress(
+    Object.entries(taskStats).map(([status, count]) => ({
+      status: status as TaskStatus,
+      count,
+    }))
+  );
 
   const serializedProject = {
     ...project,

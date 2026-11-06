@@ -261,7 +261,11 @@ export default function KanbanBoard({
   );
 
   useEffect(() => {
-    void loadBoard(false);
+    const timer = window.setTimeout(() => {
+      void loadBoard(false);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadBoard]);
 
   const assignees = useMemo(() => {

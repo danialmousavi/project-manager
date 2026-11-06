@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncProjectProgressCache } from "@/lib/project-progress";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import {
   encodeAssignmentEvent,
@@ -113,6 +114,7 @@ export async function GET(
   const tasks = await prisma.task.findMany({
     where: {
       projectId: id,
+      deletedAt: null,
       ...(access.canManage
         ? {}
         : { assigneeId: actor.id }),
@@ -277,6 +279,8 @@ export async function POST(
           },
         });
       }
+
+      await syncProjectProgressCache(tx, id);
 
       return created;
     });

@@ -261,7 +261,11 @@ export default function TaskListView({
   }, [loadTasks]);
 
   useEffect(() => {
-    void refresh();
+    const timer = window.setTimeout(() => {
+      void refresh();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [refresh]);
 
   const assignees = useMemo(() => {

@@ -20,7 +20,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  GripVertical,
   LoaderCircle,
   Plus,
   RefreshCw,
@@ -273,13 +272,9 @@ export default function SprintsManager({
     VISIBLE_DAYS - 1
   );
 
-  const dates = useMemo(
-    () =>
-      Array.from(
-        { length: VISIBLE_DAYS },
-        (_, index) => addDays(rangeStart, index)
-      ),
-    [rangeStart]
+  const dates = Array.from(
+    { length: VISIBLE_DAYS },
+    (_, index) => addDays(rangeStart, index)
   );
 
   const today = todayIso();
@@ -314,7 +309,11 @@ export default function SprintsManager({
   }, [projectId]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   async function api(

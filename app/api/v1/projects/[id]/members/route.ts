@@ -140,6 +140,7 @@ export async function PUT(
         const assignedTasks = await tx.task.count({
           where: {
             projectId: id,
+            deletedAt: null,
             assigneeId: {
               not: null,
               notIn: allIds,
