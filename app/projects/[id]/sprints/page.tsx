@@ -1,13 +1,11 @@
 
 import { Suspense } from "react";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { z } from "zod";
 import {
-  ArrowRight,
   CalendarRange,
   LoaderCircle,
 } from "lucide-react";
-import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -22,10 +20,7 @@ export default function ProjectSprintsPage({
   params,
 }: Props) {
   return (
-    <main
-      dir="rtl"
-      className="min-h-screen bg-[#f7f8fc] px-4 py-8 text-slate-900 sm:px-8"
-    >
+    <main className="px-4 py-7 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <Suspense fallback={<Loading />}>
           <SprintsContent params={params} />
@@ -38,9 +33,7 @@ export default function ProjectSprintsPage({
 async function SprintsContent({ params }: Props) {
   const actor = await getCurrentUser();
 
-  if (!actor) {
-    redirect("/login");
-  }
+  if (!actor) redirect("/login");
 
   const { id } = await params;
 
@@ -48,49 +41,44 @@ async function SprintsContent({ params }: Props) {
     notFound();
   }
 
-  const access = await getTaskProjectAccess(
-    actor,
-    id
-  );
+  const access = await getTaskProjectAccess(actor, id);
 
-  if (!access) {
-    notFound();
-  }
+  if (!access) notFound();
 
-  const project = await prisma.project.findUnique({
-    where: { id },
+  const project = await prisma.project.findFirst({
+    where: {
+      id,
+      archivedAt: null,
+    },
     select: {
       id: true,
       name: true,
     },
   });
 
-  if (!project) {
-    notFound();
-  }
+  if (!project) notFound();
 
   return (
-    <>
-      <Link
-        href={`/projects/${project.id}`}
-        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600"
-      >
-        <ArrowRight size={17} />
-        بازگشت به جزئیات پروژه
-      </Link>
+    <div className="space-y-6">
+      <header className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex items-center gap-4">
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+            <CalendarRange size={27} />
+          </div>
 
-      <header className="mb-8 flex items-center gap-4">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200">
-          <CalendarRange size={27} />
-        </div>
+          <div>
+            <p className="text-xs font-semibold text-emerald-600">
+              برنامه‌ریزی پروژه
+            </p>
 
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">
-            مدیریت اسپرینت‌ها
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            پروژه: {project.name}
-          </p>
+            <h1 className="mt-1 text-xl font-extrabold text-slate-900 sm:text-2xl">
+              اسپرینت‌های {project.name}
+            </h1>
+
+            <p className="mt-2 text-sm text-slate-500">
+              سازمان‌دهی تسک‌ها در دوره‌های زمانی مشخص
+            </p>
+          </div>
         </div>
       </header>
 
@@ -99,16 +87,16 @@ async function SprintsContent({ params }: Props) {
         canManage={access.canManage}
         canDelete={actor.role === "ADMIN"}
       />
-    </>
+    </div>
   );
 }
 
 function Loading() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-slate-500">
+    <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-slate-500">
       <LoaderCircle
-        size={24}
-        className="animate-spin text-indigo-600"
+        size={23}
+        className="animate-spin text-emerald-600"
       />
       در حال بارگذاری اسپرینت‌ها...
     </div>

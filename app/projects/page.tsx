@@ -16,7 +16,7 @@ export default function ProjectsPage() {
   return (
     <main
       dir="rtl"
-      className="min-h-screen bg-[#f7f8fc] px-4 py-8 text-slate-900 sm:px-8"
+      className="min-h-screen bg-[#f7fcf9] px-4 py-8 text-slate-900 sm:px-8"
     >
       <div className="mx-auto max-w-6xl">
         <Suspense fallback={<Loading />}>
@@ -76,14 +76,14 @@ async function ProjectsContent() {
     <>
       <Link
         href="/dashboard"
-        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600"
+        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-emerald-600"
       >
         <ArrowRight size={17} />
         بازگشت به داشبورد
       </Link>
 
       <div className="mb-8 flex items-center gap-4">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200">
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-200">
           <FolderKanban size={27} />
         </div>
 
@@ -113,7 +113,7 @@ function Loading() {
     <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-slate-500">
       <LoaderCircle
         size={24}
-        className="animate-spin text-indigo-600"
+        className="animate-spin text-emerald-600"
       />
       در حال دریافت پروژه‌ها...
     </div>

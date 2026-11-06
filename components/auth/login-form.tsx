@@ -82,7 +82,7 @@ export default function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="name@example.com"
-            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-12 pl-4 text-left text-sm outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-12 pl-4 text-left text-sm outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
           />
         </div>
       </div>
@@ -110,14 +110,14 @@ export default function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-12 pl-12 text-left text-sm outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-12 pl-12 text-left text-sm outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
           />
 
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             aria-label={showPassword ? "مخفی کردن رمز عبور" : "نمایش رمز عبور"}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600"
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
@@ -136,7 +136,7 @@ export default function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {loading ? (
           <>

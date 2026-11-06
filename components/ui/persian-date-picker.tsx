@@ -75,7 +75,7 @@ export default function PersianDatePicker({
       <div className="relative">
         <CalendarDays
           size={18}
-          className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 text-indigo-500"
+          className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 text-emerald-500"
         />
 
         <DatePicker
@@ -95,7 +95,7 @@ export default function PersianDatePicker({
           disabled={disabled}
           placeholder="انتخاب تاریخ..."
           containerClassName="w-full"
-          inputClass="h-12 w-full rounded-xl border border-slate-200 bg-white pr-10 pl-10 text-sm text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:bg-slate-100"
+          inputClass="h-12 w-full rounded-xl border border-slate-200 bg-white pr-10 pl-10 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:bg-slate-100"
         />
 
         {!disabled && value && (

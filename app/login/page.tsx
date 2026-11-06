@@ -14,11 +14,11 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8fc] lg:grid lg:grid-cols-2">
+    <main className="min-h-screen bg-[#f7fcf9] lg:grid lg:grid-cols-2">
       <div className="flex min-h-screen items-center justify-center px-5 py-12 sm:px-8">
         <div className="w-full max-w-[420px]">
           <div className="mb-10 flex items-center gap-3">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200">
+            <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-200">
               <Layers3 size={24} />
             </div>
             <div>
@@ -52,10 +52,10 @@ export default async function LoginPage() {
       </div>
 
       <div className="relative hidden overflow-hidden bg-[#25235b] p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute -left-32 top-1/4 size-96 rounded-full bg-indigo-500/30 blur-3xl" />
+        <div className="absolute -left-32 top-1/4 size-96 rounded-full bg-emerald-500/30 blur-3xl" />
         <div className="absolute -right-24 bottom-0 size-96 rounded-full bg-purple-500/30 blur-3xl" />
 
-        <div className="relative flex items-center gap-2 text-sm text-indigo-200">
+        <div className="relative flex items-center gap-2 text-sm text-emerald-200">
           <ShieldCheck size={20} />
           مدیریت ساده و منظم
         </div>
@@ -71,13 +71,13 @@ export default async function LoginPage() {
             در یک نگاه.
           </h2>
 
-          <p className="mt-6 text-lg leading-9 text-indigo-100/80">
+          <p className="mt-6 text-lg leading-9 text-emerald-100/80">
             پروژه بساز، وظایف رو مدیریت کن و پیشرفت
             کارها رو با یک تجربه ساده و حرفه‌ای دنبال کن.
           </p>
         </div>
 
-        <p className="relative text-sm text-indigo-200/70">
+        <p className="relative text-sm text-emerald-200/70">
           ساده‌تر برنامه‌ریزی کن، بهتر نتیجه بگیر.
         </p>
       </div>

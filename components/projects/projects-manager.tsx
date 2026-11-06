@@ -75,7 +75,7 @@ const priorityColors: Record<Priority, string> = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10";
 
 export default function ProjectsManager({
   initialProjects,
@@ -272,7 +272,7 @@ export default function ProjectsManager({
                 setError("");
                 setNotice("");
               }}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700"
             >
               {showForm ? (
                 <X size={18} />
@@ -289,7 +289,7 @@ export default function ProjectsManager({
         {showForm && canCreate && (
           <form
             onSubmit={createProject}
-            className="relative z-20 space-y-6 border-b border-indigo-100 bg-indigo-50/30 p-5 sm:p-6"
+            className="relative z-20 space-y-6 border-b border-emerald-100 bg-emerald-50/30 p-5 sm:p-6"
           >
             <div>
               <h3 className="text-lg font-bold text-slate-900">
@@ -391,7 +391,7 @@ export default function ProjectsManager({
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex h-11 items-center gap-2 rounded-xl bg-indigo-600 px-6 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-6 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
               >
                 {saving ? (
                   <LoaderCircle
@@ -472,10 +472,10 @@ export default function ProjectsManager({
                 return (
                   <article
                     key={project.id}
-                    className="rounded-2xl border border-slate-200 p-5 transition hover:border-indigo-200 hover:shadow-md"
+                    className="rounded-2xl border border-slate-200 p-5 transition hover:border-emerald-200 hover:shadow-md"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex size-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                      <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                         <FolderKanban size={22} />
                       </div>
 
@@ -522,7 +522,7 @@ export default function ProjectsManager({
                         <span className="text-slate-500">
                           پیشرفت
                         </span>
-                        <strong className="text-indigo-600">
+                        <strong className="text-emerald-600">
                           {project.progress.toLocaleString(
                             "fa-IR"
                           )}٪
@@ -531,7 +531,7 @@ export default function ProjectsManager({
 
                       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                         <div
-                          className="h-full rounded-full bg-indigo-600"
+                          className="h-full rounded-full bg-emerald-600"
                           style={{
                             width: `${Math.max(
                               0,
@@ -554,7 +554,7 @@ export default function ProjectsManager({
 
                       <Link
                         href={`/projects/${project.id}`}
-                        className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50"
+                        className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold text-emerald-600 hover:bg-emerald-50"
                       >
                         مشاهده جزئیات
                         <ChevronLeft size={16} />
@@ -582,7 +582,7 @@ function Stat({
 }) {
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex size-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+      <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
         {icon}
       </div>
       <div>

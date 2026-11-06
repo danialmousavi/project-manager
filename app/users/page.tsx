@@ -14,7 +14,7 @@ import UsersManager from "@/components/users/users-manager";
 
 export default function UsersPage() {
   return (
-    <main className="min-h-screen bg-[#f7f8fc] px-4 py-8 text-slate-900 sm:px-8">
+    <main className="min-h-screen bg-[#f7fcf9] px-4 py-8 text-slate-900 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <Suspense fallback={<UsersLoading />}>
           <UsersContent />
@@ -60,14 +60,14 @@ async function UsersContent() {
     <>
       <Link
         href="/dashboard"
-        className="mb-8 inline-flex items-center gap-2 text-sm text-slate-500 transition hover:text-indigo-600"
+        className="mb-8 inline-flex items-center gap-2 text-sm text-slate-500 transition hover:text-emerald-600"
       >
         <ArrowRight size={17} />
         بازگشت به داشبورد
       </Link>
 
       <div className="mb-8 flex flex-wrap items-center gap-4">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200">
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-200">
           <ShieldCheck size={27} />
         </div>
 
@@ -92,7 +92,7 @@ function UsersLoading() {
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
       <LoaderCircle
         size={32}
-        className="animate-spin text-indigo-600"
+        className="animate-spin text-emerald-600"
       />
 
       <p className="text-sm text-slate-500">

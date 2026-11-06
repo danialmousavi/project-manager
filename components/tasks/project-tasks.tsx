@@ -155,7 +155,7 @@ const priorityColors: Record<Priority, string> = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-60";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-60";
 
 function messageOf(error: unknown) {
   return error instanceof Error
@@ -516,7 +516,7 @@ export default function ProjectTasks({
           <h2 className="flex items-center gap-2 text-xl font-extrabold text-slate-900">
             <ClipboardList
               size={23}
-              className="text-indigo-600"
+              className="text-emerald-600"
             />
             مدیریت وظایف
           </h2>
@@ -533,7 +533,7 @@ export default function ProjectTasks({
               setError("");
               setCreating(true);
             }}
-            className="inline-flex h-11 items-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-semibold text-white hover:bg-indigo-700"
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700"
           >
             <Plus size={18} />
             وظیفه جدید
@@ -620,7 +620,7 @@ export default function ProjectTasks({
           <div className="flex justify-center py-14">
             <LoaderCircle
               size={25}
-              className="animate-spin text-indigo-600"
+              className="animate-spin text-emerald-600"
             />
           </div>
         ) : filteredTasks.length === 0 ? (
@@ -643,8 +643,8 @@ export default function ProjectTasks({
                 key={task.id}
                 className={`overflow-hidden rounded-2xl border transition ${
                   expanded
-                    ? "border-indigo-300 shadow-md"
-                    : "border-slate-200 hover:border-indigo-200"
+                    ? "border-emerald-300 shadow-md"
+                    : "border-slate-200 hover:border-emerald-200"
                 }`}
               >
                 <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -732,7 +732,7 @@ export default function ProjectTasks({
                         onClick={() =>
                           setEditingTask(task)
                         }
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 px-3 py-2 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-50"
                       >
                         <Pencil size={15} />
                         ویرایش
@@ -761,7 +761,7 @@ export default function ProjectTasks({
                       <div className="flex justify-center py-8">
                         <LoaderCircle
                           size={22}
-                          className="animate-spin text-indigo-600"
+                          className="animate-spin text-emerald-600"
                         />
                       </div>
                     ) : (
@@ -792,7 +792,7 @@ export default function ProjectTasks({
                               <h4 className="flex items-center gap-2 text-sm font-bold">
                                 <ArrowLeftRight
                                   size={17}
-                                  className="text-indigo-600"
+                                  className="text-emerald-600"
                                 />
                                 واگذاری سریع
                               </h4>
@@ -863,7 +863,7 @@ export default function ProjectTasks({
                                 onClick={() =>
                                   void saveAssignment()
                                 }
-                                className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                               >
                                 ثبت واگذاری
                               </button>
@@ -898,7 +898,7 @@ export default function ProjectTasks({
                           <h4 className="flex items-center gap-2 font-bold text-slate-900">
                             <MessageCircle
                               size={18}
-                              className="text-indigo-600"
+                              className="text-emerald-600"
                             />
                             گفتگوهای تسک
                           </h4>
@@ -961,7 +961,7 @@ export default function ProjectTasks({
                                 busy ||
                                 !commentText.trim()
                               }
-                              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                             >
                               <Send size={15} />
                               ثبت کامنت
@@ -1356,7 +1356,7 @@ function TaskFormModal({
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
             >
               {saving ? (
                 <LoaderCircle
@@ -1400,7 +1400,7 @@ function HistoryCard({
       </div>
 
       <div className="mt-2">
-        <span className="inline-flex rounded-lg bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700">
+        <span className="inline-flex rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
           {item.type === "ASSIGNMENT"
             ? "تغییر مسئول"
             : "ویرایش مشخصات"}
@@ -1437,7 +1437,7 @@ function HistoryCard({
                 )}
               </p>
 
-              <p className="mt-1 break-words text-xs leading-6 text-indigo-700">
+              <p className="mt-1 break-words text-xs leading-6 text-emerald-700">
                 جدید:{" "}
                 {getFieldValue(
                   change.field,
@@ -1469,7 +1469,7 @@ function MiniStat({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
-      <div className="flex size-10 items-center justify-center rounded-xl bg-white text-indigo-600">
+      <div className="flex size-10 items-center justify-center rounded-xl bg-white text-emerald-600">
         {icon}
       </div>
 

@@ -4,16 +4,24 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type FormEvent,
 } from "react";
+import Link from "next/link";
 import {
+  ArrowUpLeft,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   ChevronDown,
-  ClipboardList,
+  CircleDashed,
+  Clock3,
+  FolderPlus,
+  Layers3,
   LoaderCircle,
   Plus,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -60,9 +68,9 @@ type Props = {
   canDelete: boolean;
 };
 
-const sprintStatuses: Record<SprintStatus, string> = {
+const statuses: Record<SprintStatus, string> = {
   PLANNED: "برنامه‌ریزی‌شده",
-  ACTIVE: "فعال",
+  ACTIVE: "در حال اجرا",
   COMPLETED: "تکمیل‌شده",
   CANCELLED: "لغوشده",
 };
@@ -71,7 +79,7 @@ const taskStatuses: Record<TaskStatus, string> = {
   TODO: "برای انجام",
   IN_PROGRESS: "در حال انجام",
   IN_REVIEW: "در حال بررسی",
-  DONE: "انجام‌شده",
+  DONE: "تکمیل‌شده",
 };
 
 const statusColors: Record<SprintStatus, string> = {
@@ -82,9 +90,9 @@ const statusColors: Record<SprintStatus, string> = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10";
 
-function messageOf(error: unknown) {
+function errorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : "خطایی رخ داده است.";
@@ -101,27 +109,24 @@ export default function SprintsManager({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+
+  const [filter, setFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
 
   const [creating, setCreating] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(
-    null
-  );
-  const [deletingId, setDeletingId] = useState<string | null>(
-    null
-  );
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
-  const [startDate, setStartDate] = useState<string | null>(
-    null
-  );
-  const [endDate, setEndDate] = useState<string | null>(
-    null
-  );
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
 
+  const [taskSearch, setTaskSearch] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState("");
 
-  const load = useCallback(async () => {
+  const loadData = useCallback(async () => {
+    setLoading(true);
+
     try {
       const response = await fetch(
         `/api/v1/projects/${projectId}/sprints`,
@@ -139,15 +144,15 @@ export default function SprintsManager({
       setSprints(data.sprints ?? []);
       setTasks(data.tasks ?? []);
     } catch (err) {
-      setError(messageOf(err));
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
   }, [projectId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadData();
+  }, [loadData]);
 
   async function send(
     method: "POST" | "PATCH" | "DELETE",
@@ -157,8 +162,8 @@ export default function SprintsManager({
       `/api/v1/projects/${projectId}/sprints`,
       {
         method,
-        headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }
     );
@@ -166,7 +171,9 @@ export default function SprintsManager({
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || "عملیات ناموفق بود.");
+      throw new Error(
+        data.message || "عملیات ناموفق بود."
+      );
     }
 
     return data;
@@ -180,28 +187,27 @@ export default function SprintsManager({
     if (busy || !canManage) return;
 
     if (!startDate || !endDate) {
-      setError("هر دو تاریخ اسپرینت را انتخاب کنید.");
+      setError("تاریخ شروع و پایان را انتخاب کنید.");
       return;
     }
 
     if (startDate > endDate) {
-      setError("تاریخ پایان قبل از شروع است.");
+      setError("تاریخ پایان قبل از تاریخ شروع است.");
       return;
     }
 
     setBusy(true);
     setError("");
-    setNotice("");
 
     try {
-      const result = await send("POST", {
+      const data = await send("POST", {
         name,
         startDate,
         endDate,
       });
 
       setSprints((previous) => [
-        result.sprint,
+        data.sprint,
         ...previous,
       ]);
 
@@ -209,11 +215,9 @@ export default function SprintsManager({
       setStartDate(null);
       setEndDate(null);
       setCreating(false);
-
-      setExpandedId(result.sprint.id);
-      setNotice("اسپرینت جدید ساخته شد.");
+      setExpandedId(data.sprint.id);
     } catch (err) {
-      setError(messageOf(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -227,7 +231,6 @@ export default function SprintsManager({
 
     setBusy(true);
     setError("");
-    setNotice("");
 
     try {
       await send("PATCH", {
@@ -243,24 +246,20 @@ export default function SprintsManager({
             : sprint
         )
       );
-
-      setNotice("وضعیت اسپرینت تغییر کرد.");
     } catch (err) {
-      setError(messageOf(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
   }
 
-  async function assignTask(
-    sprintId: string,
-    taskId: string
-  ) {
-    if (!taskId || busy || !canManage) return;
+  async function addTask(sprintId: string) {
+    if (!selectedTaskId || busy || !canManage) return;
+
+    const taskId = selectedTaskId;
 
     setBusy(true);
     setError("");
-    setNotice("");
 
     try {
       await send("PATCH", {
@@ -278,9 +277,9 @@ export default function SprintsManager({
       );
 
       setSelectedTaskId("");
-      setNotice("تسک به اسپرینت اضافه شد.");
+      setTaskSearch("");
     } catch (err) {
-      setError(messageOf(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -294,7 +293,6 @@ export default function SprintsManager({
 
     setBusy(true);
     setError("");
-    setNotice("");
 
     try {
       await send("PATCH", {
@@ -310,10 +308,8 @@ export default function SprintsManager({
             : task
         )
       );
-
-      setNotice("تسک از اسپرینت خارج شد.");
     } catch (err) {
-      setError(messageOf(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -322,53 +318,94 @@ export default function SprintsManager({
   async function deleteSprint() {
     if (!deletingId || busy || !canDelete) return;
 
+    const id = deletingId;
+
     setBusy(true);
     setError("");
-    setNotice("");
 
     try {
       await send("DELETE", {
-        sprintId: deletingId,
+        sprintId: id,
       });
 
       setSprints((previous) =>
-        previous.filter((s) => s.id !== deletingId)
+        previous.filter((sprint) => sprint.id !== id)
       );
 
       setTasks((previous) =>
         previous.map((task) =>
-          task.sprintId === deletingId
+          task.sprintId === id
             ? { ...task, sprintId: null }
             : task
         )
       );
 
-      if (expandedId === deletingId) {
-        setExpandedId(null);
-      }
-
+      if (expandedId === id) setExpandedId(null);
       setDeletingId(null);
-      setNotice("اسپرینت حذف شد و تسک‌ها باقی ماندند.");
     } catch (err) {
-      setError(messageOf(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
   }
 
-  const availableTasks = tasks.filter(
-    (task) => task.sprintId === null
+  const visibleSprints = useMemo(
+    () =>
+      sprints.filter((sprint) => {
+        const matchesName = sprint.name
+          .toLocaleLowerCase()
+          .includes(search.trim().toLocaleLowerCase());
+
+        const matchesStatus =
+          filter === "ALL" ||
+          sprint.status === filter;
+
+        return matchesName && matchesStatus;
+      }),
+    [sprints, search, filter]
   );
 
+  const availableTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          task.sprintId === null &&
+          task.title
+            .toLocaleLowerCase()
+            .includes(
+              taskSearch.trim().toLocaleLowerCase()
+            )
+      ),
+    [tasks, taskSearch]
+  );
+
+  const activeCount = sprints.filter(
+    (sprint) => sprint.status === "ACTIVE"
+  ).length;
+
+  const finishedCount = sprints.filter(
+    (sprint) => sprint.status === "COMPLETED"
+  ).length;
+
+  function expandSprint(id: string) {
+    setExpandedId((current) =>
+      current === id ? null : id
+    );
+    setSelectedTaskId("");
+    setTaskSearch("");
+  }
+
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6">
+      {/* Page actions */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900">
-            اسپرینت‌های پروژه
+          <h2 className="text-lg font-extrabold text-slate-900">
+            برنامه اسپرینت‌ها
           </h2>
-          <p className="mt-2 text-sm text-slate-500">
-            مدیریت دوره‌های کاری و برنامه‌ریزی تسک‌ها
+
+          <p className="mt-1.5 text-sm text-slate-500">
+            دوره‌های کاری، تسک‌ها و میزان پیشرفت
           </p>
         </div>
 
@@ -379,7 +416,7 @@ export default function SprintsManager({
               setError("");
               setCreating(true);
             }}
-            className="inline-flex h-11 items-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-semibold text-white hover:bg-indigo-700"
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-bold text-white shadow-md shadow-emerald-600/15 transition hover:bg-emerald-700"
           >
             <Plus size={18} />
             اسپرینت جدید
@@ -387,76 +424,148 @@ export default function SprintsManager({
         )}
       </div>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700"
-        >
-          {error}
-        </p>
-      )}
-
-      {notice && (
-        <p
-          role="status"
-          className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700"
-        >
-          {notice}
-        </p>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="کل اسپرینت‌ها" value={sprints.length} />
+      {/* Stats */}
+      <div className="grid gap-3 sm:grid-cols-3">
         <Stat
-          label="فعال"
-          value={
-            sprints.filter((s) => s.status === "ACTIVE").length
-          }
+          label="تمام اسپرینت‌ها"
+          value={sprints.length}
+          icon={<Layers3 size={20} />}
+          color="emerald"
+        />
+        <Stat
+          label="در حال اجرا"
+          value={activeCount}
+          icon={<Clock3 size={20} />}
+          color="emerald"
         />
         <Stat
           label="تکمیل‌شده"
-          value={
-            sprints.filter((s) => s.status === "COMPLETED")
-              .length
-          }
+          value={finishedCount}
+          icon={<CheckCircle2 size={20} />}
+          color="emerald"
         />
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-16">
-          <LoaderCircle
-            size={26}
-            className="animate-spin text-indigo-600"
+      {error && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-700"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            aria-label="بستن پیام"
+            onClick={() => setError("")}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row">
+        <div className="relative flex-1">
+          <Search
+            size={17}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+
+          <input
+            type="search"
+            aria-label="جست‌وجوی اسپرینت"
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
+            placeholder="جست‌وجوی اسپرینت..."
+            className={`${inputClass} pr-10`}
           />
         </div>
-      ) : sprints.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-white py-16 text-center">
-          <CalendarDays
-            size={35}
-            className="mx-auto text-slate-300"
+
+        <select
+          aria-label="فیلتر وضعیت اسپرینت"
+          value={filter}
+          onChange={(event) =>
+            setFilter(event.target.value)
+          }
+          className={`${inputClass} sm:w-48`}
+        >
+          <option value="ALL">همه وضعیت‌ها</option>
+
+          {Object.entries(statuses).map(
+            ([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            )
+          )}
+        </select>
+      </div>
+
+      {/* Content */}
+      {loading ? (
+        <div className="flex min-h-60 items-center justify-center gap-3 rounded-3xl border border-slate-200 bg-white">
+          <LoaderCircle
+            size={24}
+            className="animate-spin text-emerald-600"
           />
-          <p className="mt-4 text-sm text-slate-500">
-            هنوز اسپرینتی ایجاد نشده است.
+          <span className="text-sm text-slate-500">
+            دریافت اسپرینت‌ها...
+          </span>
+        </div>
+      ) : visibleSprints.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
+          <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500">
+            <CalendarRange size={29} />
+          </div>
+
+          <h3 className="mt-5 font-bold text-slate-800">
+            {search || filter !== "ALL"
+              ? "اسپرینتی پیدا نشد"
+              : "هنوز اسپرینتی ندارید"}
+          </h3>
+
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-7 text-slate-500">
+            {search || filter !== "ALL"
+              ? "عبارت جست‌وجو یا فیلتر را تغییر دهید."
+              : "یک بازه کاری تعریف کنید و وظایف پروژه را به آن اختصاص دهید."}
           </p>
+
+          {canManage &&
+            !search &&
+            filter === "ALL" && (
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white"
+              >
+                <Plus size={17} />
+                ساخت اولین اسپرینت
+              </button>
+            )}
         </div>
       ) : (
-        <div className="space-y-4">
-          {sprints.map((sprint) => {
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          {visibleSprints.map((sprint) => {
             const sprintTasks = tasks.filter(
-              (task) => task.sprintId === sprint.id
+              (task) =>
+                task.sprintId === sprint.id
             );
 
-            const completed = sprintTasks.filter(
+            const done = sprintTasks.filter(
               (task) => task.status === "DONE"
             ).length;
 
-            const progress = sprintTasks.length
-              ? Math.round(
-                  (completed / sprintTasks.length) * 100
-                )
-              : 0;
+            const progress =
+              sprintTasks.length > 0
+                ? Math.round(
+                    (done / sprintTasks.length) * 100
+                  )
+                : 0;
 
-            const expanded = expandedId === sprint.id;
+            const expanded =
+              expandedId === sprint.id;
+
             const closed =
               sprint.status === "COMPLETED" ||
               sprint.status === "CANCELLED";
@@ -464,190 +573,276 @@ export default function SprintsManager({
             return (
               <article
                 key={sprint.id}
-                className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+                className={`overflow-hidden rounded-3xl border bg-white shadow-sm transition ${
+                  expanded
+                    ? "border-emerald-300 shadow-lg shadow-emerald-500/5 lg:col-span-2"
+                    : "border-slate-200 hover:border-emerald-200 hover:shadow-md"
+                }`}
               >
                 <div className="p-5 sm:p-6">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-3">
                     <button
                       type="button"
-                      className="flex min-w-0 items-center gap-3 text-right"
-                      onClick={() => {
-                        setExpandedId(
-                          expanded ? null : sprint.id
-                        );
-                        setSelectedTaskId("");
-                      }}
+                      onClick={() =>
+                        expandSprint(sprint.id)
+                      }
+                      aria-expanded={expanded}
+                      className="flex min-w-0 flex-1 items-start gap-3 text-right"
                     >
-                      <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                        <CalendarDays size={21} />
+                      <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                        <CalendarDays size={23} />
                       </div>
 
-                      <div>
-                        <h3 className="font-bold text-slate-900">
+                      <div className="min-w-0">
+                        <h3 className="break-words text-base font-extrabold text-slate-900">
                           {sprint.name}
                         </h3>
-                        <p className="mt-2 text-xs text-slate-500">
+
+                        <p className="mt-2 text-xs leading-6 text-slate-500">
                           {sprint.startDate
-                            ? isoToJalali(sprint.startDate)
+                            ? isoToJalali(
+                                sprint.startDate
+                              )
                             : "بدون تاریخ"}
-                          {" تا "}
+                          {" — "}
                           {sprint.endDate
-                            ? isoToJalali(sprint.endDate)
+                            ? isoToJalali(
+                                sprint.endDate
+                              )
                             : "بدون تاریخ"}
                         </p>
                       </div>
 
                       <ChevronDown
-                        size={17}
-                        className={`text-slate-400 transition ${
+                        size={18}
+                        className={`mr-auto mt-2 shrink-0 text-slate-400 transition ${
                           expanded ? "rotate-180" : ""
                         }`}
                       />
                     </button>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {canManage ? (
-                        <select
-                          aria-label={`وضعیت ${sprint.name}`}
-                          value={sprint.status}
-                          disabled={busy}
-                          onChange={(event) =>
-                            void changeStatus(
-                              sprint.id,
-                              event.target.value as SprintStatus
-                            )
-                          }
-                          className={`rounded-lg border-0 px-3 py-2 text-xs font-semibold outline-none ${statusColors[sprint.status]}`}
-                        >
-                          {Object.entries(sprintStatuses).map(
-                            ([value, label]) => (
-                              <option key={value} value={value}>
-                                {label}
-                              </option>
-                            )
-                          )}
-                        </select>
-                      ) : (
-                        <span
-                          className={`rounded-lg px-3 py-2 text-xs ${statusColors[sprint.status]}`}
-                        >
-                          {sprintStatuses[sprint.status]}
-                        </span>
-                      )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        title="حذف اسپرینت"
+                        aria-label={`حذف ${sprint.name}`}
+                        onClick={() =>
+                          setDeletingId(sprint.id)
+                        }
+                        className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    )}
+                  </div>
 
-                      {canDelete && (
-                        <button
-                          type="button"
-                          aria-label={`حذف ${sprint.name}`}
-                          onClick={() => setDeletingId(sprint.id)}
-                          className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                        >
-                          <Trash2 size={17} />
-                        </button>
-                      )}
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                    {canManage ? (
+                      <select
+                        aria-label={`وضعیت ${sprint.name}`}
+                        value={sprint.status}
+                        disabled={busy}
+                        onChange={(event) =>
+                          void changeStatus(
+                            sprint.id,
+                            event.target.value as SprintStatus
+                          )
+                        }
+                        className={`rounded-lg border-0 px-3 py-2 text-xs font-bold outline-none disabled:opacity-50 ${statusColors[sprint.status]}`}
+                      >
+                        {Object.entries(statuses).map(
+                          ([value, label]) => (
+                            <option
+                              key={value}
+                              value={value}
+                            >
+                              {label}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    ) : (
+                      <span
+                        className={`rounded-lg px-3 py-2 text-xs font-bold ${statusColors[sprint.status]}`}
+                      >
+                        {statuses[sprint.status]}
+                      </span>
+                    )}
+
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <CircleDashed size={15} />
+                      {sprintTasks.length.toLocaleString(
+                        "fa-IR"
+                      )}{" "}
+                      تسک
                     </div>
                   </div>
 
-                  <div className="mt-6">
-                    <div className="mb-2 flex justify-between text-xs text-slate-500">
-                      <span>
-                        {sprintTasks.length.toLocaleString("fa-IR")} وظیفه
-                        {" — "}
-                        {completed.toLocaleString("fa-IR")} تکمیل‌شده
-                      </span>
-                      <strong className="text-indigo-600">
-                        {progress.toLocaleString("fa-IR")}٪
+                  <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-slate-500">
+                          پیشرفت اسپرینت
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-400">
+                          {done.toLocaleString("fa-IR")} وظیفه
+                          تکمیل‌شده
+                        </p>
+                      </div>
+
+                      <strong className="text-2xl font-extrabold text-emerald-600">
+                        {progress.toLocaleString(
+                          "fa-IR"
+                        )}
+                        ٪
                       </strong>
                     </div>
 
-                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
                       <div
-                        className="h-full rounded-full bg-indigo-600 transition-all"
-                        style={{ width: `${progress}%` }}
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          progress === 100
+                            ? "bg-emerald-500"
+                            : "bg-emerald-600"
+                        }`}
+                        style={{
+                          width: `${progress}%`,
+                        }}
                       />
                     </div>
                   </div>
                 </div>
 
                 {expanded && (
-                  <div className="space-y-4 border-t border-slate-100 bg-slate-50/60 p-5 sm:p-6">
-                    <div className="flex items-center gap-2">
-                      <ClipboardList
-                        size={18}
-                        className="text-indigo-600"
-                      />
-                      <h4 className="text-sm font-bold text-slate-900">
-                        وظایف این اسپرینت
-                      </h4>
+                  <div className="space-y-5 border-t border-slate-100 bg-slate-50/70 p-5 sm:p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-bold text-slate-900">
+                          وظایف اسپرینت
+                        </h4>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          تسک‌های مرتبط با این دوره
+                        </p>
+                      </div>
+
+                      <Link
+                        href={`/projects/${projectId}/tasks`}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-600 hover:border-emerald-200"
+                      >
+                        مدیریت وظایف
+                        <ArrowUpLeft size={15} />
+                      </Link>
                     </div>
 
                     {sprintTasks.length === 0 ? (
-                      <p className="rounded-xl bg-white p-4 text-sm text-slate-400">
-                        هنوز وظیفه‌ای به این اسپرینت اضافه نشده است.
-                      </p>
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-7 text-center">
+                        <FolderPlus
+                          size={25}
+                          className="mx-auto text-slate-300"
+                        />
+                        <p className="mt-3 text-sm text-slate-500">
+                          هنوز تسکی به این اسپرینت اضافه نشده است.
+                        </p>
+                      </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="grid gap-2 md:grid-cols-2">
                         {sprintTasks.map((task) => (
                           <div
                             key={task.id}
-                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white p-4"
+                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white p-4"
                           >
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-800">
-                                {task.title}
-                              </p>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                {task.status === "DONE" ? (
+                                  <CheckCircle2
+                                    size={17}
+                                    className="shrink-0 text-emerald-500"
+                                  />
+                                ) : (
+                                  <CircleDashed
+                                    size={17}
+                                    className="shrink-0 text-slate-300"
+                                  />
+                                )}
+
+                                <p className="truncate text-sm font-semibold text-slate-800">
+                                  {task.title}
+                                </p>
+                              </div>
+
                               <p className="mt-2 text-xs text-slate-500">
                                 {taskStatuses[task.status]}
                                 {" · "}
-                                {task.assignee?.name ?? "بدون مسئول"}
+                                {task.assignee?.name ??
+                                  "بدون مسئول"}
                               </p>
                             </div>
 
-                            <div className="flex items-center gap-2">
-                              {task.status === "DONE" && (
-                                <CheckCircle2
-                                  size={18}
-                                  className="text-emerald-600"
-                                />
-                              )}
-
-                              {canManage && !closed && (
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    void removeTask(
-                                      sprint.id,
-                                      task.id
-                                    )
-                                  }
-                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                                >
-                                  خارج کردن
-                                </button>
-                              )}
-                            </div>
+                            {canManage && !closed && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  void removeTask(
+                                    sprint.id,
+                                    task.id
+                                  )
+                                }
+                                className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                              >
+                                خارج کردن
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
                     )}
 
                     {canManage && !closed && (
-                      <div className="rounded-xl border border-indigo-100 bg-white p-4">
-                        <p className="mb-3 text-sm font-semibold text-slate-800">
-                          افزودن تسک موجود
+                      <div className="rounded-2xl border border-emerald-100 bg-white p-4 sm:p-5">
+                        <h4 className="text-sm font-bold text-slate-900">
+                          افزودن وظیفه به اسپرینت
+                        </h4>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          فقط وظایفی که در اسپرینت دیگری نیستند نمایش داده می‌شوند.
                         </p>
 
-                        <div className="flex flex-col gap-3 sm:flex-row">
+                        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                          <div className="relative">
+                            <Search
+                              size={16}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                            />
+
+                            <input
+                              type="search"
+                              value={taskSearch}
+                              onChange={(event) => {
+                                setTaskSearch(
+                                  event.target.value
+                                );
+                                setSelectedTaskId("");
+                              }}
+                              placeholder="جست‌وجوی تسک..."
+                              className={`${inputClass} pr-10`}
+                            />
+                          </div>
+
                           <select
+                            aria-label="انتخاب تسک"
                             value={selectedTaskId}
                             onChange={(event) =>
-                              setSelectedTaskId(event.target.value)
+                              setSelectedTaskId(
+                                event.target.value
+                              )
                             }
                             className={inputClass}
                           >
                             <option value="">
-                              انتخاب تسک خارج از اسپرینت...
+                              انتخاب وظیفه...
                             </option>
 
                             {availableTasks.map((task) => (
@@ -664,18 +859,23 @@ export default function SprintsManager({
                             type="button"
                             disabled={busy || !selectedTaskId}
                             onClick={() =>
-                              void assignTask(
-                                sprint.id,
-                                selectedTaskId
-                              )
+                              void addTask(sprint.id)
                             }
-                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                           >
                             <Plus size={17} />
                             افزودن
                           </button>
                         </div>
                       </div>
+                    )}
+
+                    {closed && canManage && (
+                      <p className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-xs leading-6 text-amber-800">
+                        این اسپرینت بسته است. برای تغییر
+                        تسک‌های آن، ابتدا وضعیت را به
+                        برنامه‌ریزی‌شده یا فعال تغییر دهید.
+                      </p>
                     )}
                   </div>
                 )}
@@ -685,24 +885,41 @@ export default function SprintsManager({
         </div>
       )}
 
+      {/* Create sprint modal */}
       {creating && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              !busy
+            ) {
+              setCreating(false);
+            }
+          }}
+        >
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="create-sprint-title"
+            aria-labelledby="sprint-modal-title"
             className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <h3
-                  id="create-sprint-title"
+                <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                  <CalendarRange size={24} />
+                </div>
+
+                <h2
+                  id="sprint-modal-title"
                   className="text-xl font-extrabold text-slate-900"
                 >
-                  اسپرینت جدید
-                </h3>
-                <p className="mt-2 text-sm text-slate-500">
-                  نام و بازه زمانی اسپرینت را مشخص کنید.
+                  ساخت اسپرینت جدید
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  یک دوره زمانی برای برنامه‌ریزی فعالیت‌های
+                  تیم تعریف کنید.
                 </p>
               </div>
 
@@ -719,20 +936,23 @@ export default function SprintsManager({
 
             <form
               onSubmit={createSprint}
-              className="mt-6 space-y-5"
+              className="mt-7 space-y-5"
             >
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-slate-700">
-                  عنوان اسپرینت
+                  نام اسپرینت
                 </span>
+
                 <input
+                  className={inputClass}
                   required
                   minLength={3}
                   maxLength={150}
                   value={name}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={(event) =>
+                    setName(event.target.value)
+                  }
                   placeholder="مثلاً اسپرینت اول — طراحی رابط کاربری"
-                  className={inputClass}
                 />
               </label>
 
@@ -742,6 +962,7 @@ export default function SprintsManager({
                   value={startDate}
                   onChange={setStartDate}
                 />
+
                 <PersianDatePicker
                   label="تاریخ پایان"
                   value={endDate}
@@ -754,7 +975,7 @@ export default function SprintsManager({
                   type="button"
                   disabled={busy}
                   onClick={() => setCreating(false)}
-                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm"
+                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm text-slate-600"
                 >
                   انصراف
                 </button>
@@ -762,7 +983,7 @@ export default function SprintsManager({
                 <button
                   type="submit"
                   disabled={busy}
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {busy ? (
                     <LoaderCircle
@@ -772,7 +993,7 @@ export default function SprintsManager({
                   ) : (
                     <Plus size={17} />
                   )}
-                  ثبت اسپرینت
+                  ایجاد اسپرینت
                 </button>
               </div>
             </form>
@@ -783,7 +1004,7 @@ export default function SprintsManager({
       {deletingId && (
         <ConfirmDialog
           title="حذف اسپرینت"
-          description="فقط خود اسپرینت حذف می‌شود. تسک‌ها، کامنت‌ها و تاریخچه تسک‌ها باقی می‌مانند و می‌توانید آن‌ها را به اسپرینت دیگری اضافه کنید."
+          description="اسپرینت حذف می‌شود، اما تسک‌های آن و تاریخچه تسک‌ها باقی می‌مانند."
           busy={busy}
           onCancel={() => setDeletingId(null)}
           onConfirm={() => void deleteSprint()}
@@ -796,16 +1017,35 @@ export default function SprintsManager({
 function Stat({
   label,
   value,
+  icon,
+  color,
 }: {
   label: string;
   value: number;
+  icon: React.ReactNode;
+  color: "emerald";
 }) {
+  const colors = {
+    emerald: "bg-emerald-50 text-emerald-600",
+  };
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-extrabold text-slate-900">
-        {value.toLocaleString("fa-IR")}
-      </p>
+    <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div
+        className={`flex size-12 shrink-0 items-center justify-center rounded-xl ${colors[color]}`}
+      >
+        {icon}
+      </div>
+
+      <div>
+        <p className="text-xs text-slate-500">
+          {label}
+        </p>
+
+        <p className="mt-1 text-2xl font-extrabold text-slate-900">
+          {value.toLocaleString("fa-IR")}
+        </p>
+      </div>
     </div>
   );
 }

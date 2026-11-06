@@ -1,6 +1,6 @@
-
 import type { Metadata } from "next";
 import "./globals.css";
+import ActionFeedback from "@/components/ui/action-feedback";
 
 export const metadata: Metadata = {
   title: "مدیریت پروژه | پنل مدیریت",
@@ -14,7 +14,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fa" dir="rtl">
-      <body>{children}</body>
+      <body>
+        <>
+          <ActionFeedback />
+          {children}
+        </>
+      </body>
     </html>
   );
 }

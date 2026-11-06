@@ -98,11 +98,26 @@
 }
 
 :root {
-  --background: #f7f8fc;
-  --foreground: #172033;
-  --muted: #64748b;
-  --primary: #5b5cf0;
-  --border: #e7eaf1;
+  --background: #f7fcf9;
+  --foreground: #173b2b;
+  --muted: #648276;
+  --primary: #16a34a;
+  --primary-hover: #15803d;
+  --primary-soft: #f0fdf4;
+  --primary-soft-strong: #dcfce7;
+  --primary-border: #bbf7d0;
+  --border: #dcebe2;
+}
+
+@theme inline {
+  --color-emerald-50: var(--primary-soft);
+  --color-emerald-100: var(--primary-soft-strong);
+  --color-emerald-200: var(--primary-border);
+  --color-emerald-300: color-mix(in srgb, var(--primary) 45%, white);
+  --color-emerald-400: color-mix(in srgb, var(--primary) 70%, white);
+  --color-emerald-500: var(--primary);
+  --color-emerald-600: var(--primary);
+  --color-emerald-700: var(--primary-hover);
 }
 
 * {
@@ -134,6 +149,6 @@ button {
 }
 
 ::selection {
-  background: #dedeff;
-  color: #292a82;
+  background: var(--primary-soft-strong);
+  color: var(--primary-hover);
 }

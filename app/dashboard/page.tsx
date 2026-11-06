@@ -22,7 +22,7 @@ const roleLabels = {
 
 export default function DashboardPage() {
   return (
-    <main className="min-h-screen bg-[#f7f8fc] px-4 py-8 text-slate-900 sm:px-8">
+    <main className="min-h-screen bg-[#f7fcf9] px-4 py-8 text-slate-900 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <Suspense fallback={<DashboardLoading />}>
           <DashboardContent />
@@ -44,7 +44,7 @@ async function DashboardContent() {
       {/* Header */}
       <header className="flex flex-wrap items-center justify-between gap-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div>
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
             <Layers3 size={15} />
             سامانه مدیریت پروژه
           </div>
@@ -59,7 +59,7 @@ async function DashboardContent() {
           </p>
 
           <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-            <ShieldCheck size={16} className="text-indigo-600" />
+            <ShieldCheck size={16} className="text-emerald-600" />
             نقش شما: {roleLabels[user.role]}
           </div>
         </div>
@@ -83,9 +83,9 @@ async function DashboardContent() {
           {user.role === "ADMIN" && (
             <Link
               href="/users"
-              className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-lg"
+              className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-lg"
             >
-              <div className="flex size-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                 <Users size={23} />
               </div>
 
@@ -98,7 +98,7 @@ async function DashboardContent() {
                 تعیین نقش و مدیریت وضعیت کاربران.
               </p>
 
-              <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-indigo-600">
+              <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-emerald-600">
                 ورود به مدیریت کاربران
                 <ArrowLeft
                   size={17}
@@ -110,7 +110,7 @@ async function DashboardContent() {
 
           <Link
             href="/projects"
-            className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-lg"
+            className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-lg"
           >
             <div className="flex size-12 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
               <FolderKanban size={23} />
@@ -125,7 +125,7 @@ async function DashboardContent() {
               پیشرفت فعالیت‌ها.
             </p>
 
-            <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-indigo-600">
+            <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-emerald-600">
               مشاهده پروژه‌ها
               <ArrowLeft
                 size={17}
@@ -137,9 +137,9 @@ async function DashboardContent() {
       </section>
 
       {/* Information */}
-      <section className="mt-8 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-6">
+      <section className="mt-8 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-6">
         <div className="flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600">
             <ShieldCheck size={20} />
           </div>
 
@@ -165,7 +165,7 @@ function DashboardLoading() {
     <div className="flex min-h-[65vh] flex-col items-center justify-center gap-4">
       <LoaderCircle
         size={32}
-        className="animate-spin text-indigo-600"
+        className="animate-spin text-emerald-600"
       />
 
       <p className="text-sm text-slate-500">

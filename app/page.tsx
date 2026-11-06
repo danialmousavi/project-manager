@@ -50,7 +50,7 @@ export default function HomePage() {
       <div className="mx-auto max-w-6xl">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200">
+            <div className="flex size-11 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-200">
               <Layers3 size={22} />
             </div>
 
@@ -64,23 +64,23 @@ export default function HomePage() {
             </div>
           </div>
 
-          <span className="rounded-full border border-indigo-100 bg-indigo-50 px-4 py-2 text-xs font-medium text-indigo-700">
+          <span className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700">
             نسخه اولیه MVP
           </span>
         </header>
 
         <section className="relative mt-16 overflow-hidden rounded-[32px] border border-slate-200 bg-white p-7 shadow-sm sm:p-12 lg:mt-24 lg:p-16">
-          <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-indigo-100/70 blur-3xl" />
+          <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-emerald-100/70 blur-3xl" />
 
           <div className="relative max-w-2xl">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-2 text-xs font-medium text-indigo-700">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700">
               <Sparkles size={16} />
               مدیریت ساده‌تر، پیشرفت سریع‌تر
             </div>
 
             <h2 className="text-3xl font-extrabold leading-[1.8] tracking-tight sm:text-5xl">
               پروژه‌هات رو
-              <span className="text-indigo-600">
+              <span className="text-emerald-600">
                 {" "}ساده‌تر{" "}
               </span>
               مدیریت کن.
@@ -93,7 +93,7 @@ export default function HomePage() {
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <div className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white">
                 <CheckCircle2 size={18} />
                 در حال آماده‌سازی
               </div>
@@ -125,7 +125,7 @@ export default function HomePage() {
                   key={feature.title}
                   className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
                 >
-                  <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                  <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
                     <Icon size={23} />
                   </div>
 

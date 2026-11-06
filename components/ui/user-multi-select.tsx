@@ -177,7 +177,7 @@ export default function UserMultiSelect({
       <div
         className={`min-h-12 rounded-xl border bg-white transition ${
           open
-            ? "border-indigo-400 ring-4 ring-indigo-500/10"
+            ? "border-emerald-400 ring-4 ring-emerald-500/10"
             : "border-slate-200"
         } ${disabled ? "opacity-60" : ""}`}
       >
@@ -199,7 +199,7 @@ export default function UserMultiSelect({
                 selected.slice(0, 4).map((user) => (
                   <span
                     key={user.id}
-                    className="inline-flex max-w-full items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs text-indigo-700"
+                    className="inline-flex max-w-full items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700"
                   >
                     <span className="max-w-32 truncate">
                       {user.name}
@@ -269,7 +269,7 @@ export default function UserMultiSelect({
                   setQuery(event.target.value)
                 }
                 placeholder="جست‌وجو نام یا ایمیل..."
-                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pr-10 pl-3 text-sm outline-none focus:border-indigo-400"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pr-10 pl-3 text-sm outline-none focus:border-emerald-400"
               />
             </div>
           </div>
@@ -321,7 +321,7 @@ export default function UserMultiSelect({
                     onClick={() => toggleUser(user)}
                     className={`flex w-full items-center gap-3 rounded-xl p-3 text-right transition ${
                       isSelected
-                        ? "bg-indigo-50"
+                        ? "bg-emerald-50"
                         : "hover:bg-slate-50"
                     }`}
                   >
@@ -345,7 +345,7 @@ export default function UserMultiSelect({
                     <div
                       className={`flex size-5 shrink-0 items-center justify-center rounded-md border ${
                         isSelected
-                          ? "border-indigo-600 bg-indigo-600 text-white"
+                          ? "border-emerald-600 bg-emerald-600 text-white"
                           : "border-slate-300"
                       }`}
                     >
@@ -364,7 +364,7 @@ export default function UserMultiSelect({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
             >
               تأیید انتخاب
             </button>
