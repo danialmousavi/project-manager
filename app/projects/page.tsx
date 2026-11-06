@@ -2,6 +2,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+
 import {
   ArrowRight,
   FolderKanban,
@@ -10,7 +11,26 @@ import {
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
 import ProjectsManager from "@/components/projects/projects-manager";
+
+type TaskStatus =
+  | "TODO"
+  | "IN_PROGRESS"
+  | "IN_REVIEW"
+  | "DONE";
+
+const taskWeights: Record<TaskStatus, number> = {
+  TODO: 0,
+  IN_PROGRESS: 50,
+  IN_REVIEW: 90,
+  DONE: 100,
+};
+
+type ProgressAccumulator = {
+  total: number;
+  weightedSum: number;
+};
 
 export default function ProjectsPage() {
   return (
@@ -56,8 +76,8 @@ async function ProjectsContent() {
       description: true,
       status: true,
       priority: true,
-      progress: true,
       createdAt: true,
+
       members: {
         select: {
           role: true,
@@ -71,6 +91,95 @@ async function ProjectsContent() {
       },
     },
   });
+
+  const projectIds = projects.map(
+    (project) => project.id
+  );
+
+  const progressByProject = new Map<
+    string,
+    ProgressAccumulator
+  >();
+
+  // Initialize every project with zero progress.
+  for (const projectId of projectIds) {
+    progressByProject.set(projectId, {
+      total: 0,
+      weightedSum: 0,
+    });
+  }
+
+  // Read only grouped task counts.
+  // No need to load every task into memory.
+  if (projectIds.length > 0) {
+    const groupedTasks = await prisma.task.groupBy({
+      by: ["projectId", "status"],
+
+      where: {
+        projectId: {
+          in: projectIds,
+        },
+      },
+
+      _count: {
+        _all: true,
+      },
+    });
+
+    for (const group of groupedTasks) {
+      const status = group.status as TaskStatus;
+
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          taskWeights,
+          status
+        )
+      ) {
+        continue;
+      }
+
+      const current = progressByProject.get(
+        group.projectId
+      );
+
+      if (!current) {
+        continue;
+      }
+
+      const count = group._count._all;
+
+      current.total += count;
+
+      current.weightedSum +=
+        count * taskWeights[status];
+    }
+  }
+
+  const serializedProjects = projects.map(
+    (project) => {
+      const stats = progressByProject.get(
+        project.id
+      );
+
+      const progress =
+        stats && stats.total > 0
+          ? Math.round(
+              stats.weightedSum / stats.total
+            )
+          : 0;
+
+      return {
+        ...project,
+
+        // Real progress calculated from Task statuses.
+        // This replaces the old manual Project.progress.
+        progress,
+
+        createdAt:
+          project.createdAt.toISOString(),
+      };
+    }
+  );
 
   return (
     <>
@@ -91,17 +200,15 @@ async function ProjectsContent() {
           <h1 className="text-2xl font-extrabold sm:text-3xl">
             مدیریت پروژه‌ها
           </h1>
+
           <p className="mt-2 text-sm text-slate-500">
-            پروژه‌ها، اعضا و پیشرفت فعالیت‌ها
+            پروژه‌ها، اعضا و پیشرفت واقعی فعالیت‌ها
           </p>
         </div>
       </div>
 
       <ProjectsManager
-        initialProjects={projects.map((project) => ({
-          ...project,
-          createdAt: project.createdAt.toISOString(),
-        }))}
+        initialProjects={serializedProjects}
         canCreate={user.role === "ADMIN"}
       />
     </>

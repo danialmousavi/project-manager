@@ -1,14 +1,23 @@
 
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import {
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+import {
+  Activity,
+  ArrowLeft,
   CalendarDays,
-  Check,
+  CheckCircle2,
   Clock3,
   FolderKanban,
-  History,
+  ListTodo,
   LoaderCircle,
   Save,
   Users,
@@ -17,10 +26,11 @@ import {
 import UserMultiSelect, {
   type SelectableUser,
 } from "@/components/ui/user-multi-select";
+
 import PersianDatePicker from "@/components/ui/persian-date-picker";
-import ProjectTasks from "@/components/tasks/project-tasks";
 
 type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
+
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
 type Status =
@@ -31,6 +41,12 @@ type Status =
   | "COMPLETED"
   | "CANCELLED";
 
+type TaskStatus =
+  | "TODO"
+  | "IN_PROGRESS"
+  | "IN_REVIEW"
+  | "DONE";
+
 type Member = {
   role: "MANAGER" | "MEMBER";
   user: {
@@ -39,6 +55,8 @@ type Member = {
     role: Role;
   };
 };
+
+type TaskStats = Record<TaskStatus, number>;
 
 type Project = {
   id: string;
@@ -51,13 +69,6 @@ type Project = {
   dueDate: string | null;
   createdAt: string;
   members: Member[];
-  progressHistory: {
-    id: string;
-    progress: number;
-    note: string | null;
-    createdAt: string;
-    updatedBy: { name: string };
-  }[];
   _count: {
     tasks: number;
     sprints: number;
@@ -66,6 +77,7 @@ type Project = {
 
 type Props = {
   project: Project;
+  taskStats: TaskStats;
   canEdit: boolean;
   actorRole: Role;
 };
@@ -86,23 +98,51 @@ const priorityLabels: Record<Priority, string> = {
   URGENT: "فوری",
 };
 
+const taskStatusLabels: Record<TaskStatus, string> = {
+  TODO: "برای انجام",
+  IN_PROGRESS: "در حال انجام",
+  IN_REVIEW: "در حال بررسی",
+  DONE: "انجام‌شده",
+};
+
+const taskStatusColors: Record<TaskStatus, string> = {
+  TODO: "bg-slate-400",
+  IN_PROGRESS: "bg-sky-500",
+  IN_REVIEW: "bg-amber-500",
+  DONE: "bg-emerald-600",
+};
+
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:bg-slate-100 disabled:text-slate-500";
+  "w-full rounded-xl border border-slate-200 " +
+  "bg-white px-4 py-3 text-sm text-slate-800 " +
+  "outline-none transition " +
+  "focus:border-emerald-500 " +
+  "focus:ring-4 focus:ring-emerald-500/10 " +
+  "disabled:bg-slate-100 disabled:text-slate-500";
 
 export default function ProjectDetails({
   project,
+  taskStats,
   canEdit,
   actorRole,
 }: Props) {
   const router = useRouter();
+
   const isAdmin = actorRole === "ADMIN";
 
   const [name, setName] = useState(project.name);
+
   const [description, setDescription] = useState(
     project.description ?? ""
   );
-  const [priority, setPriority] = useState(project.priority);
-  const [status, setStatus] = useState(project.status);
+
+  const [priority, setPriority] = useState(
+    project.priority
+  );
+
+  const [status, setStatus] = useState(
+    project.status
+  );
 
   const [startDate, setStartDate] = useState<
     string | null
@@ -136,18 +176,27 @@ export default function ProjectDetails({
       }))
   );
 
-  const [progress, setProgress] = useState(
-    project.progress
+  const [busy, setBusy] = useState<string | null>(
+    null
   );
-  const [progressNote, setProgressNote] = useState("");
 
-  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const totalTasks =
+    taskStats.TODO +
+    taskStats.IN_PROGRESS +
+    taskStats.IN_REVIEW +
+    taskStats.DONE;
+
+  const progress = Math.max(
+    0,
+    Math.min(100, project.progress)
+  );
+
   async function sendRequest(
     url: string,
-    method: "PATCH" | "PUT" | "POST",
+    method: "PATCH" | "PUT",
     body: unknown
   ) {
     const response = await fetch(url, {
@@ -206,13 +255,15 @@ export default function ProjectDetails({
               startDate,
               dueDate,
             }
-          : { status }
+          : {
+              status,
+            }
       );
 
       setNotice("تغییرات پروژه ذخیره شد.");
       router.refresh();
-    } catch (error) {
-      setError(messageOf(error));
+    } catch (err) {
+      setError(messageOf(err));
     } finally {
       setBusy(null);
     }
@@ -230,40 +281,20 @@ export default function ProjectDetails({
         `/api/v1/projects/${project.id}/members`,
         "PUT",
         {
-          managerIds: managers.map((user) => user.id),
-          memberIds: employees.map((user) => user.id),
+          managerIds: managers.map(
+            (user) => user.id
+          ),
+          memberIds: employees.map(
+            (user) => user.id
+          ),
         }
       );
 
       setNotice("اعضای پروژه ذخیره شدند.");
       router.refresh();
-    } catch (error) {
-      setError(messageOf(error));
+    } catch (err) {
+      setError(messageOf(err));
     } finally {
-      setBusy(null);
-    }
-  }
-
-  async function saveProgress() {
-    if (!canEdit || busy) return;
-
-    setBusy("progress");
-    setError("");
-    setNotice("");
-
-    try {
-      await sendRequest(
-        `/api/v1/projects/${project.id}/progress`,
-        "POST",
-        {
-          progress,
-          note: progressNote,
-        }
-      );
-
-      window.location.reload();
-    } catch (error) {
-      setError(messageOf(error));
       setBusy(null);
     }
   }
@@ -303,13 +334,17 @@ export default function ProjectDetails({
 
           <Info
             label="تسک‌ها"
-            value={project._count.tasks.toLocaleString("fa-IR")}
-            icon={<FolderKanban size={20} />}
+            value={project._count.tasks.toLocaleString(
+              "fa-IR"
+            )}
+            icon={<ListTodo size={20} />}
           />
 
           <Info
             label="اسپرینت‌ها"
-            value={project._count.sprints.toLocaleString("fa-IR")}
+            value={project._count.sprints.toLocaleString(
+              "fa-IR"
+            )}
             icon={<CalendarDays size={20} />}
           />
         </div>
@@ -342,8 +377,9 @@ export default function ProjectDetails({
 
             {!isAdmin && (
               <p className="mt-2 text-xs leading-6 text-slate-500">
-                نام، توضیحات، اولویت و تاریخ‌های پروژه
-                فقط توسط مدیر اصلی تنظیم می‌شوند.
+                نام، توضیحات، اولویت و تاریخ‌های
+                پروژه فقط توسط مدیر اصلی تنظیم
+                می‌شوند.
                 {canEdit
                   ? " شما می‌توانید وضعیت پروژه را تغییر دهید."
                   : ""}
@@ -376,7 +412,9 @@ export default function ProjectDetails({
                   disabled={!isAdmin}
                   value={description}
                   onChange={(event) =>
-                    setDescription(event.target.value)
+                    setDescription(
+                      event.target.value
+                    )
                   }
                 />
               </Field>
@@ -393,13 +431,16 @@ export default function ProjectDetails({
                       )
                     }
                   >
-                    {Object.entries(statusLabels).map(
-                      ([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      )
-                    )}
+                    {Object.entries(
+                      statusLabels
+                    ).map(([value, label]) => (
+                      <option
+                        key={value}
+                        value={value}
+                      >
+                        {label}
+                      </option>
+                    ))}
                   </select>
                 </Field>
 
@@ -414,13 +455,16 @@ export default function ProjectDetails({
                       )
                     }
                   >
-                    {Object.entries(priorityLabels).map(
-                      ([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      )
-                    )}
+                    {Object.entries(
+                      priorityLabels
+                    ).map(([value, label]) => (
+                      <option
+                        key={value}
+                        value={value}
+                      >
+                        {label}
+                      </option>
+                    ))}
                   </select>
                 </Field>
 
@@ -486,10 +530,12 @@ export default function ProjectDetails({
                     <p className="mb-2 text-xs text-slate-500">
                       مدیران پروژه (فقط نمایشی)
                     </p>
+
                     <p className="text-sm font-medium text-slate-800">
                       {managers
                         .map((manager) => manager.name)
-                        .join("، ") || "تعیین نشده"}
+                        .join("، ") ||
+                        "تعیین نشده"}
                     </p>
                   </div>
                 )}
@@ -521,19 +567,26 @@ export default function ProjectDetails({
               </div>
             ) : (
               <div className="mt-5 space-y-2">
-                {project.members.map((member) => (
-                  <div
-                    key={member.user.id}
-                    className="flex justify-between gap-3 rounded-xl bg-slate-50 p-4 text-sm"
-                  >
-                    <span>{member.user.name}</span>
-                    <span className="text-slate-500">
-                      {member.role === "MANAGER"
-                        ? "مدیر پروژه"
-                        : "کارمند"}
-                    </span>
-                  </div>
-                ))}
+                {project.members.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    هنوز عضوی ثبت نشده است.
+                  </p>
+                ) : (
+                  project.members.map((member) => (
+                    <div
+                      key={member.user.id}
+                      className="flex justify-between gap-3 rounded-xl bg-slate-50 p-4 text-sm"
+                    >
+                      <span>{member.user.name}</span>
+
+                      <span className="text-slate-500">
+                        {member.role === "MANAGER"
+                          ? "مدیر پروژه"
+                          : "کارمند"}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </section>
@@ -541,131 +594,165 @@ export default function ProjectDetails({
 
         <div className="space-y-6 lg:col-span-2">
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold">
-              پیشرفت پروژه
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+                <Activity
+                  size={20}
+                  className="text-emerald-600"
+                />
+                پیشرفت پروژه
+              </h2>
+
+              <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-700">
+                محاسبه خودکار
+              </span>
+            </div>
 
             <p className="mt-7 text-center text-5xl font-extrabold text-emerald-600">
               {progress.toLocaleString("fa-IR")}٪
             </p>
 
-            <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="mt-5 h-3 overflow-hidden rounded-full bg-emerald-100"
+              role="progressbar"
+              aria-label="پیشرفت خودکار پروژه"
+              aria-valuenow={progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
-                className="h-full rounded-full bg-emerald-600 transition-all"
+                className="h-full rounded-full bg-emerald-600 transition-all duration-300"
                 style={{
-                  width: `${Math.max(
-                    0,
-                    Math.min(100, progress)
-                  )}%`,
+                  width: `${progress}%`,
                 }}
               />
             </div>
 
-            {canEdit && (
-              <div className="mt-6 space-y-4">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={progress}
-                  onChange={(event) =>
-                    setProgress(
-                      Number(event.target.value)
-                    )
-                  }
-                  aria-label="درصد پیشرفت پروژه"
-                  className="w-full accent-emerald-600"
-                />
+            <p className="mt-4 text-center text-xs leading-6 text-slate-500">
+              محاسبه‌شده از وضعیت تمام تسک‌های پروژه
+            </p>
 
-                <Field label="توضیحات پیشرفت">
-                  <textarea
-                    className={inputClass}
-                    rows={3}
-                    maxLength={1000}
-                    value={progressNote}
-                    onChange={(event) =>
-                      setProgressNote(event.target.value)
-                    }
-                    placeholder="چه فعالیت‌هایی انجام شده است؟"
-                  />
-                </Field>
-
-                <button
-                  type="button"
-                  disabled={Boolean(busy)}
-                  onClick={() => void saveProgress()}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {busy === "progress" ? (
-                    <LoaderCircle
-                      size={17}
-                      className="animate-spin"
-                    />
-                  ) : (
-                    <Check size={17} />
-                  )}
-                  ثبت پیشرفت
-                </button>
-              </div>
+            {totalTasks === 0 && (
+              <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-center text-xs leading-6 text-amber-800">
+                هنوز تسکی در پروژه وجود ندارد؛
+                پیشرفت صفر درصد است.
+              </p>
             )}
+
+            <div className="mt-6 space-y-3 border-t border-slate-100 pt-5">
+              {(Object.keys(
+                taskStatusLabels
+              ) as TaskStatus[]).map(
+                (taskStatus) => (
+                  <div
+                    key={taskStatus}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`size-2.5 rounded-full ${taskStatusColors[taskStatus]}`}
+                      />
+
+                      <span className="text-xs text-slate-600">
+                        {taskStatusLabels[taskStatus]}
+                      </span>
+                    </div>
+
+                    <strong className="text-sm text-slate-800">
+                      {taskStats[
+                        taskStatus
+                      ].toLocaleString("fa-IR")}
+                    </strong>
+                  </div>
+                )
+              )}
+            </div>
+
+            <div className="mt-5 rounded-xl bg-emerald-50 p-4">
+              <div className="flex items-center justify-between gap-3 text-xs text-emerald-800">
+                <span>مجموع تسک‌ها</span>
+                <strong>
+                  {totalTasks.toLocaleString("fa-IR")}
+                </strong>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-emerald-800">
+                <span>تسک‌های تکمیل‌شده</span>
+                <strong>
+                  {taskStats.DONE.toLocaleString(
+                    "fa-IR"
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <Link
+              href={`/projects/${project.id}/tasks`}
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            >
+              <ListTodo size={17} />
+              مدیریت وظایف پروژه
+              <ArrowLeft size={15} />
+            </Link>
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="flex items-center gap-2 text-lg font-bold">
-              <History
+            <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+              <CheckCircle2
                 size={20}
                 className="text-emerald-600"
               />
-              تاریخچه پیشرفت
+              نحوه محاسبه پیشرفت
             </h2>
 
-            <div className="mt-5 space-y-4">
-              {project.progressHistory.length === 0 && (
-                <p className="text-sm text-slate-400">
-                  هنوز پیشرفتی ثبت نشده است.
-                </p>
-              )}
+            <p className="mt-4 text-sm leading-7 text-slate-500">
+              پیشرفت براساس وضعیت واقعی تسک‌ها
+              محاسبه می‌شود. ایجاد، حذف یا تغییر
+              وضعیت تسک‌ها روی درصد پروژه اثر
+              می‌گذارد.
+            </p>
 
-              {project.progressHistory.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="border-r-2 border-emerald-200 pr-4"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <strong className="text-sm">
-                      {entry.updatedBy.name}
-                    </strong>
+            <div className="mt-5 space-y-3">
+              <WeightRow
+                label="برای انجام"
+                weight="۰٪"
+                colorClass="bg-slate-400"
+              />
 
-                    <span className="text-sm font-bold text-emerald-600">
-                      {entry.progress.toLocaleString(
-                        "fa-IR"
-                      )}٪
-                    </span>
-                  </div>
+              <WeightRow
+                label="در حال انجام"
+                weight="۵۰٪"
+                colorClass="bg-sky-500"
+              />
 
-                  <p className="mt-2 text-xs leading-6 text-slate-500">
-                    {entry.note || "بدون توضیح"}
-                  </p>
+              <WeightRow
+                label="در حال بررسی"
+                weight="۹۰٪"
+                colorClass="bg-amber-500"
+              />
 
-                  <p className="mt-2 flex items-center gap-1 text-xs text-slate-400">
-                    <Clock3 size={13} />
-                    {new Date(
-                      entry.createdAt
-                    ).toLocaleString("fa-IR")}
-                  </p>
-                </div>
-              ))}
+              <WeightRow
+                label="انجام‌شده"
+                weight="۱۰۰٪"
+                colorClass="bg-emerald-600"
+              />
+            </div>
+
+            <div className="mt-5 flex items-start gap-2 rounded-xl bg-slate-50 p-4">
+              <Clock3
+                size={16}
+                className="mt-0.5 shrink-0 text-emerald-600"
+              />
+
+              <p className="text-xs leading-6 text-slate-500">
+                تغییرات بعد از بازکردن مجدد صفحه
+                یا تازه‌سازی آن در این کارت
+                منعکس می‌شوند.
+              </p>
             </div>
           </section>
         </div>
       </div>
-
-      <ProjectTasks
-        projectId={project.id}
-        members={project.members}
-        canManage={canEdit}
-        actorRole={actorRole}
-      />
     </div>
   );
 }
@@ -677,7 +764,7 @@ function Info({
 }: {
   label: string;
   value: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
@@ -703,7 +790,7 @@ function Field({
   children,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <label className="block">
@@ -712,6 +799,34 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+function WeightRow({
+  label,
+  weight,
+  colorClass,
+}: {
+  label: string;
+  weight: string;
+  colorClass: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
+      <div className="flex items-center gap-2">
+        <span
+          className={`size-2.5 rounded-full ${colorClass}`}
+        />
+
+        <span className="text-xs text-slate-600">
+          {label}
+        </span>
+      </div>
+
+      <strong className="text-xs text-slate-800">
+        {weight}
+      </strong>
+    </div>
   );
 }
 

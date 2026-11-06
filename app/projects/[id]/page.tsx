@@ -19,6 +19,19 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
+type TaskStatus =
+  | "TODO"
+  | "IN_PROGRESS"
+  | "IN_REVIEW"
+  | "DONE";
+
+const taskWeights: Record<TaskStatus, number> = {
+  TODO: 0,
+  IN_PROGRESS: 50,
+  IN_REVIEW: 90,
+  DONE: 100,
+};
+
 export default function ProjectDetailsPage({
   params,
 }: Props) {
@@ -57,7 +70,9 @@ async function Content({ params }: Props) {
         ? {}
         : {
             members: {
-              some: { userId: user.id },
+              some: {
+                userId: user.id,
+              },
             },
           }),
     },
@@ -67,7 +82,6 @@ async function Content({ params }: Props) {
       description: true,
       status: true,
       priority: true,
-      progress: true,
       startDate: true,
       dueDate: true,
       createdAt: true,
@@ -80,22 +94,6 @@ async function Content({ params }: Props) {
               id: true,
               name: true,
               role: true,
-            },
-          },
-        },
-      },
-
-      progressHistory: {
-        orderBy: { createdAt: "desc" },
-        take: 30,
-        select: {
-          id: true,
-          progress: true,
-          note: true,
-          createdAt: true,
-          updatedBy: {
-            select: {
-              name: true,
             },
           },
         },
@@ -125,18 +123,63 @@ async function Content({ params }: Props) {
       )
     );
 
+  // Count ALL project tasks regardless of the viewer's role
+  // or the sprint each task belongs to.
+  const groupedTasks = await prisma.task.groupBy({
+    by: ["status"],
+    where: {
+      projectId: project.id,
+    },
+    _count: {
+      _all: true,
+    },
+  });
+
+  const taskStats = {
+    TODO: 0,
+    IN_PROGRESS: 0,
+    IN_REVIEW: 0,
+    DONE: 0,
+  };
+
+  for (const group of groupedTasks) {
+    const status = group.status as TaskStatus;
+
+    if (Object.prototype.hasOwnProperty.call(
+      taskStats,
+      status
+    )) {
+      taskStats[status] = group._count._all;
+    }
+  }
+
+  const totalTasks =
+    taskStats.TODO +
+    taskStats.IN_PROGRESS +
+    taskStats.IN_REVIEW +
+    taskStats.DONE;
+
+  const weightedProgress =
+    taskStats.TODO * taskWeights.TODO +
+    taskStats.IN_PROGRESS *
+      taskWeights.IN_PROGRESS +
+    taskStats.IN_REVIEW *
+      taskWeights.IN_REVIEW +
+    taskStats.DONE * taskWeights.DONE;
+
+  const automaticProgress =
+    totalTasks === 0
+      ? 0
+      : Math.round(weightedProgress / totalTasks);
+
   const serializedProject = {
     ...project,
+    progress: automaticProgress,
     startDate:
       project.startDate?.toISOString() ?? null,
     dueDate:
       project.dueDate?.toISOString() ?? null,
     createdAt: project.createdAt.toISOString(),
-    progressHistory:
-      project.progressHistory.map((entry) => ({
-        ...entry,
-        createdAt: entry.createdAt.toISOString(),
-      })),
   };
 
   return (
@@ -151,6 +194,7 @@ async function Content({ params }: Props) {
 
       <ProjectDetails
         project={serializedProject}
+        taskStats={taskStats}
         canEdit={canManage}
         actorRole={user.role}
       />
