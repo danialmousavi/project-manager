@@ -4,33 +4,45 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  isValidIranianMobile,
+  isValidNationalId,
+  normalizeNationalId,
+  normalizePhone,
+} from "@/lib/iranian-identity";
 
-const updateUserSchema = z
+const updateSchema = z
   .object({
     role: z.enum(["MANAGER", "EMPLOYEE"]).optional(),
     isActive: z.boolean().optional(),
+    nationalId: z.string()
+      .transform(normalizeNationalId)
+      .refine(isValidNationalId, "کد ملی معتبر نیست")
+      .optional(),
+    phone: z.string()
+      .transform(normalizePhone)
+      .refine(isValidIranianMobile, "شماره موبایل معتبر نیست")
+      .optional(),
   })
   .strict()
   .refine(
-    (value) =>
-      value.role !== undefined ||
-      value.isActive !== undefined,
-    { message: "هیچ تغییری ارسال نشده است" }
+    (value) => Object.keys(value).length > 0,
+    "اطلاعاتی برای ویرایش ارسال نشده است"
   );
 
-type RouteContext = {
+type Context = {
   params: Promise<{ id: string }>;
 };
 
 export async function PATCH(
   request: NextRequest,
-  context: RouteContext
+  context: Context
 ) {
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
     return NextResponse.json(
-      { message: "ابتدا وارد حساب خود شوید" },
+      { message: "ابتدا وارد حساب شوید" },
       { status: 401 }
     );
   }
@@ -42,9 +54,10 @@ export async function PATCH(
     );
   }
 
-  const origin = request.headers.get("origin");
-
-  if (!origin || origin !== request.nextUrl.origin) {
+  if (
+    !request.headers.get("origin") ||
+    request.headers.get("origin") !== request.nextUrl.origin
+  ) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است" },
       { status: 403 }
@@ -52,9 +65,8 @@ export async function PATCH(
   }
 
   const { id } = await context.params;
-  const parsedId = z.uuid().safeParse(id);
 
-  if (!parsedId.success) {
+  if (!z.uuid().safeParse(id).success) {
     return NextResponse.json(
       { message: "شناسه کاربر نامعتبر است" },
       { status: 400 }
@@ -62,52 +74,119 @@ export async function PATCH(
   }
 
   const body = await request.json().catch(() => null);
-  const parsed = updateUserSchema.safeParse(body);
+  const parsed = updateSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
-      { message: "اطلاعات ارسال‌شده نامعتبر است" },
+      {
+        message:
+          parsed.error.issues[0]?.message ||
+          "اطلاعات نامعتبر است",
+      },
       { status: 400 }
     );
   }
 
-  if (id === currentUser.id) {
+  const changes = parsed.data;
+  const editingSelf = id === currentUser.id;
+
+  if (
+    editingSelf &&
+    (changes.role !== undefined ||
+      changes.isActive !== undefined)
+  ) {
     return NextResponse.json(
-      { message: "نمی‌توانید دسترسی حساب خودتان را تغییر دهید" },
+      { message: "نمی‌توانید نقش یا وضعیت حساب خودتان را تغییر دهید" },
       { status: 403 }
     );
   }
 
   try {
-    // The conditional update also protects ADMIN users
-    // against concurrent role changes.
-    const result = await prisma.user.updateMany({
-      where: {
-        id,
-        role: { not: "ADMIN" },
-      },
-      data: parsed.data,
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true },
     });
 
-    if (result.count === 0) {
+    if (!existing) {
       return NextResponse.json(
-        {
-          message:
-            "کاربر یافت نشد یا تغییر حساب مدیر اصلی مجاز نیست",
-        },
+        { message: "کاربر پیدا نشد" },
         { status: 404 }
       );
     }
 
+    if (
+      existing.role === "ADMIN" &&
+      (changes.role !== undefined ||
+        changes.isActive !== undefined)
+    ) {
+      return NextResponse.json(
+        { message: "تغییر نقش یا وضعیت مدیر اصلی مجاز نیست" },
+        { status: 403 }
+      );
+    }
+
+    const identityOnly = {
+      nationalId: changes.nationalId,
+      phone: changes.phone,
+    };
+
+    const result = await prisma.user.updateMany({
+      where: {
+        id,
+        ...(changes.role !== undefined ||
+        changes.isActive !== undefined
+          ? { role: { not: "ADMIN" as const } }
+          : {}),
+      },
+      data:
+        editingSelf || existing.role === "ADMIN"
+          ? identityOnly
+          : changes,
+    });
+
+    if (result.count === 0) {
+      return NextResponse.json(
+        { message: "ویرایش این کاربر مجاز نیست" },
+        { status: 403 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        nationalId: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
+
     return NextResponse.json({
       success: true,
-      message: "اطلاعات کاربر به‌روزرسانی شد",
+      message: "اطلاعات کاربر ذخیره شد",
+      user,
     });
   } catch (error) {
-    console.error("Update user failed:", error);
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        { message: "کد ملی یا شماره موبایل تکراری است" },
+        { status: 409 }
+      );
+    }
+
+    console.error("Update user failed");
 
     return NextResponse.json(
-      { message: "خطا در به‌روزرسانی کاربر" },
+      { message: "خطا در ذخیره اطلاعات کاربر" },
       { status: 500 }
     );
   }

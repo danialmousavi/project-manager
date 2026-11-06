@@ -5,12 +5,22 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  isValidIranianMobile,
+  isValidNationalId,
+  normalizeNationalId,
+  normalizePhone,
+} from "@/lib/iranian-identity";
 
 const createUserSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.email().trim().toLowerCase(),
   password: z.string().min(10).max(128),
   role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"]),
+  nationalId: z.string().transform(normalizeNationalId)
+    .refine(isValidNationalId, "کد ملی معتبر نیست"),
+  phone: z.string().transform(normalizePhone)
+    .refine(isValidIranianMobile, "شماره موبایل معتبر نیست"),
 });
 
 export async function POST(request: NextRequest) {
@@ -18,21 +28,22 @@ export async function POST(request: NextRequest) {
 
   if (!currentUser) {
     return NextResponse.json(
-      { message: "ابتدا وارد حساب خود شوید" },
+      { message: "ابتدا وارد حساب شوید" },
       { status: 401 }
     );
   }
 
   if (currentUser.role !== "ADMIN") {
     return NextResponse.json(
-      { message: "شما اجازه مدیریت کاربران را ندارید" },
+      { message: "دسترسی غیرمجاز" },
       { status: 403 }
     );
   }
 
-  const origin = request.headers.get("origin");
-
-  if (!origin || origin !== request.nextUrl.origin) {
+  if (
+    !request.headers.get("origin") ||
+    request.headers.get("origin") !== request.nextUrl.origin
+  ) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است" },
       { status: 403 }
@@ -46,26 +57,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         message:
-          "اطلاعات نامعتبر است. رمز عبور باید حداقل ۱۰ کاراکتر باشد.",
+          parsed.error.issues[0]?.message ||
+          "اطلاعات کاربر معتبر نیست",
       },
       { status: 400 }
     );
   }
 
-  const { name, email, password, role } = parsed.data;
-
   try {
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    });
-
-    if (existingUser) {
-      return NextResponse.json(
-        { message: "این ایمیل قبلاً ثبت شده است" },
-        { status: 409 }
-      );
-    }
+    const { name, email, password, role, nationalId, phone } =
+      parsed.data;
 
     const passwordHash = await argon2.hash(password, {
       type: argon2.argon2id,
@@ -75,14 +76,17 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         email,
+        nationalId,
+        phone,
         passwordHash,
         role,
-        isActive: true,
       },
       select: {
         id: true,
         name: true,
         email: true,
+        nationalId: true,
+        phone: true,
         role: true,
         isActive: true,
         createdAt: true,
@@ -92,13 +96,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: "کاربر با موفقیت ایجاد شد",
+        message: "کاربر ایجاد شد",
         user,
       },
       { status: 201 }
     );
   } catch (error) {
-    // Handles concurrent requests using the same email.
     if (
       typeof error === "object" &&
       error !== null &&
@@ -106,12 +109,15 @@ export async function POST(request: NextRequest) {
       error.code === "P2002"
     ) {
       return NextResponse.json(
-        { message: "این ایمیل قبلاً ثبت شده است" },
+        {
+          message:
+            "ایمیل، کد ملی یا شماره موبایل قبلاً ثبت شده است",
+        },
         { status: 409 }
       );
     }
 
-    console.error("Create user failed:", error);
+    console.error("Create user failed");
 
     return NextResponse.json(
       { message: "خطا در ایجاد کاربر" },

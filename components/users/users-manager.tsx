@@ -22,6 +22,8 @@ type UserItem = {
   id: string;
   name: string;
   email: string;
+  nationalId: string | null;
+  phone: string | null;
   role: UserRole;
   isActive: boolean;
   createdAt: string;
@@ -63,6 +65,8 @@ export default function UsersManager({ initialUsers }: Props) {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    nationalId: "",
+    phone: "",
     password: "",
     role: "EMPLOYEE" as UserRole,
   });
@@ -115,6 +119,8 @@ export default function UsersManager({ initialUsers }: Props) {
       setForm({
         name: "",
         email: "",
+        nationalId: "",
+        phone: "",
         password: "",
         role: "EMPLOYEE",
       });
@@ -138,6 +144,8 @@ export default function UsersManager({ initialUsers }: Props) {
     changes: {
       role?: "MANAGER" | "EMPLOYEE";
       isActive?: boolean;
+      nationalId?: string;
+      phone?: string;
     }
   ) {
     if (busyUserId) return;
@@ -170,7 +178,11 @@ export default function UsersManager({ initialUsers }: Props) {
       setUsers((previous) =>
         previous.map((item) =>
           item.id === user.id
-            ? { ...item, ...changes }
+            ? {
+                ...item,
+                ...data.user,
+                createdAt: data.user.createdAt,
+              }
             : item
         )
       );
@@ -277,6 +289,42 @@ export default function UsersManager({ initialUsers }: Props) {
                     })
                   }
                   placeholder="user@example.com"
+                />
+              </Field>
+
+              <Field label="کد ملی">
+                <input
+                  className={inputClass}
+                  dir="ltr"
+                  inputMode="numeric"
+                  maxLength={10}
+                  required
+                  value={form.nationalId}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      nationalId: event.target.value,
+                    })
+                  }
+                  placeholder="کد ملی ۱۰ رقمی"
+                />
+              </Field>
+
+              <Field label="شماره موبایل">
+                <input
+                  className={inputClass}
+                  dir="ltr"
+                  inputMode="tel"
+                  type="tel"
+                  required
+                  value={form.phone}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      phone: event.target.value,
+                    })
+                  }
+                  placeholder="09123456789"
                 />
               </Field>
 
@@ -440,6 +488,14 @@ export default function UsersManager({ initialUsers }: Props) {
                           >
                             {user.email}
                           </p>
+                          <div className="mt-2 space-y-1 text-xs text-slate-500">
+                            <p dir="ltr" className="text-left">
+                              {user.phone ?? "موبایل ثبت نشده"}
+                            </p>
+                            <p>
+                              کد ملی: {user.nationalId ?? "ثبت نشده"}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -526,6 +582,34 @@ export default function UsersManager({ initialUsers }: Props) {
                               : user.isActive
                                 ? "غیرفعال‌کردن"
                                 : "فعال‌کردن"}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={Boolean(busyUserId)}
+                            onClick={async () => {
+                              const nationalId = window.prompt(
+                                "کد ملی کاربر:",
+                                user.nationalId ?? ""
+                              );
+
+                              if (nationalId === null) return;
+
+                              const phone = window.prompt(
+                                "شماره موبایل کاربر:",
+                                user.phone ?? ""
+                              );
+
+                              if (phone === null) return;
+
+                              await updateUser(user, {
+                                nationalId,
+                                phone,
+                              });
+                            }}
+                            className="rounded-lg border border-indigo-200 px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50"
+                          >
+                            ویرایش اطلاعات
                           </button>
                         </div>
                       )}
