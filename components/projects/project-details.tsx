@@ -17,7 +17,7 @@ import {
 import UserMultiSelect, {
   type SelectableUser,
 } from "@/components/ui/user-multi-select";
-
+import ProjectTasks from "@/components/tasks/project-tasks";
 import { isoToJalali, jalaliToIso } from "@/lib/jalali";
 
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
@@ -700,6 +700,15 @@ export default function ProjectDetails({
             </div>
           </section>
         </div>
+      </div>
+
+      {/* Project tasks */}
+      <div className="mt-6">
+        <ProjectTasks
+          projectId={project.id}
+          members={project.members}
+          canManage={canEdit}
+        />
       </div>
     </div>
   );
