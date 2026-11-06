@@ -8,18 +8,32 @@ import { getTaskProjectAccess } from "@/lib/task-access";
 import {
   encodeAssignmentEvent,
 } from "@/lib/task-assignment-history";
+import {
+  encodeTaskChangeEvent,
+  type TaskFieldChange,
+  type TaskFieldName,
+} from "@/lib/task-change-history";
 
 type Context = {
   params: Promise<{ id: string }>;
 };
 
+const statusEnum = z.enum([
+  "TODO",
+  "IN_PROGRESS",
+  "IN_REVIEW",
+  "DONE",
+]);
+
+const priorityEnum = z.enum([
+  "LOW",
+  "MEDIUM",
+  "HIGH",
+  "URGENT",
+]);
+
 const statusSchema = z.object({
-  status: z.enum([
-    "TODO",
-    "IN_PROGRESS",
-    "IN_REVIEW",
-    "DONE",
-  ]),
+  status: statusEnum,
 }).strict();
 
 const assignmentSchema = z.object({
@@ -27,10 +41,76 @@ const assignmentSchema = z.object({
   note: z.string().trim().max(500).default(""),
 }).strict();
 
+const detailsSchema = z.object({
+  title: z.string().trim().min(3).max(200),
+  description: z.string().trim().max(5000),
+  priority: priorityEnum,
+  status: statusEnum,
+  startDate: z.iso.date().nullable(),
+  dueDate: z.iso.date().nullable(),
+  assigneeId: z.uuid().nullable(),
+  note: z.string().trim().max(500).default(""),
+}).strict();
+
+type TaskDetails = z.infer<typeof detailsSchema>;
+
 function validOrigin(request: NextRequest) {
   return (
     request.headers.get("origin") ===
     request.nextUrl.origin
+  );
+}
+
+function dateString(date: Date | null) {
+  return date?.toISOString().slice(0, 10) ?? null;
+}
+
+function toDate(value: string | null) {
+  return value
+    ? new Date(`${value}T00:00:00.000Z`)
+    : null;
+}
+
+function taskError(error: unknown) {
+  const code =
+    error instanceof Error ? error.message : "";
+
+  const errors: Record<
+    string,
+    { message: string; status: number }
+  > = {
+    NOT_FOUND: {
+      message: "تسک پیدا نشد.",
+      status: 404,
+    },
+    FORBIDDEN: {
+      message: "اجازه انجام این عملیات را ندارید.",
+      status: 403,
+    },
+    INVALID_ASSIGNEE: {
+      message:
+        "مسئول باید مدیر یا کارمند فعال و مجاز همین پروژه باشد.",
+      status: 400,
+    },
+    CONFLICT: {
+      message:
+        "تسک هم‌زمان تغییر کرده است؛ صفحه را تازه کنید.",
+      status: 409,
+    },
+  };
+
+  if (errors[code]) {
+    return NextResponse.json(
+      { message: errors[code].message },
+      { status: errors[code].status }
+    );
+  }
+
+  console.error("Task API error:", error);
+
+  return NextResponse.json(
+    { message: "خطا در انجام عملیات تسک." },
+    { status: 500 }
   );
 }
 
@@ -63,9 +143,11 @@ export async function PATCH(
     );
   }
 
-  const body = await request.json().catch(() => null);
+  const body: unknown = await request
+    .json()
+    .catch(() => null);
 
-  const task = await prisma.task.findUnique({
+  const currentTask = await prisma.task.findUnique({
     where: { id },
     select: {
       id: true,
@@ -74,7 +156,7 @@ export async function PATCH(
     },
   });
 
-  if (!task) {
+  if (!currentTask) {
     return NextResponse.json(
       { message: "تسک پیدا نشد." },
       { status: 404 }
@@ -83,7 +165,7 @@ export async function PATCH(
 
   const access = await getTaskProjectAccess(
     actor,
-    task.projectId
+    currentTask.projectId
   );
 
   if (!access) {
@@ -93,73 +175,135 @@ export async function PATCH(
     );
   }
 
-  // Change task status.
-  if (
-    body &&
-    typeof body === "object" &&
-    Object.hasOwn(body, "status")
-  ) {
-    const parsed = statusSchema.safeParse(body);
+  // Simple status updates.
+  const statusParsed = statusSchema.safeParse(body);
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { message: "وضعیت تسک نامعتبر است." },
-        { status: 400 }
-      );
-    }
-
+  if (statusParsed.success) {
     if (
       !access.canManage &&
-      task.assigneeId !== actor.id
+      currentTask.assigneeId !== actor.id
     ) {
       return NextResponse.json(
-        { message: "اجازه تغییر وضعیت این تسک را ندارید." },
+        { message: "اجازه تغییر وضعیت ندارید." },
         { status: 403 }
       );
     }
 
-    const result = await prisma.task.updateMany({
-      where: {
-        id,
-        projectId: task.projectId,
-        ...(!access.canManage
-          ? { assigneeId: actor.id }
-          : {}),
-      },
-      data: {
-        status: parsed.data.status,
-        version: { increment: 1 },
-      },
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        const current = await tx.task.findUnique({
+          where: { id },
+          select: {
+            status: true,
+            version: true,
+            assigneeId: true,
+          },
+        });
 
-    return NextResponse.json(
-      {
-        success: result.count === 1,
-        message:
-          result.count === 1
-            ? "وضعیت تسک ذخیره شد."
-            : "تسک تغییر کرده است؛ صفحه را تازه کنید.",
-      },
-      {
-        status: result.count === 1 ? 200 : 409,
-      }
-    );
-  }
+        if (!current) throw new Error("NOT_FOUND");
 
-  // Change task assignee.
-  const parsed = assignmentSchema.safeParse(body);
+        if (
+          !access.canManage &&
+          current.assigneeId !== actor.id
+        ) {
+          throw new Error("FORBIDDEN");
+        }
 
-  if (!parsed.success) {
-    return NextResponse.json(
-      { message: "اطلاعات واگذاری نامعتبر است." },
-      { status: 400 }
-    );
+        if (current.status === statusParsed.data.status) {
+          return;
+        }
+
+        const result = await tx.task.updateMany({
+          where: {
+            id,
+            version: current.version,
+            ...(!access.canManage
+              ? { assigneeId: actor.id }
+              : {}),
+          },
+          data: {
+            status: statusParsed.data.status,
+            version: { increment: 1 },
+          },
+        });
+
+        if (result.count !== 1) {
+          throw new Error("CONFLICT");
+        }
+
+        await tx.taskComment.create({
+          data: {
+            taskId: id,
+            authorId: actor.id,
+            content: encodeTaskChangeEvent({
+              changes: [{
+                field: "status",
+                from: current.status,
+                to: statusParsed.data.status,
+              }],
+              note: "",
+            }),
+          },
+        });
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "وضعیت تسک ثبت شد.",
+      });
+    } catch (error) {
+      return taskError(error);
+    }
   }
 
   if (!access.canManage) {
     return NextResponse.json(
-      { message: "اجازه واگذاری تسک ندارید." },
+      { message: "اجازه ویرایش تسک ندارید." },
       { status: 403 }
+    );
+  }
+
+  const assignmentParsed =
+    assignmentSchema.safeParse(body);
+
+  const detailsParsed =
+    detailsSchema.safeParse(body);
+
+  if (
+    !assignmentParsed.success &&
+    !detailsParsed.success
+  ) {
+    return NextResponse.json(
+      { message: "اطلاعات ویرایش تسک معتبر نیست." },
+      { status: 400 }
+    );
+  }
+
+  const details: TaskDetails | null =
+    detailsParsed.success
+      ? detailsParsed.data
+      : null;
+
+  const nextAssigneeId = details
+    ? details.assigneeId
+    : assignmentParsed.success
+      ? assignmentParsed.data.assigneeId
+      : null;
+
+  const note = details
+    ? details.note
+    : assignmentParsed.success
+      ? assignmentParsed.data.note
+      : "";
+
+  if (
+    details?.startDate &&
+    details.dueDate &&
+    details.startDate > details.dueDate
+  ) {
+    return NextResponse.json(
+      { message: "تاریخ پایان قبل از شروع است." },
+      { status: 400 }
     );
   }
 
@@ -169,33 +313,39 @@ export async function PATCH(
         const current = await tx.task.findUnique({
           where: { id },
           select: {
+            id: true,
+            projectId: true,
+            version: true,
+            title: true,
+            description: true,
+            priority: true,
+            status: true,
+            startDate: true,
+            dueDate: true,
             assigneeId: true,
             assignee: {
               select: { name: true },
             },
-            version: true,
           },
         });
 
-        if (!current) {
-          throw new Error("NOT_FOUND");
-        }
+        if (!current) throw new Error("NOT_FOUND");
 
-        const nextId = parsed.data.assigneeId;
+        const assigneeChanged =
+          current.assigneeId !== nextAssigneeId;
 
-        if (current.assigneeId === nextId) {
-          return false;
-        }
+        let nextAssigneeName =
+          current.assignee?.name ?? null;
 
-        let nextName: string | null = null;
-
-        if (nextId) {
+        if (assigneeChanged && nextAssigneeId) {
           const member =
             await tx.projectMember.findFirst({
               where: {
-                projectId: task.projectId,
-                userId: nextId,
-                user: { isActive: true },
+                projectId: current.projectId,
+                userId: nextAssigneeId,
+                user: {
+                  isActive: true,
+                },
                 ...(actor.role === "ADMIN"
                   ? {}
                   : { role: "MEMBER" }),
@@ -211,7 +361,7 @@ export async function PATCH(
               },
             });
 
-          const valid =
+          const allowed =
             member &&
             (
               (member.role === "MANAGER" &&
@@ -220,21 +370,82 @@ export async function PATCH(
                 member.user.role === "EMPLOYEE")
             );
 
-          if (!valid) {
+          if (!allowed) {
             throw new Error("INVALID_ASSIGNEE");
           }
 
-          nextName = member.user.name;
+          nextAssigneeName = member.user.name;
+        }
+
+        if (assigneeChanged && !nextAssigneeId) {
+          nextAssigneeName = null;
+        }
+
+        const changes: TaskFieldChange[] = [];
+
+        if (details) {
+          const before: Record<
+            TaskFieldName,
+            string | null
+          > = {
+            title: current.title,
+            description: current.description,
+            priority: current.priority,
+            status: current.status,
+            startDate: dateString(current.startDate),
+            dueDate: dateString(current.dueDate),
+          };
+
+          const after: Record<
+            TaskFieldName,
+            string | null
+          > = {
+            title: details.title,
+            description: details.description || null,
+            priority: details.priority,
+            status: details.status,
+            startDate: details.startDate,
+            dueDate: details.dueDate,
+          };
+
+          for (const field of Object.keys(
+            after
+          ) as TaskFieldName[]) {
+            if (before[field] !== after[field]) {
+              changes.push({
+                field,
+                from: before[field],
+                to: after[field],
+              });
+            }
+          }
+        }
+
+        if (
+          changes.length === 0 &&
+          !assigneeChanged
+        ) {
+          return false;
         }
 
         const updated = await tx.task.updateMany({
           where: {
             id,
             version: current.version,
-            assigneeId: current.assigneeId,
           },
           data: {
-            assigneeId: nextId,
+            ...(details
+              ? {
+                  title: details.title,
+                  description:
+                    details.description || null,
+                  status: details.status,
+                  priority: details.priority,
+                  startDate: toDate(details.startDate),
+                  dueDate: toDate(details.dueDate),
+                }
+              : {}),
+            assigneeId: nextAssigneeId,
             version: { increment: 1 },
           },
         });
@@ -243,20 +454,35 @@ export async function PATCH(
           throw new Error("CONFLICT");
         }
 
-        await tx.taskComment.create({
-          data: {
-            taskId: id,
-            authorId: actor.id,
-            content: encodeAssignmentEvent({
-              fromUserId: current.assigneeId,
-              fromUserName:
-                current.assignee?.name ?? null,
-              toUserId: nextId,
-              toUserName: nextName,
-              note: parsed.data.note,
-            }),
-          },
-        });
+        if (changes.length > 0) {
+          await tx.taskComment.create({
+            data: {
+              taskId: id,
+              authorId: actor.id,
+              content: encodeTaskChangeEvent({
+                changes,
+                note,
+              }),
+            },
+          });
+        }
+
+        if (assigneeChanged) {
+          await tx.taskComment.create({
+            data: {
+              taskId: id,
+              authorId: actor.id,
+              content: encodeAssignmentEvent({
+                fromUserId: current.assigneeId,
+                fromUserName:
+                  current.assignee?.name ?? null,
+                toUserId: nextAssigneeId,
+                toUserName: nextAssigneeName,
+                note,
+              }),
+            },
+          });
+        }
 
         return true;
       }
@@ -266,36 +492,11 @@ export async function PATCH(
       success: true,
       changed,
       message: changed
-        ? "واگذاری تسک ثبت شد."
-        : "مسئول تسک تغییری نکرد.",
+        ? "تغییرات تسک ذخیره شد."
+        : "اطلاعات تسک تغییری نکرد.",
     });
   } catch (error) {
-    const code =
-      error instanceof Error ? error.message : "";
-
-    if (code === "INVALID_ASSIGNEE") {
-      return NextResponse.json(
-        { message: "مسئول انتخاب‌شده معتبر نیست." },
-        { status: 400 }
-      );
-    }
-
-    if (code === "CONFLICT") {
-      return NextResponse.json(
-        {
-          message:
-            "مسئول تسک توسط فرد دیگری تغییر کرده؛ صفحه را تازه کنید.",
-        },
-        { status: 409 }
-      );
-    }
-
-    console.error("Assign task:", error);
-
-    return NextResponse.json(
-      { message: "خطا در واگذاری تسک." },
-      { status: 500 }
-    );
+    return taskError(error);
   }
 }
 
@@ -314,10 +515,7 @@ export async function DELETE(
 
   if (actor.role !== "ADMIN") {
     return NextResponse.json(
-      {
-        message:
-          "فقط مدیر اصلی می‌تواند تسک را حذف کند.",
-      },
+      { message: "فقط مدیر اصلی می‌تواند تسک را حذف کند." },
       { status: 403 }
     );
   }
@@ -368,12 +566,12 @@ export async function DELETE(
         success: deleted,
         message: deleted
           ? "تسک حذف شد."
-          : "تسک پیدا نشد.",
+          : "تسک یافت نشد.",
       },
       { status: deleted ? 200 : 404 }
     );
   } catch (error) {
-    console.error("Delete task:", error);
+    console.error("Delete task error:", error);
 
     return NextResponse.json(
       { message: "خطا در حذف تسک." },

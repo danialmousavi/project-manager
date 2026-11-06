@@ -1,29 +1,45 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
+
 import {
   ASSIGNMENT_PREFIX,
   decodeAssignmentEvent,
 } from "@/lib/task-assignment-history";
 
+import {
+  TASK_CHANGE_PREFIX,
+  decodeTaskChangeEvent,
+  type TaskFieldChange,
+} from "@/lib/task-change-history";
+
 type Context = {
   params: Promise<{ id: string }>;
 };
 
-export async function GET(
-  _request: NextRequest,
-  context: Context
-) {
+type HistoryItem = {
+  id: string;
+  type: "ASSIGNMENT" | "EDIT";
+  fromUserName: string | null;
+  toUserName: string | null;
+  note: string;
+  changes: TaskFieldChange[];
+  createdAt: string;
+  changedBy: {
+    name: string;
+  };
+};
+
+export async function GET(_request: NextRequest, context: Context) {
   const actor = await getCurrentUser();
 
   if (!actor) {
     return NextResponse.json(
-      { message: "ابتدا وارد شوید." },
-      { status: 401 }
+      { message: "ابتدا وارد حساب شوید." },
+      { status: 401 },
     );
   }
 
@@ -32,50 +48,57 @@ export async function GET(
   if (!z.uuid().safeParse(id).success) {
     return NextResponse.json(
       { message: "شناسه تسک نامعتبر است." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const task = await prisma.task.findUnique({
-    where: { id },
+    where: {
+      id,
+    },
     select: {
       projectId: true,
     },
   });
 
   if (!task) {
-    return NextResponse.json(
-      { message: "تسک یافت نشد." },
-      { status: 404 }
-    );
+    return NextResponse.json({ message: "تسک یافت نشد." }, { status: 404 });
   }
 
-  const access = await getTaskProjectAccess(
-    actor,
-    task.projectId
-  );
+  const access = await getTaskProjectAccess(actor, task.projectId);
 
   if (!access?.canManage) {
     return NextResponse.json(
-      {
-        message:
-          "اجازه مشاهده تاریخچه واگذاری را ندارید.",
-      },
-      { status: 403 }
+      { message: "اجازه مشاهده تاریخچه را ندارید." },
+      { status: 403 },
     );
   }
 
   const events = await prisma.taskComment.findMany({
     where: {
       taskId: id,
-      content: {
-        startsWith: ASSIGNMENT_PREFIX,
+      OR: [
+        {
+          content: {
+            startsWith: ASSIGNMENT_PREFIX,
+          },
+        },
+        {
+          content: {
+            startsWith: TASK_CHANGE_PREFIX,
+          },
+        },
+      ],
+    },
+    orderBy: [
+      {
+        createdAt: "desc",
       },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: 100,
+      {
+        id: "desc",
+      },
+    ],
+    take: 150,
     select: {
       id: true,
       content: true,
@@ -88,28 +111,65 @@ export async function GET(
     },
   });
 
-  return NextResponse.json(
-    {
-      success: true,
-      history: events.flatMap((event) => {
-        const parsed = decodeAssignmentEvent(
-          event.content
-        );
+  const history: HistoryItem[] = events.flatMap<HistoryItem>((event) => {
+    const base = {
+      id: event.id,
+      createdAt: event.createdAt.toISOString(),
+      changedBy: {
+        name: event.author.name,
+      },
+    };
 
-        if (!parsed) return [];
+    if (event.content.startsWith(ASSIGNMENT_PREFIX)) {
+      const parsed = decodeAssignmentEvent(event.content);
 
-        return [{
-          id: event.id,
+      if (!parsed) {
+        return [];
+      }
+
+      return [
+        {
+          ...base,
+          type: "ASSIGNMENT",
           fromUserName: parsed.fromUserName,
           toUserName: parsed.toUserName,
           note: parsed.note,
-          createdAt: event.createdAt.toISOString(),
-          changedBy: event.author,
-        }];
-      }),
+          changes: [],
+        },
+      ];
+    }
+
+    if (event.content.startsWith(TASK_CHANGE_PREFIX)) {
+      const parsed = decodeTaskChangeEvent(event.content);
+
+      if (!parsed) {
+        return [];
+      }
+
+      return [
+        {
+          ...base,
+          type: "EDIT",
+          fromUserName: null,
+          toUserName: null,
+          note: parsed.note,
+          changes: parsed.changes,
+        },
+      ];
+    }
+
+    return [];
+  });
+
+  return NextResponse.json(
+    {
+      success: true,
+      history,
     },
     {
-      headers: { "Cache-Control": "no-store" },
-    }
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
   );
 }
