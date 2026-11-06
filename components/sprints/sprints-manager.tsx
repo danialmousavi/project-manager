@@ -5,42 +5,49 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
+  type PointerEvent,
+  type ReactNode,
 } from "react";
-import Link from "next/link";
+
 import {
-  ArrowUpLeft,
   CalendarDays,
   CalendarRange,
   CheckCircle2,
   ChevronDown,
-  CircleDashed,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
-  FolderPlus,
-  Layers3,
+  GripVertical,
   LoaderCircle,
   Plus,
-  Search,
+  RefreshCw,
   Trash2,
   X,
 } from "lucide-react";
 
 import PersianDatePicker from "@/components/ui/persian-date-picker";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
-import { isoToJalali } from "@/lib/jalali";
-
-type SprintStatus =
-  | "PLANNED"
-  | "ACTIVE"
-  | "COMPLETED"
-  | "CANCELLED";
 
 type TaskStatus =
   | "TODO"
   | "IN_PROGRESS"
   | "IN_REVIEW"
   | "DONE";
+
+type Priority =
+  | "LOW"
+  | "MEDIUM"
+  | "HIGH"
+  | "URGENT";
+
+type SprintStatus =
+  | "PLANNED"
+  | "ACTIVE"
+  | "COMPLETED"
+  | "CANCELLED";
 
 type Sprint = {
   id: string;
@@ -53,9 +60,13 @@ type Sprint = {
 type Task = {
   id: string;
   title: string;
+  description: string | null;
   status: TaskStatus;
-  priority: string;
+  priority: Priority;
+  startDate: string | null;
+  dueDate: string | null;
   sprintId: string | null;
+  assigneeId: string | null;
   assignee: {
     id: string;
     name: string;
@@ -68,34 +79,142 @@ type Props = {
   canDelete: boolean;
 };
 
-const statuses: Record<SprintStatus, string> = {
+type DragMode = "move" | "start" | "end";
+
+type DragState = {
+  taskId: string;
+  mode: DragMode;
+  pointerX: number;
+  originalStart: string;
+  originalEnd: string;
+  nextStart: string;
+  nextEnd: string;
+};
+
+const DAY_WIDTH = 46;
+const VISIBLE_DAYS = 56;
+const DAY_MS = 86_400_000;
+
+const statusLabels: Record<TaskStatus, string> = {
+  TODO: "برای انجام",
+  IN_PROGRESS: "در حال انجام",
+  IN_REVIEW: "در حال بررسی",
+  DONE: "انجام‌شده",
+};
+
+const statusColors: Record<TaskStatus, string> = {
+  TODO: "#64748b",
+  IN_PROGRESS: "#0ea5e9",
+  IN_REVIEW: "#f59e0b",
+  DONE: "#16a34a",
+};
+
+const sprintLabels: Record<SprintStatus, string> = {
   PLANNED: "برنامه‌ریزی‌شده",
-  ACTIVE: "در حال اجرا",
+  ACTIVE: "فعال",
   COMPLETED: "تکمیل‌شده",
   CANCELLED: "لغوشده",
 };
 
-const taskStatuses: Record<TaskStatus, string> = {
-  TODO: "برای انجام",
-  IN_PROGRESS: "در حال انجام",
-  IN_REVIEW: "در حال بررسی",
-  DONE: "تکمیل‌شده",
-};
-
-const statusColors: Record<SprintStatus, string> = {
-  PLANNED: "bg-slate-100 text-slate-600",
-  ACTIVE: "bg-blue-50 text-blue-700",
-  COMPLETED: "bg-emerald-50 text-emerald-700",
-  CANCELLED: "bg-rose-50 text-rose-700",
-};
-
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10";
+  "w-full rounded-xl border border-emerald-200 " +
+  "bg-white px-4 py-3 text-sm outline-none " +
+  "focus:border-emerald-500 focus:ring-4 " +
+  "focus:ring-emerald-500/10";
 
-function errorMessage(error: unknown) {
+function utcTime(value: string) {
+  return Date.parse(
+    `${value.slice(0, 10)}T00:00:00.000Z`
+  );
+}
+
+function addDays(value: string, days: number) {
+  return new Date(
+    utcTime(value) + days * DAY_MS
+  ).toISOString().slice(0, 10);
+}
+
+function diffDays(a: string, b: string) {
+  return Math.round(
+    (utcTime(a) - utcTime(b)) / DAY_MS
+  );
+}
+
+function todayIso() {
+  const date = new Date();
+
+  return (
+    `${date.getFullYear()}-` +
+    `${String(date.getMonth() + 1).padStart(2, "0")}-` +
+    `${String(date.getDate()).padStart(2, "0")}`
+  );
+}
+
+function persianDate(
+  value: string,
+  options: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }
+) {
+  return new Intl.DateTimeFormat(
+    "fa-IR-u-ca-persian",
+    {
+      ...options,
+      timeZone: "UTC",
+    }
+  ).format(new Date(utcTime(value)));
+}
+
+function getError(error: unknown) {
   return error instanceof Error
     ? error.message
     : "خطایی رخ داده است.";
+}
+
+function calculateDrag(
+  drag: DragState,
+  clientX: number
+) {
+  const days = Math.round(
+    (clientX - drag.pointerX) / DAY_WIDTH
+  );
+
+  if (drag.mode === "move") {
+    return {
+      startDate: addDays(drag.originalStart, days),
+      dueDate: addDays(drag.originalEnd, days),
+    };
+  }
+
+  if (drag.mode === "start") {
+    const maxDays = diffDays(
+      drag.originalEnd,
+      drag.originalStart
+    );
+
+    return {
+      startDate: addDays(
+        drag.originalStart,
+        Math.min(days, maxDays)
+      ),
+      dueDate: drag.originalEnd,
+    };
+  }
+
+  const minDays = -diffDays(
+    drag.originalEnd,
+    drag.originalStart
+  );
+
+  return {
+    startDate: drag.originalStart,
+    dueDate: addDays(
+      drag.originalEnd,
+      Math.max(days, minDays)
+    ),
+  };
 }
 
 export default function SprintsManager({
@@ -108,53 +227,97 @@ export default function SprintsManager({
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const busyRef = useRef(false);
 
-  const [filter, setFilter] = useState("ALL");
-  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const [anchor, setAnchor] = useState(todayIso);
+  const [selectedSprint, setSelectedSprint] =
+    useState("ALL");
+
+  const [expandedSprint, setExpandedSprint] =
+    useState<string | null>(null);
+
+  const [selectedTaskId, setSelectedTaskId] =
+    useState("");
 
   const [creating, setCreating] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingSprint, setDeletingSprint] =
+    useState<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
+  const [sprintName, setSprintName] = useState("");
+  const [sprintStart, setSprintStart] =
+    useState<string | null>(null);
+  const [sprintEnd, setSprintEnd] =
+    useState<string | null>(null);
 
-  const [taskSearch, setTaskSearch] = useState("");
-  const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [editingTask, setEditingTask] =
+    useState<Task | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const [taskStart, setTaskStart] =
+    useState<string | null>(null);
+  const [taskEnd, setTaskEnd] =
+    useState<string | null>(null);
 
+  const [formError, setFormError] = useState("");
+
+  const [drag, setDrag] =
+    useState<DragState | null>(null);
+
+  const dragRef = useRef<DragState | null>(null);
+
+  const rangeStart = addDays(anchor, -7);
+  const rangeEnd = addDays(
+    rangeStart,
+    VISIBLE_DAYS - 1
+  );
+
+  const dates = useMemo(
+    () =>
+      Array.from(
+        { length: VISIBLE_DAYS },
+        (_, index) => addDays(rangeStart, index)
+      ),
+    [rangeStart]
+  );
+
+  const today = todayIso();
+  const timelineWidth = DAY_WIDTH * VISIBLE_DAYS;
+
+  const load = useCallback(async () => {
     try {
       const response = await fetch(
         `/api/v1/projects/${projectId}/sprints`,
-        { cache: "no-store" }
+        {
+          cache: "no-store",
+          credentials: "same-origin",
+        }
       );
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.message || "دریافت اسپرینت‌ها انجام نشد."
+          data.message || "دریافت اطلاعات ناموفق بود."
         );
       }
 
       setSprints(data.sprints ?? []);
       setTasks(data.tasks ?? []);
+      setError("");
     } catch (err) {
-      setError(errorMessage(err));
+      setError(getError(err));
     } finally {
       setLoading(false);
     }
   }, [projectId]);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    void load();
+  }, [load]);
 
-  async function send(
+  async function api(
     method: "POST" | "PATCH" | "DELETE",
     body: unknown
   ) {
@@ -163,7 +326,9 @@ export default function SprintsManager({
       {
         method,
         credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(body),
       }
     );
@@ -171,69 +336,284 @@ export default function SprintsManager({
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(
-        data.message || "عملیات ناموفق بود."
-      );
+      throw new Error(data.message || "عملیات ناموفق بود.");
     }
 
     return data;
   }
 
-  async function createSprint(
-    event: FormEvent<HTMLFormElement>
+  async function runAction(
+    action: () => Promise<void>
   ) {
-    event.preventDefault();
+    if (busyRef.current) return;
 
-    if (busy || !canManage) return;
-
-    if (!startDate || !endDate) {
-      setError("تاریخ شروع و پایان را انتخاب کنید.");
-      return;
-    }
-
-    if (startDate > endDate) {
-      setError("تاریخ پایان قبل از تاریخ شروع است.");
-      return;
-    }
-
+    busyRef.current = true;
     setBusy(true);
     setError("");
+    setNotice("");
 
     try {
-      const data = await send("POST", {
-        name,
-        startDate,
-        endDate,
-      });
-
-      setSprints((previous) => [
-        data.sprint,
-        ...previous,
-      ]);
-
-      setName("");
-      setStartDate(null);
-      setEndDate(null);
-      setCreating(false);
-      setExpandedId(data.sprint.id);
+      await action();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(getError(err));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
-  async function changeStatus(
+  // Use the existing Task API so task history is retained.
+  async function updateTaskDates(
+    task: Task,
+    startDate: string | null,
+    dueDate: string | null
+  ) {
+    if (!canManage || busyRef.current) return;
+
+    if (
+      startDate &&
+      dueDate &&
+      startDate > dueDate
+    ) {
+      setError("تاریخ پایان قبل از شروع است.");
+      return;
+    }
+
+    if (
+      task.startDate === startDate &&
+      task.dueDate === dueDate
+    ) {
+      return;
+    }
+
+    busyRef.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    const originalTask = task;
+
+    setTasks((previous) =>
+      previous.map((item) =>
+        item.id === task.id
+          ? { ...item, startDate, dueDate }
+          : item
+      )
+    );
+
+    try {
+      const response = await fetch(
+        `/api/v1/tasks/${task.id}`,
+        {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: task.title,
+            description: task.description ?? "",
+            priority: task.priority,
+            status: task.status,
+            startDate,
+            dueDate,
+            assigneeId: task.assigneeId,
+            note: "تغییر زمان‌بندی از تایم‌لاین اسپرینت",
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "ذخیره تاریخ تسک انجام نشد."
+        );
+      }
+
+      setEditingTask(null);
+      setNotice(
+        `زمان‌بندی تسک «${task.title}» ذخیره شد.`
+      );
+    } catch (err) {
+      setTasks((previous) =>
+        previous.map((item) =>
+          item.id === originalTask.id
+            ? originalTask
+            : item
+        )
+      );
+
+      setError(getError(err));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  function beginDrag(
+    event: PointerEvent<HTMLDivElement>,
+    task: Task,
+    mode: DragMode
+  ) {
+    if (
+      !canManage ||
+      busyRef.current ||
+      !task.startDate ||
+      !task.dueDate ||
+      event.button !== 0
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    event.currentTarget.setPointerCapture(
+      event.pointerId
+    );
+
+    const initial: DragState = {
+      taskId: task.id,
+      mode,
+      pointerX: event.clientX,
+      originalStart: task.startDate,
+      originalEnd: task.dueDate,
+      nextStart: task.startDate,
+      nextEnd: task.dueDate,
+    };
+
+    dragRef.current = initial;
+    setDrag(initial);
+  }
+
+  function moveDrag(
+    event: PointerEvent<HTMLDivElement>
+  ) {
+    const current = dragRef.current;
+    if (!current) return;
+
+    const next = calculateDrag(
+      current,
+      event.clientX
+    );
+
+    const updated = {
+      ...current,
+      nextStart: next.startDate,
+      nextEnd: next.dueDate,
+    };
+
+    dragRef.current = updated;
+    setDrag(updated);
+  }
+
+  function finishDrag(
+    event: PointerEvent<HTMLDivElement>
+  ) {
+    const current = dragRef.current;
+
+    dragRef.current = null;
+    setDrag(null);
+
+    if (!current) return;
+
+    const next = calculateDrag(
+      current,
+      event.clientX
+    );
+
+    const task = tasks.find(
+      (item) => item.id === current.taskId
+    );
+
+    if (!task) return;
+
+    void updateTaskDates(
+      task,
+      next.startDate,
+      next.dueDate
+    );
+  }
+
+  function cancelDrag() {
+    dragRef.current = null;
+    setDrag(null);
+  }
+
+  function openTaskDates(task: Task) {
+    setEditingTask(task);
+    setTaskStart(task.startDate);
+    setTaskEnd(task.dueDate);
+    setFormError("");
+  }
+
+  function saveTaskForm(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (!editingTask || busy) return;
+
+    if (!taskStart || !taskEnd) {
+      setFormError("هر دو تاریخ را انتخاب کنید.");
+      return;
+    }
+
+    if (taskStart > taskEnd) {
+      setFormError("تاریخ پایان قبل از شروع است.");
+      return;
+    }
+
+    void updateTaskDates(
+      editingTask,
+      taskStart,
+      taskEnd
+    );
+  }
+
+  function createSprint(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (!sprintStart || !sprintEnd) {
+      setFormError("هر دو تاریخ را انتخاب کنید.");
+      return;
+    }
+
+    if (sprintStart > sprintEnd) {
+      setFormError("تاریخ پایان قبل از شروع است.");
+      return;
+    }
+
+    void runAction(async () => {
+      const data = await api("POST", {
+        name: sprintName,
+        startDate: sprintStart,
+        endDate: sprintEnd,
+      });
+
+      setSprints((previous) => [
+        ...previous,
+        data.sprint,
+      ]);
+
+      setCreating(false);
+      setSprintName("");
+      setSprintStart(null);
+      setSprintEnd(null);
+
+      setNotice("اسپرینت جدید ساخته شد.");
+    });
+  }
+
+  function setSprintStatus(
     sprintId: string,
     status: SprintStatus
   ) {
-    if (busy || !canManage) return;
-
-    setBusy(true);
-    setError("");
-
-    try {
-      await send("PATCH", {
+    void runAction(async () => {
+      await api("PATCH", {
         action: "SET_STATUS",
         sprintId,
         status,
@@ -246,23 +626,18 @@ export default function SprintsManager({
             : sprint
         )
       );
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+
+      setNotice("وضعیت اسپرینت ذخیره شد.");
+    });
   }
 
-  async function addTask(sprintId: string) {
-    if (!selectedTaskId || busy || !canManage) return;
+  function addTaskToSprint(sprintId: string) {
+    if (!selectedTaskId) return;
 
     const taskId = selectedTaskId;
 
-    setBusy(true);
-    setError("");
-
-    try {
-      await send("PATCH", {
+    void runAction(async () => {
+      await api("PATCH", {
         action: "ASSIGN_TASK",
         sprintId,
         taskId,
@@ -277,25 +652,16 @@ export default function SprintsManager({
       );
 
       setSelectedTaskId("");
-      setTaskSearch("");
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+      setNotice("تسک به اسپرینت اضافه شد.");
+    });
   }
 
-  async function removeTask(
+  function removeTaskFromSprint(
     sprintId: string,
     taskId: string
   ) {
-    if (busy || !canManage) return;
-
-    setBusy(true);
-    setError("");
-
-    try {
-      await send("PATCH", {
+    void runAction(async () => {
+      await api("PATCH", {
         action: "REMOVE_TASK",
         sprintId,
         taskId,
@@ -308,674 +674,854 @@ export default function SprintsManager({
             : task
         )
       );
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+
+      setNotice("تسک از اسپرینت خارج شد.");
+    });
   }
 
-  async function deleteSprint() {
-    if (!deletingId || busy || !canDelete) return;
+  function deleteSprint() {
+    if (!deletingSprint) return;
 
-    const id = deletingId;
+    const sprintId = deletingSprint;
 
-    setBusy(true);
-    setError("");
-
-    try {
-      await send("DELETE", {
-        sprintId: id,
-      });
+    void runAction(async () => {
+      await api("DELETE", { sprintId });
 
       setSprints((previous) =>
-        previous.filter((sprint) => sprint.id !== id)
+        previous.filter(
+          (sprint) => sprint.id !== sprintId
+        )
       );
 
       setTasks((previous) =>
         previous.map((task) =>
-          task.sprintId === id
+          task.sprintId === sprintId
             ? { ...task, sprintId: null }
             : task
         )
       );
 
-      if (expandedId === id) setExpandedId(null);
-      setDeletingId(null);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+      setDeletingSprint(null);
+      setNotice("اسپرینت حذف شد؛ تسک‌ها حفظ شدند.");
+    });
   }
 
-  const visibleSprints = useMemo(
-    () =>
-      sprints.filter((sprint) => {
-        const matchesName = sprint.name
-          .toLocaleLowerCase()
-          .includes(search.trim().toLocaleLowerCase());
-
-        const matchesStatus =
-          filter === "ALL" ||
-          sprint.status === filter;
-
-        return matchesName && matchesStatus;
-      }),
-    [sprints, search, filter]
-  );
-
-  const availableTasks = useMemo(
+  const displayedTasks = useMemo(
     () =>
       tasks.filter(
         (task) =>
-          task.sprintId === null &&
-          task.title
-            .toLocaleLowerCase()
-            .includes(
-              taskSearch.trim().toLocaleLowerCase()
-            )
+          selectedSprint === "ALL" ||
+          (selectedSprint === "BACKLOG"
+            ? task.sprintId === null
+            : task.sprintId === selectedSprint)
       ),
-    [tasks, taskSearch]
+    [tasks, selectedSprint]
   );
 
-  const activeCount = sprints.filter(
-    (sprint) => sprint.status === "ACTIVE"
+  const orderedTasks = useMemo(
+    () =>
+      [...displayedTasks].sort((a, b) =>
+        (a.startDate ?? "9999").localeCompare(
+          b.startDate ?? "9999"
+        )
+      ),
+    [displayedTasks]
+  );
+
+  const unassignedTasks = tasks.filter(
+    (task) => task.sprintId === null
+  );
+
+  const completedCount = displayedTasks.filter(
+    (task) => task.status === "DONE"
   ).length;
 
-  const finishedCount = sprints.filter(
-    (sprint) => sprint.status === "COMPLETED"
-  ).length;
-
-  function expandSprint(id: string) {
-    setExpandedId((current) =>
-      current === id ? null : id
-    );
-    setSelectedTaskId("");
-    setTaskSearch("");
-  }
+  const todayIndex = diffDays(today, rangeStart);
 
   return (
-    <div className="space-y-6">
-      {/* Page actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div
+      dir="rtl"
+      className="space-y-6"
+      style={{ color: "var(--foreground)" }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-extrabold text-slate-900">
-            برنامه اسپرینت‌ها
+          <h2 className="flex items-center gap-2 text-xl font-extrabold">
+            <CalendarRange
+              size={24}
+              className="text-emerald-600"
+            />
+            تایم‌لاین اسپرینت‌ها و تسک‌ها
           </h2>
 
-          <p className="mt-1.5 text-sm text-slate-500">
-            دوره‌های کاری، تسک‌ها و میزان پیشرفت
+          <p
+            className="mt-2 text-sm leading-7"
+            style={{ color: "var(--muted)" }}
+          >
+            هر نوار، زمان‌بندی یک تسک واقعی است؛
+            دایره کنار آن وضعیت فعلی تسک را
+            نشان می‌دهد.
           </p>
         </div>
 
-        {canManage && (
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => {
-              setError("");
-              setCreating(true);
-            }}
-            className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-bold text-white shadow-md shadow-emerald-600/15 transition hover:bg-emerald-700"
+            disabled={busy}
+            onClick={() => void load()}
+            className="inline-flex h-11 items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 text-sm font-semibold text-emerald-700 disabled:opacity-50"
           >
-            <Plus size={18} />
-            اسپرینت جدید
+            <RefreshCw size={17} />
+            به‌روزرسانی
           </button>
-        )}
-      </div>
 
-      {/* Stats */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat
-          label="تمام اسپرینت‌ها"
-          value={sprints.length}
-          icon={<Layers3 size={20} />}
-          color="emerald"
-        />
-        <Stat
-          label="در حال اجرا"
-          value={activeCount}
-          icon={<Clock3 size={20} />}
-          color="emerald"
-        />
-        <Stat
-          label="تکمیل‌شده"
-          value={finishedCount}
-          icon={<CheckCircle2 size={20} />}
-          color="emerald"
-        />
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => {
+                setFormError("");
+                setCreating(true);
+              }}
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white"
+            >
+              <Plus size={17} />
+              اسپرینت جدید
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
-        <div
+        <p
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-700"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
         >
-          <span>{error}</span>
-          <button
-            type="button"
-            aria-label="بستن پیام"
-            onClick={() => setError("")}
-          >
-            <X size={16} />
-          </button>
-        </div>
+          {error}
+        </p>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row">
-        <div className="relative flex-1">
-          <Search
-            size={17}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-          />
-
-          <input
-            type="search"
-            aria-label="جست‌وجوی اسپرینت"
-            value={search}
-            onChange={(event) =>
-              setSearch(event.target.value)
-            }
-            placeholder="جست‌وجوی اسپرینت..."
-            className={`${inputClass} pr-10`}
-          />
-        </div>
-
-        <select
-          aria-label="فیلتر وضعیت اسپرینت"
-          value={filter}
-          onChange={(event) =>
-            setFilter(event.target.value)
-          }
-          className={`${inputClass} sm:w-48`}
+      {notice && (
+        <p
+          role="status"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
         >
-          <option value="ALL">همه وضعیت‌ها</option>
+          {notice}
+        </p>
+      )}
 
-          {Object.entries(statuses).map(
-            ([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            )
-          )}
-        </select>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Stat
+          label="تسک‌های قابل مشاهده"
+          value={displayedTasks.length}
+          icon={<CalendarDays size={18} />}
+        />
+        <Stat
+          label="در حال انجام"
+          value={displayedTasks.filter(
+            (task) => task.status === "IN_PROGRESS"
+          ).length}
+          icon={<Clock3 size={18} />}
+        />
+        <Stat
+          label="تکمیل‌شده"
+          value={completedCount}
+          icon={<CheckCircle2 size={18} />}
+        />
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <div className="flex min-h-60 items-center justify-center gap-3 rounded-3xl border border-slate-200 bg-white">
-          <LoaderCircle
-            size={24}
-            className="animate-spin text-emerald-600"
-          />
-          <span className="text-sm text-slate-500">
-            دریافت اسپرینت‌ها...
-          </span>
-        </div>
-      ) : visibleSprints.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
-          <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500">
-            <CalendarRange size={29} />
+      <div className="rounded-2xl border border-emerald-100 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-emerald-100 p-4">
+          <div>
+            <h3 className="font-bold">
+              تقویم زمان‌بندی تسک‌ها
+            </h3>
+
+            <p
+              className="mt-2 text-xs"
+              style={{ color: "var(--muted)" }}
+            >
+              {persianDate(rangeStart)}
+              {" تا "}
+              {persianDate(rangeEnd)}
+            </p>
           </div>
 
-          <h3 className="mt-5 font-bold text-slate-800">
-            {search || filter !== "ALL"
-              ? "اسپرینتی پیدا نشد"
-              : "هنوز اسپرینتی ندارید"}
-          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="فیلتر اسپرینت"
+              value={selectedSprint}
+              onChange={(event) =>
+                setSelectedSprint(event.target.value)
+              }
+              className="max-w-48 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs"
+            >
+              <option value="ALL">
+                همه تسک‌ها
+              </option>
 
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-7 text-slate-500">
-            {search || filter !== "ALL"
-              ? "عبارت جست‌وجو یا فیلتر را تغییر دهید."
-              : "یک بازه کاری تعریف کنید و وظایف پروژه را به آن اختصاص دهید."}
-          </p>
+              <option value="BACKLOG">
+                خارج از اسپرینت
+              </option>
 
-          {canManage &&
-            !search &&
-            filter === "ALL" && (
-              <button
-                type="button"
-                onClick={() => setCreating(true)}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white"
-              >
-                <Plus size={17} />
-                ساخت اولین اسپرینت
-              </button>
-            )}
+              {sprints.map((sprint) => (
+                <option
+                  key={sprint.id}
+                  value={sprint.id}
+                >
+                  {sprint.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              aria-label="۲۱ روز قبل"
+              onClick={() =>
+                setAnchor(addDays(anchor, -21))
+              }
+              className="rounded-lg border border-emerald-200 p-2"
+            >
+              <ChevronRight size={17} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAnchor(todayIso())}
+              className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700"
+            >
+              امروز
+            </button>
+
+            <button
+              type="button"
+              aria-label="۲۱ روز بعد"
+              onClick={() =>
+                setAnchor(addDays(anchor, 21))
+              }
+              className="rounded-lg border border-emerald-200 p-2"
+            >
+              <ChevronLeft size={17} />
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          {visibleSprints.map((sprint) => {
+
+        <div className="flex flex-wrap gap-4 border-b border-emerald-100 px-4 py-3">
+          {(Object.keys(statusLabels) as TaskStatus[]).map(
+            (status) => (
+              <span
+                key={status}
+                className="inline-flex items-center gap-2 text-xs"
+                style={{ color: "var(--muted)" }}
+              >
+                <span
+                  className="size-2.5 rounded-full"
+                  style={{
+                    backgroundColor: statusColors[status],
+                  }}
+                />
+                {statusLabels[status]}
+              </span>
+            )
+          )}
+        </div>
+
+        {loading ? (
+          <div className="flex min-h-60 items-center justify-center gap-2">
+            <LoaderCircle
+              size={22}
+              className="animate-spin text-emerald-600"
+            />
+            در حال بارگذاری...
+          </div>
+        ) : (
+          <div
+            className="grid"
+            style={{
+              gridTemplateColumns:
+                "minmax(170px, 240px) minmax(0, 1fr)",
+            }}
+          >
+            {/* Task names */}
+            <div className="border-l border-emerald-100 bg-white">
+              <div className="flex h-[76px] items-center border-b border-emerald-100 px-3 text-xs font-bold">
+                نام تسک و مسئول
+              </div>
+
+              {orderedTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex h-[78px] items-center justify-between gap-2 border-b border-emerald-100 px-3"
+                >
+                  <div className="min-w-0">
+                    <p
+                      className="truncate text-xs font-bold"
+                      title={task.title}
+                    >
+                      {task.title}
+                    </p>
+
+                    <p
+                      className="mt-2 truncate text-[11px]"
+                      style={{ color: "var(--muted)" }}
+                    >
+                      {task.assignee?.name ??
+                        "بدون مسئول"}
+                    </p>
+                  </div>
+
+                  {canManage && (
+                    <button
+                      type="button"
+                      title="تنظیم تاریخ تسک"
+                      aria-label={`تنظیم تاریخ ${task.title}`}
+                      onClick={() => openTaskDates(task)}
+                      className="shrink-0 rounded-lg border border-emerald-100 px-2 py-1.5 text-[11px] text-emerald-700 hover:bg-emerald-50"
+                    >
+                      تاریخ
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {orderedTasks.length === 0 && (
+                <p className="p-5 text-xs text-slate-500">
+                  تسکی برای نمایش وجود ندارد.
+                </p>
+              )}
+            </div>
+
+            {/* Calendar */}
+            <div
+              className="min-w-0 overflow-x-auto"
+              dir="ltr"
+            >
+              <div style={{ width: timelineWidth }}>
+                <div className="flex h-[76px] border-b border-emerald-100">
+                  {dates.map((date, index) => {
+                    const month = persianDate(date, {
+                      year: "numeric",
+                      month: "long",
+                    });
+
+                    const newMonth =
+                      index === 0 ||
+                      month !==
+                        persianDate(dates[index - 1], {
+                          year: "numeric",
+                          month: "long",
+                        });
+
+                    return (
+                      <div
+                        key={date}
+                        className={`relative flex shrink-0 flex-col items-center justify-end border-r border-emerald-100 pb-2 ${
+                          date === today
+                            ? "bg-emerald-50"
+                            : ""
+                        }`}
+                        style={{ width: DAY_WIDTH }}
+                      >
+                        {newMonth && (
+                          <span
+                            dir="rtl"
+                            className="absolute left-1 top-2 whitespace-nowrap text-[10px] font-bold text-emerald-700"
+                          >
+                            {month}
+                          </span>
+                        )}
+
+                        <strong className="text-xs">
+                          {persianDate(date, {
+                            day: "numeric",
+                          })}
+                        </strong>
+
+                        <span className="mt-1 text-[10px] text-slate-400">
+                          {persianDate(date, {
+                            weekday: "short",
+                          })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {orderedTasks.map((task) => {
+                  const currentDrag =
+                    drag?.taskId === task.id
+                      ? drag
+                      : null;
+
+                  const startDate =
+                    currentDrag?.nextStart ??
+                    task.startDate;
+
+                  const dueDate =
+                    currentDrag?.nextEnd ??
+                    task.dueDate;
+
+                  const scheduled = Boolean(
+                    startDate && dueDate
+                  );
+
+                  const startIndex = scheduled
+                    ? diffDays(
+                        startDate!,
+                        rangeStart
+                      )
+                    : 0;
+
+                  const duration = scheduled
+                    ? Math.max(
+                        1,
+                        diffDays(
+                          dueDate!,
+                          startDate!
+                        ) + 1
+                      )
+                    : 0;
+
+                  const visible =
+                    scheduled &&
+                    startIndex < VISIBLE_DAYS &&
+                    startIndex + duration > 0;
+
+                  return (
+                    <div
+                      key={task.id}
+                      className="relative h-[78px] border-b border-emerald-100"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(to right, var(--border) 1px, transparent 1px)",
+                        backgroundSize: `${DAY_WIDTH}px 100%`,
+                      }}
+                    >
+                      {todayIndex >= 0 &&
+                        todayIndex < VISIBLE_DAYS && (
+                          <div
+                            className="pointer-events-none absolute inset-y-0 z-[1] w-[2px] bg-emerald-500/40"
+                            style={{
+                              left:
+                                todayIndex * DAY_WIDTH +
+                                DAY_WIDTH / 2,
+                            }}
+                          />
+                        )}
+
+                      {visible && (
+                        <>
+                          <div
+                            className="absolute top-[25px] z-[3] flex size-6 items-center justify-center rounded-full border-[3px] border-white shadow-sm"
+                            style={{
+                              left:
+                                startIndex * DAY_WIDTH - 29,
+                              backgroundColor:
+                                statusColors[task.status],
+                            }}
+                            title={statusLabels[task.status]}
+                            aria-label={
+                              `وضعیت: ${statusLabels[task.status]}`
+                            }
+                          >
+                            {task.status === "DONE" && (
+                              <CheckCircle2
+                                size={13}
+                                className="text-white"
+                              />
+                            )}
+                          </div>
+
+                          <div
+                            className={`absolute top-[22px] z-[2] flex h-[34px] items-center rounded-lg text-white shadow-sm ${
+                              canManage
+                                ? "cursor-grab active:cursor-grabbing"
+                                : "cursor-default"
+                            }`}
+                            style={{
+                              left:
+                                startIndex * DAY_WIDTH,
+                              width:
+                                duration * DAY_WIDTH,
+                              backgroundColor:
+                                statusColors[task.status],
+                              touchAction: "none",
+                              outline: currentDrag
+                                ? "2px solid var(--primary)"
+                                : "none",
+                            }}
+                            title={
+                              `${task.title}\n` +
+                              `${persianDate(startDate!)} تا ${persianDate(dueDate!)}\n` +
+                              `وضعیت: ${statusLabels[task.status]}`
+                            }
+                            onPointerDown={(event) => {
+                              const target =
+                                event.target as HTMLElement;
+
+                              const mode =
+                                target.closest(
+                                  "[data-resize='start']"
+                                )
+                                  ? "start"
+                                  : target.closest(
+                                      "[data-resize='end']"
+                                    )
+                                    ? "end"
+                                    : "move";
+
+                              beginDrag(event, task, mode);
+                            }}
+                            onPointerMove={moveDrag}
+                            onPointerUp={finishDrag}
+                            onPointerCancel={cancelDrag}
+                          >
+                            {canManage && (
+                              <div
+                                data-resize="start"
+                                title="تغییر تاریخ شروع"
+                                className="flex h-full w-3 shrink-0 cursor-ew-resize items-center justify-center rounded-l-lg bg-white/20"
+                              >
+                                <span className="h-5 w-[3px] rounded-full bg-white/80" />
+                              </div>
+                            )}
+
+                            <span
+                              dir="rtl"
+                              className="min-w-0 flex-1 truncate px-2 text-center text-[11px] font-semibold"
+                            >
+                              {task.title}
+                            </span>
+
+                            {canManage && (
+                              <div
+                                data-resize="end"
+                                title="تغییر تاریخ پایان"
+                                className="flex h-full w-3 shrink-0 cursor-ew-resize items-center justify-center rounded-r-lg bg-white/20"
+                              >
+                                <span className="h-5 w-[3px] rounded-full bg-white/80" />
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      {!scheduled && (
+                        <div className="absolute inset-y-0 left-3 flex items-center gap-2">
+                          <span className="text-xs text-slate-400">
+                            بدون زمان‌بندی
+                          </span>
+
+                          {canManage && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openTaskDates(task)
+                              }
+                              className="rounded-lg bg-emerald-50 px-2 py-1 text-xs text-emerald-700"
+                            >
+                              تعیین تاریخ
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <p
+        className="text-xs leading-7"
+        style={{ color: "var(--muted)" }}
+      >
+        <strong>راهنما:</strong> دایره رنگی وضعیت
+        هر تسک را نشان می‌دهد. وسط نوار را
+        برای جابه‌جایی کل بازه بکشید؛ دو سر
+        نوار برای کوتاه یا بلندکردن آن هستند.
+        برای مشاهده تاریخ دقیق، نشانگر را
+        روی نوار نگه دارید. برای تاریخ‌های
+        خارج از بازه نمایشی، از دکمه‌های
+        حرکت تقویم استفاده کنید.
+      </p>
+
+      {/* Sprint management remains available */}
+      <section className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+        <h3 className="text-base font-extrabold">
+          مدیریت اسپرینت‌ها و تسک‌های مرتبط
+        </h3>
+
+        <div className="mt-5 space-y-3">
+          {sprints.map((sprint) => {
             const sprintTasks = tasks.filter(
-              (task) =>
-                task.sprintId === sprint.id
+              (task) => task.sprintId === sprint.id
             );
-
-            const done = sprintTasks.filter(
-              (task) => task.status === "DONE"
-            ).length;
-
-            const progress =
-              sprintTasks.length > 0
-                ? Math.round(
-                    (done / sprintTasks.length) * 100
-                  )
-                : 0;
-
-            const expanded =
-              expandedId === sprint.id;
 
             const closed =
               sprint.status === "COMPLETED" ||
               sprint.status === "CANCELLED";
 
+            const expanded =
+              expandedSprint === sprint.id;
+
             return (
-              <article
+              <div
                 key={sprint.id}
-                className={`overflow-hidden rounded-3xl border bg-white shadow-sm transition ${
-                  expanded
-                    ? "border-emerald-300 shadow-lg shadow-emerald-500/5 lg:col-span-2"
-                    : "border-slate-200 hover:border-emerald-200 hover:shadow-md"
-                }`}
+                className="overflow-hidden rounded-xl border border-emerald-100"
               >
-                <div className="p-5 sm:p-6">
-                  <div className="flex items-start justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        expandSprint(sprint.id)
+                <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExpandedSprint(
+                        expanded ? null : sprint.id
+                      );
+                      setSelectedTaskId("");
+                    }}
+                    className="flex min-w-0 items-center gap-2 text-right"
+                  >
+                    <ChevronDown
+                      size={17}
+                      className={
+                        expanded ? "rotate-180" : ""
                       }
-                      aria-expanded={expanded}
-                      className="flex min-w-0 flex-1 items-start gap-3 text-right"
-                    >
-                      <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                        <CalendarDays size={23} />
-                      </div>
+                    />
 
-                      <div className="min-w-0">
-                        <h3 className="break-words text-base font-extrabold text-slate-900">
-                          {sprint.name}
-                        </h3>
+                    <span className="font-semibold">
+                      {sprint.name}
+                    </span>
 
-                        <p className="mt-2 text-xs leading-6 text-slate-500">
-                          {sprint.startDate
-                            ? isoToJalali(
-                                sprint.startDate
-                              )
-                            : "بدون تاریخ"}
-                          {" — "}
-                          {sprint.endDate
-                            ? isoToJalali(
-                                sprint.endDate
-                              )
-                            : "بدون تاریخ"}
-                        </p>
-                      </div>
+                    <span className="text-xs text-slate-400">
+                      {sprintTasks.length.toLocaleString(
+                        "fa-IR"
+                      )}{" "}
+                      تسک
+                    </span>
+                  </button>
 
-                      <ChevronDown
-                        size={18}
-                        className={`mr-auto mt-2 shrink-0 text-slate-400 transition ${
-                          expanded ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {canDelete && (
-                      <button
-                        type="button"
-                        title="حذف اسپرینت"
-                        aria-label={`حذف ${sprint.name}`}
-                        onClick={() =>
-                          setDeletingId(sprint.id)
-                        }
-                        className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                      >
-                        <Trash2 size={17} />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
                     {canManage ? (
                       <select
                         aria-label={`وضعیت ${sprint.name}`}
                         value={sprint.status}
                         disabled={busy}
                         onChange={(event) =>
-                          void changeStatus(
+                          setSprintStatus(
                             sprint.id,
                             event.target.value as SprintStatus
                           )
                         }
-                        className={`rounded-lg border-0 px-3 py-2 text-xs font-bold outline-none disabled:opacity-50 ${statusColors[sprint.status]}`}
+                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
                       >
-                        {Object.entries(statuses).map(
-                          ([value, label]) => (
-                            <option
-                              key={value}
-                              value={value}
-                            >
-                              {label}
-                            </option>
-                          )
-                        )}
+                        {Object.entries(
+                          sprintLabels
+                        ).map(([value, label]) => (
+                          <option
+                            key={value}
+                            value={value}
+                          >
+                            {label}
+                          </option>
+                        ))}
                       </select>
                     ) : (
-                      <span
-                        className={`rounded-lg px-3 py-2 text-xs font-bold ${statusColors[sprint.status]}`}
-                      >
-                        {statuses[sprint.status]}
+                      <span className="rounded-lg bg-emerald-50 px-3 py-2 text-xs">
+                        {sprintLabels[sprint.status]}
                       </span>
                     )}
 
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <CircleDashed size={15} />
-                      {sprintTasks.length.toLocaleString(
-                        "fa-IR"
-                      )}{" "}
-                      تسک
-                    </div>
-                  </div>
-
-                  <div className="mt-6 rounded-2xl bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs text-slate-500">
-                          پیشرفت اسپرینت
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-400">
-                          {done.toLocaleString("fa-IR")} وظیفه
-                          تکمیل‌شده
-                        </p>
-                      </div>
-
-                      <strong className="text-2xl font-extrabold text-emerald-600">
-                        {progress.toLocaleString(
-                          "fa-IR"
-                        )}
-                        ٪
-                      </strong>
-                    </div>
-
-                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          progress === 100
-                            ? "bg-emerald-500"
-                            : "bg-emerald-600"
-                        }`}
-                        style={{
-                          width: `${progress}%`,
-                        }}
-                      />
-                    </div>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        aria-label={`حذف ${sprint.name}`}
+                        onClick={() =>
+                          setDeletingSprint(sprint.id)
+                        }
+                        className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 {expanded && (
-                  <div className="space-y-5 border-t border-slate-100 bg-slate-50/70 p-5 sm:p-6">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <h4 className="font-bold text-slate-900">
-                          وظایف اسپرینت
-                        </h4>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          تسک‌های مرتبط با این دوره
-                        </p>
-                      </div>
-
-                      <Link
-                        href={`/projects/${projectId}/tasks`}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-600 hover:border-emerald-200"
-                      >
-                        مدیریت وظایف
-                        <ArrowUpLeft size={15} />
-                      </Link>
-                    </div>
-
+                  <div className="space-y-3 border-t border-emerald-100 bg-emerald-50/40 p-4">
                     {sprintTasks.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-7 text-center">
-                        <FolderPlus
-                          size={25}
-                          className="mx-auto text-slate-300"
-                        />
-                        <p className="mt-3 text-sm text-slate-500">
-                          هنوز تسکی به این اسپرینت اضافه نشده است.
-                        </p>
-                      </div>
+                      <p className="text-sm text-slate-500">
+                        هنوز تسکی به این اسپرینت
+                        اضافه نشده است.
+                      </p>
                     ) : (
-                      <div className="grid gap-2 md:grid-cols-2">
-                        {sprintTasks.map((task) => (
-                          <div
-                            key={task.id}
-                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white p-4"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                {task.status === "DONE" ? (
-                                  <CheckCircle2
-                                    size={17}
-                                    className="shrink-0 text-emerald-500"
-                                  />
-                                ) : (
-                                  <CircleDashed
-                                    size={17}
-                                    className="shrink-0 text-slate-300"
-                                  />
-                                )}
+                      sprintTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span
+                              className="size-3 shrink-0 rounded-full"
+                              style={{
+                                backgroundColor:
+                                  statusColors[task.status],
+                              }}
+                            />
 
-                                <p className="truncate text-sm font-semibold text-slate-800">
-                                  {task.title}
-                                </p>
-                              </div>
+                            <div>
+                              <p className="text-sm font-semibold">
+                                {task.title}
+                              </p>
 
-                              <p className="mt-2 text-xs text-slate-500">
-                                {taskStatuses[task.status]}
+                              <p className="mt-1 text-xs text-slate-500">
+                                {statusLabels[task.status]}
                                 {" · "}
                                 {task.assignee?.name ??
                                   "بدون مسئول"}
                               </p>
                             </div>
-
-                            {canManage && !closed && (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() =>
-                                  void removeTask(
-                                    sprint.id,
-                                    task.id
-                                  )
-                                }
-                                className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                              >
-                                خارج کردن
-                              </button>
-                            )}
                           </div>
-                        ))}
-                      </div>
+
+                          {canManage && !closed && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                removeTaskFromSprint(
+                                  sprint.id,
+                                  task.id
+                                )
+                              }
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-xs text-emerald-700 disabled:opacity-50"
+                            >
+                              خارج کردن
+                            </button>
+                          )}
+                        </div>
+                      ))
                     )}
 
                     {canManage && !closed && (
-                      <div className="rounded-2xl border border-emerald-100 bg-white p-4 sm:p-5">
-                        <h4 className="text-sm font-bold text-slate-900">
-                          افزودن وظیفه به اسپرینت
-                        </h4>
+                      <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+                        <select
+                          aria-label="انتخاب تسک"
+                          value={selectedTaskId}
+                          onChange={(event) =>
+                            setSelectedTaskId(
+                              event.target.value
+                            )
+                          }
+                          className={inputClass}
+                        >
+                          <option value="">
+                            انتخاب تسک خارج از اسپرینت
+                          </option>
 
-                        <p className="mt-1 text-xs text-slate-500">
-                          فقط وظایفی که در اسپرینت دیگری نیستند نمایش داده می‌شوند.
-                        </p>
-
-                        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                          <div className="relative">
-                            <Search
-                              size={16}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                            />
-
-                            <input
-                              type="search"
-                              value={taskSearch}
-                              onChange={(event) => {
-                                setTaskSearch(
-                                  event.target.value
-                                );
-                                setSelectedTaskId("");
-                              }}
-                              placeholder="جست‌وجوی تسک..."
-                              className={`${inputClass} pr-10`}
-                            />
-                          </div>
-
-                          <select
-                            aria-label="انتخاب تسک"
-                            value={selectedTaskId}
-                            onChange={(event) =>
-                              setSelectedTaskId(
-                                event.target.value
-                              )
-                            }
-                            className={inputClass}
-                          >
-                            <option value="">
-                              انتخاب وظیفه...
+                          {unassignedTasks.map((task) => (
+                            <option
+                              key={task.id}
+                              value={task.id}
+                            >
+                              {task.title}
                             </option>
+                          ))}
+                        </select>
 
-                            {availableTasks.map((task) => (
-                              <option
-                                key={task.id}
-                                value={task.id}
-                              >
-                                {task.title}
-                              </option>
-                            ))}
-                          </select>
-
-                          <button
-                            type="button"
-                            disabled={busy || !selectedTaskId}
-                            onClick={() =>
-                              void addTask(sprint.id)
-                            }
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                          >
-                            <Plus size={17} />
-                            افزودن
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          disabled={busy || !selectedTaskId}
+                          onClick={() =>
+                            addTaskToSprint(sprint.id)
+                          }
+                          className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          افزودن تسک
+                        </button>
                       </div>
-                    )}
-
-                    {closed && canManage && (
-                      <p className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-xs leading-6 text-amber-800">
-                        این اسپرینت بسته است. برای تغییر
-                        تسک‌های آن، ابتدا وضعیت را به
-                        برنامه‌ریزی‌شده یا فعال تغییر دهید.
-                      </p>
                     )}
                   </div>
                 )}
-              </article>
+              </div>
             );
           })}
-        </div>
-      )}
 
-      {/* Create sprint modal */}
-      {creating && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
-          onMouseDown={(event) => {
-            if (
-              event.target === event.currentTarget &&
-              !busy
-            ) {
-              setCreating(false);
-            }
-          }}
-        >
+          {!loading && sprints.length === 0 && (
+            <p className="py-8 text-center text-sm text-slate-500">
+              هنوز اسپرینتی ایجاد نشده است.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Set task dates */}
+      {editingTask && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4">
           <div
+            dir="rtl"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="sprint-modal-title"
-            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+            aria-labelledby="task-dates-title"
+            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                  <CalendarRange size={24} />
-                </div>
-
-                <h2
-                  id="sprint-modal-title"
-                  className="text-xl font-extrabold text-slate-900"
+                <h3
+                  id="task-dates-title"
+                  className="text-lg font-extrabold"
                 >
-                  ساخت اسپرینت جدید
-                </h2>
-
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  یک دوره زمانی برای برنامه‌ریزی فعالیت‌های
-                  تیم تعریف کنید.
+                  زمان‌بندی تسک
+                </h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  {editingTask.title}
                 </p>
               </div>
 
               <button
                 type="button"
-                disabled={busy}
                 aria-label="بستن"
-                onClick={() => setCreating(false)}
-                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"
+                disabled={busy}
+                onClick={() => setEditingTask(null)}
               >
                 <X size={20} />
               </button>
             </div>
 
             <form
-              onSubmit={createSprint}
-              className="mt-7 space-y-5"
+              onSubmit={saveTaskForm}
+              className="mt-6 space-y-5"
             >
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">
-                  نام اسپرینت
-                </span>
-
-                <input
-                  className={inputClass}
-                  required
-                  minLength={3}
-                  maxLength={150}
-                  value={name}
-                  onChange={(event) =>
-                    setName(event.target.value)
-                  }
-                  placeholder="مثلاً اسپرینت اول — طراحی رابط کاربری"
-                />
-              </label>
-
               <div className="grid gap-4 sm:grid-cols-2">
                 <PersianDatePicker
-                  label="تاریخ شروع"
-                  value={startDate}
-                  onChange={setStartDate}
+                  label="تاریخ شروع تسک"
+                  value={taskStart}
+                  onChange={setTaskStart}
                 />
 
                 <PersianDatePicker
-                  label="تاریخ پایان"
-                  value={endDate}
-                  onChange={setEndDate}
+                  label="تاریخ پایان تسک"
+                  value={taskEnd}
+                  onChange={setTaskEnd}
                 />
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+              {formError && (
+                <p
+                  role="alert"
+                  className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700"
+                >
+                  {formError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-3 border-t border-emerald-100 pt-5">
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setCreating(false)}
-                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm text-slate-600"
+                  onClick={() =>
+                    setEditingTask(null)
+                  }
+                  className="rounded-xl border border-emerald-200 px-5 py-3 text-sm"
                 >
                   انصراف
                 </button>
@@ -983,17 +1529,9 @@ export default function SprintsManager({
                 <button
                   type="submit"
                   disabled={busy}
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  {busy ? (
-                    <LoaderCircle
-                      size={17}
-                      className="animate-spin"
-                    />
-                  ) : (
-                    <Plus size={17} />
-                  )}
-                  ایجاد اسپرینت
+                  ذخیره تاریخ تسک
                 </button>
               </div>
             </form>
@@ -1001,13 +1539,104 @@ export default function SprintsManager({
         </div>
       )}
 
-      {deletingId && (
+      {/* Create sprint */}
+      {creating && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-sprint-title"
+            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <h3
+                id="create-sprint-title"
+                className="text-lg font-extrabold"
+              >
+                اسپرینت جدید
+              </h3>
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setCreating(false)}
+                aria-label="بستن"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={createSprint}
+              className="mt-6 space-y-5"
+            >
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold">
+                  عنوان اسپرینت
+                </span>
+                <input
+                  required
+                  minLength={3}
+                  maxLength={150}
+                  value={sprintName}
+                  onChange={(event) =>
+                    setSprintName(event.target.value)
+                  }
+                  className={inputClass}
+                />
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <PersianDatePicker
+                  label="تاریخ شروع"
+                  value={sprintStart}
+                  onChange={setSprintStart}
+                />
+                <PersianDatePicker
+                  label="تاریخ پایان"
+                  value={sprintEnd}
+                  onChange={setSprintEnd}
+                />
+              </div>
+
+              {formError && (
+                <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
+                  {formError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-3 border-t border-emerald-100 pt-5">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setCreating(false)}
+                  className="rounded-xl border border-emerald-200 px-5 py-3 text-sm"
+                >
+                  انصراف
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  ساخت اسپرینت
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {deletingSprint && (
         <ConfirmDialog
           title="حذف اسپرینت"
-          description="اسپرینت حذف می‌شود، اما تسک‌های آن و تاریخچه تسک‌ها باقی می‌مانند."
+          description="اسپرینت حذف می‌شود ولی تسک‌های آن باقی می‌مانند."
           busy={busy}
-          onCancel={() => setDeletingId(null)}
-          onConfirm={() => void deleteSprint()}
+          onCancel={() =>
+            setDeletingSprint(null)
+          }
+          onConfirm={deleteSprint}
         />
       )}
     </div>
@@ -1018,31 +1647,26 @@ function Stat({
   label,
   value,
   icon,
-  color,
 }: {
   label: string;
   value: number;
-  icon: React.ReactNode;
-  color: "emerald";
+  icon: ReactNode;
 }) {
-  const colors = {
-    emerald: "bg-emerald-50 text-emerald-600",
-  };
-
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div
-        className={`flex size-12 shrink-0 items-center justify-center rounded-xl ${colors[color]}`}
-      >
+    <div className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
+      <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
         {icon}
       </div>
 
       <div>
-        <p className="text-xs text-slate-500">
+        <p
+          className="text-xs"
+          style={{ color: "var(--muted)" }}
+        >
           {label}
         </p>
 
-        <p className="mt-1 text-2xl font-extrabold text-slate-900">
+        <p className="mt-1 text-xl font-extrabold">
           {value.toLocaleString("fa-IR")}
         </p>
       </div>

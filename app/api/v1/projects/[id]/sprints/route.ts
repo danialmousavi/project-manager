@@ -43,19 +43,34 @@ const updateSchema = z.discriminatedUnion("action", [
     sprintId: uuid,
     taskId: uuid,
   }).strict(),
+
+  z.object({
+    action: z.literal("UPDATE_DATES"),
+    sprintId: uuid,
+    startDate: z.iso.date(),
+    endDate: z.iso.date(),
+    expectedStartDate: z.iso.date(),
+    expectedEndDate: z.iso.date(),
+  }).strict(),
 ]);
 
 const deleteSchema = z.object({
   sprintId: uuid,
 }).strict();
 
-function dateOf(value: string) {
+function asDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function hasValidOrigin(request: NextRequest) {
-  return request.headers.get("origin") ===
-    request.nextUrl.origin;
+function asIso(value: Date | null) {
+  return value?.toISOString().slice(0, 10) ?? null;
+}
+
+function validOrigin(request: NextRequest) {
+  return (
+    request.headers.get("origin") ===
+    request.nextUrl.origin
+  );
 }
 
 function fail(message: string, status: number) {
@@ -65,38 +80,58 @@ function fail(message: string, status: number) {
   );
 }
 
-async function getContextAccess(context: Context) {
+async function projectAccess(context: Context) {
   const actor = await getCurrentUser();
+
   if (!actor) {
-    return { actor: null, projectId: null, access: null };
+    return {
+      actor: null,
+      projectId: null,
+      access: null,
+    };
   }
 
   const { id } = await context.params;
+
   if (!uuid.safeParse(id).success) {
-    return { actor, projectId: null, access: null };
+    return {
+      actor,
+      projectId: null,
+      access: null,
+    };
   }
 
-  const access = await getTaskProjectAccess(actor, id);
-  return { actor, projectId: id, access };
+  return {
+    actor,
+    projectId: id,
+    access: await getTaskProjectAccess(actor, id),
+  };
 }
 
-// GET: Read sprints and their project tasks.
 export async function GET(
   _request: NextRequest,
   context: Context
 ) {
   const { actor, projectId, access } =
-    await getContextAccess(context);
+    await projectAccess(context);
 
-  if (!actor) return fail("ابتدا وارد حساب شوید.", 401);
-  if (!projectId) return fail("شناسه پروژه نامعتبر است.", 400);
-  if (!access) return fail("دسترسی مجاز نیست.", 403);
+  if (!actor) {
+    return fail("ابتدا وارد حساب شوید.", 401);
+  }
+
+  if (!projectId) {
+    return fail("شناسه پروژه نامعتبر است.", 400);
+  }
+
+  if (!access) {
+    return fail("اجازه مشاهده پروژه ندارید.", 403);
+  }
 
   try {
     const [sprints, tasks] = await Promise.all([
       prisma.sprint.findMany({
         where: { projectId },
-        orderBy: { startDate: "desc" },
+        orderBy: { startDate: "asc" },
         take: 100,
         select: {
           id: true,
@@ -114,14 +149,21 @@ export async function GET(
             ? {}
             : { assigneeId: actor.id }),
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: [
+          { position: "asc" },
+          { createdAt: "desc" },
+        ],
         take: 500,
         select: {
           id: true,
           title: true,
+          description: true,
           status: true,
           priority: true,
+          startDate: true,
+          dueDate: true,
           sprintId: true,
+          assigneeId: true,
           assignee: {
             select: {
               id: true,
@@ -139,35 +181,47 @@ export async function GET(
         canDelete: actor.role === "ADMIN",
         sprints: sprints.map((sprint) => ({
           ...sprint,
-          startDate: sprint.startDate?.toISOString() ?? null,
-          endDate: sprint.endDate?.toISOString() ?? null,
+          startDate: asIso(sprint.startDate),
+          endDate: asIso(sprint.endDate),
         })),
-        tasks,
+        tasks: tasks.map((task) => ({
+          ...task,
+          startDate: asIso(task.startDate),
+          dueDate: asIso(task.dueDate),
+        })),
       },
       {
-        headers: { "Cache-Control": "no-store" },
+        headers: {
+          "Cache-Control": "no-store",
+        },
       }
     );
   } catch (error) {
-    console.error("Get sprints:", error);
-    return fail("خطا در دریافت اسپرینت‌ها.", 500);
+    console.error("GET sprints:", error);
+    return fail("خطا در دریافت زمان‌بندی‌ها.", 500);
   }
 }
 
-// POST: Create a new sprint.
 export async function POST(
   request: NextRequest,
   context: Context
 ) {
   const { actor, projectId, access } =
-    await getContextAccess(context);
+    await projectAccess(context);
 
-  if (!actor) return fail("ابتدا وارد حساب شوید.", 401);
-  if (!projectId) return fail("شناسه پروژه نامعتبر است.", 400);
-  if (!access?.canManage) {
-    return fail("اجازه ایجاد اسپرینت ندارید.", 403);
+  if (!actor) {
+    return fail("ابتدا وارد حساب شوید.", 401);
   }
-  if (!hasValidOrigin(request)) {
+
+  if (!projectId) {
+    return fail("شناسه پروژه نامعتبر است.", 400);
+  }
+
+  if (!access?.canManage) {
+    return fail("اجازه ساخت اسپرینت ندارید.", 403);
+  }
+
+  if (!validOrigin(request)) {
     return fail("درخواست نامعتبر است.", 403);
   }
 
@@ -191,8 +245,8 @@ export async function POST(
         projectId,
         name: data.name,
         status: "PLANNED",
-        startDate: dateOf(data.startDate),
-        endDate: dateOf(data.endDate),
+        startDate: asDate(data.startDate),
+        endDate: asDate(data.endDate),
       },
       select: {
         id: true,
@@ -208,33 +262,38 @@ export async function POST(
         success: true,
         sprint: {
           ...sprint,
-          startDate: sprint.startDate?.toISOString() ?? null,
-          endDate: sprint.endDate?.toISOString() ?? null,
+          startDate: asIso(sprint.startDate),
+          endDate: asIso(sprint.endDate),
         },
-        message: "اسپرینت ساخته شد.",
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Create sprint:", error);
+    console.error("POST sprint:", error);
     return fail("خطا در ساخت اسپرینت.", 500);
   }
 }
 
-// PATCH: Change status or manage sprint tasks.
 export async function PATCH(
   request: NextRequest,
   context: Context
 ) {
   const { actor, projectId, access } =
-    await getContextAccess(context);
+    await projectAccess(context);
 
-  if (!actor) return fail("ابتدا وارد حساب شوید.", 401);
-  if (!projectId) return fail("شناسه پروژه نامعتبر است.", 400);
+  if (!actor) {
+    return fail("ابتدا وارد حساب شوید.", 401);
+  }
+
+  if (!projectId) {
+    return fail("شناسه پروژه نامعتبر است.", 400);
+  }
+
   if (!access?.canManage) {
     return fail("اجازه ویرایش اسپرینت ندارید.", 403);
   }
-  if (!hasValidOrigin(request)) {
+
+  if (!validOrigin(request)) {
     return fail("درخواست نامعتبر است.", 403);
   }
 
@@ -243,18 +302,52 @@ export async function PATCH(
   );
 
   if (!parsed.success) {
-    return fail("اطلاعات درخواست معتبر نیست.", 400);
+    return fail("اطلاعات درخواست نامعتبر است.", 400);
   }
 
   const data = parsed.data;
 
   try {
+    if (data.action === "UPDATE_DATES") {
+      if (data.startDate > data.endDate) {
+        return fail("تاریخ پایان قبل از شروع است.", 400);
+      }
+
+      const updated = await prisma.sprint.updateMany({
+        where: {
+          id: data.sprintId,
+          projectId,
+          startDate: asDate(data.expectedStartDate),
+          endDate: asDate(data.expectedEndDate),
+        },
+        data: {
+          startDate: asDate(data.startDate),
+          endDate: asDate(data.endDate),
+        },
+      });
+
+      if (updated.count !== 1) {
+        return fail(
+          "اسپرینت تغییر کرده است؛ صفحه را تازه کنید.",
+          409
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "تاریخ‌های اسپرینت ذخیره شدند.",
+      });
+    }
+
     const sprint = await prisma.sprint.findFirst({
       where: {
         id: data.sprintId,
         projectId,
       },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+      },
     });
 
     if (!sprint) {
@@ -262,21 +355,14 @@ export async function PATCH(
     }
 
     if (data.action === "SET_STATUS") {
-      const updated = await prisma.sprint.updateMany({
-        where: {
-          id: sprint.id,
-          projectId,
-        },
+      await prisma.sprint.update({
+        where: { id: sprint.id },
         data: { status: data.status },
       });
 
-      if (updated.count !== 1) {
-        return fail("اسپرینت تغییر کرده است.", 409);
-      }
-
       return NextResponse.json({
         success: true,
-        message: "وضعیت اسپرینت ذخیره شد.",
+        message: "وضعیت اسپرینت تغییر کرد.",
       });
     }
 
@@ -285,7 +371,7 @@ export async function PATCH(
       sprint.status === "CANCELLED"
     ) {
       return fail(
-        "برای تغییر تسک‌ها، اسپرینت نباید بسته باشد.",
+        "امکان تغییر تسک‌های اسپرینت بسته وجود ندارد.",
         409
       );
     }
@@ -295,7 +381,6 @@ export async function PATCH(
         where: {
           id: data.taskId,
           projectId,
-          // Task must not belong to another sprint.
           OR: [
             { sprintId: null },
             { sprintId: data.sprintId },
@@ -309,7 +394,7 @@ export async function PATCH(
 
       if (updated.count !== 1) {
         return fail(
-          "این تسک وجود ندارد یا عضو اسپرینت دیگری است.",
+          "تسک وجود ندارد یا عضو اسپرینت دیگری است.",
           409
         );
       }
@@ -333,7 +418,10 @@ export async function PATCH(
     });
 
     if (removed.count !== 1) {
-      return fail("تسک در این اسپرینت پیدا نشد.", 404);
+      return fail(
+        "تسک در این اسپرینت پیدا نشد.",
+        404
+      );
     }
 
     return NextResponse.json({
@@ -341,25 +429,37 @@ export async function PATCH(
       message: "تسک از اسپرینت خارج شد.",
     });
   } catch (error) {
-    console.error("Update sprint:", error);
-    return fail("خطا در ذخیره تغییرات اسپرینت.", 500);
+    console.error("PATCH sprint:", error);
+    return fail("خطا در ذخیره تغییرات.", 500);
   }
 }
 
-// DELETE: Only Admin may delete a sprint.
 export async function DELETE(
   request: NextRequest,
   context: Context
 ) {
   const { actor, projectId, access } =
-    await getContextAccess(context);
+    await projectAccess(context);
 
-  if (!actor) return fail("ابتدا وارد حساب شوید.", 401);
-  if (!projectId) return fail("شناسه پروژه نامعتبر است.", 400);
-  if (actor.role !== "ADMIN" || !access?.canManage) {
-    return fail("فقط مدیر اصلی می‌تواند اسپرینت را حذف کند.", 403);
+  if (!actor) {
+    return fail("ابتدا وارد حساب شوید.", 401);
   }
-  if (!hasValidOrigin(request)) {
+
+  if (!projectId) {
+    return fail("شناسه پروژه نامعتبر است.", 400);
+  }
+
+  if (
+    actor.role !== "ADMIN" ||
+    !access?.canManage
+  ) {
+    return fail(
+      "فقط مدیر اصلی می‌تواند اسپرینت را حذف کند.",
+      403
+    );
+  }
+
+  if (!validOrigin(request)) {
     return fail("درخواست نامعتبر است.", 403);
   }
 
@@ -368,51 +468,54 @@ export async function DELETE(
   );
 
   if (!parsed.success) {
-    return fail("شناسه اسپرینت معتبر نیست.", 400);
+    return fail("شناسه اسپرینت نامعتبر است.", 400);
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const sprint = await tx.sprint.findFirst({
-        where: {
-          id: parsed.data.sprintId,
-          projectId,
-        },
-        select: { id: true },
-      });
+    const deleted = await prisma.$transaction(
+      async (tx) => {
+        const sprint = await tx.sprint.findFirst({
+          where: {
+            id: parsed.data.sprintId,
+            projectId,
+          },
+          select: { id: true },
+        });
 
-      if (!sprint) return false;
+        if (!sprint) {
+          return false;
+        }
 
-      // Keep tasks; only remove their sprint relation.
-      await tx.task.updateMany({
-        where: {
-          projectId,
-          sprintId: sprint.id,
-        },
-        data: {
-          sprintId: null,
-          version: { increment: 1 },
-        },
-      });
+        await tx.task.updateMany({
+          where: {
+            projectId,
+            sprintId: sprint.id,
+          },
+          data: {
+            sprintId: null,
+            version: { increment: 1 },
+          },
+        });
 
-      await tx.sprint.delete({
-        where: { id: sprint.id },
-      });
+        await tx.sprint.delete({
+          where: { id: sprint.id },
+        });
 
-      return true;
-    });
+        return true;
+      }
+    );
 
     return NextResponse.json(
       {
-        success: result,
-        message: result
-          ? "اسپرینت حذف شد؛ تسک‌های آن حفظ شدند."
-          : "اسپرینت یافت نشد.",
+        success: deleted,
+        message: deleted
+          ? "اسپرینت حذف شد؛ تسک‌ها باقی ماندند."
+          : "اسپرینت پیدا نشد.",
       },
-      { status: result ? 200 : 404 }
+      { status: deleted ? 200 : 404 }
     );
   } catch (error) {
-    console.error("Delete sprint:", error);
+    console.error("DELETE sprint:", error);
     return fail("خطا در حذف اسپرینت.", 500);
   }
 }
