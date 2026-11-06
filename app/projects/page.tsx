@@ -14,9 +14,12 @@ import ProjectsManager from "@/components/projects/projects-manager";
 
 export default function ProjectsPage() {
   return (
-    <main className="min-h-screen bg-[#f7f8fc] px-4 py-8 text-slate-900 sm:px-8">
+    <main
+      dir="rtl"
+      className="min-h-screen bg-[#f7f8fc] px-4 py-8 text-slate-900 sm:px-8"
+    >
       <div className="mx-auto max-w-6xl">
-        <Suspense fallback={<ProjectsLoading />}>
+        <Suspense fallback={<Loading />}>
           <ProjectsContent />
         </Suspense>
       </div>
@@ -69,54 +72,50 @@ async function ProjectsContent() {
     },
   });
 
-  const serializedProjects = projects.map((project) => ({
-    ...project,
-    createdAt: project.createdAt.toISOString(),
-  }));
-
   return (
     <>
       <Link
         href="/dashboard"
-        className="mb-8 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600"
+        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600"
       >
         <ArrowRight size={17} />
         بازگشت به داشبورد
       </Link>
 
       <div className="mb-8 flex items-center gap-4">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-indigo-600 text-white">
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200">
           <FolderKanban size={27} />
         </div>
 
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">
+          <h1 className="text-2xl font-extrabold sm:text-3xl">
             مدیریت پروژه‌ها
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            پروژه‌ها، اعضا و میزان پیشرفت
+            پروژه‌ها، اعضا و پیشرفت فعالیت‌ها
           </p>
         </div>
       </div>
 
       <ProjectsManager
-        initialProjects={serializedProjects}
+        initialProjects={projects.map((project) => ({
+          ...project,
+          createdAt: project.createdAt.toISOString(),
+        }))}
         canCreate={user.role === "ADMIN"}
       />
     </>
   );
 }
 
-function ProjectsLoading() {
+function Loading() {
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
+    <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-slate-500">
       <LoaderCircle
-        size={28}
+        size={24}
         className="animate-spin text-indigo-600"
       />
-      <p className="text-sm text-slate-500">
-        در حال دریافت پروژه‌ها...
-      </p>
+      در حال دریافت پروژه‌ها...
     </div>
   );
 }

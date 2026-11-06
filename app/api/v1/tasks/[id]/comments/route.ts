@@ -5,26 +5,27 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
+import {
+  ASSIGNMENT_PREFIX,
+} from "@/lib/task-assignment-history";
 
 type Context = {
   params: Promise<{ id: string }>;
 };
 
-const commentSchema = z
-  .object({
-    content: z.string().trim().min(1).max(2000),
-  })
-  .strict();
+const schema = z.object({
+  content: z.string().trim().min(1).max(2000),
+}).strict();
 
-async function getAccessibleTask(
+async function accessibleTask(
   actor: {
     id: string;
     role: "ADMIN" | "MANAGER" | "EMPLOYEE";
   },
-  taskId: string
+  id: string
 ) {
   const task = await prisma.task.findUnique({
-    where: { id: taskId },
+    where: { id },
     select: {
       id: true,
       projectId: true,
@@ -39,9 +40,11 @@ async function getAccessibleTask(
     task.projectId
   );
 
-  if (!access) return null;
-
-  if (!access.canManage && task.assigneeId !== actor.id) {
+  if (
+    !access ||
+    (!access.canManage &&
+      task.assigneeId !== actor.id)
+  ) {
     return null;
   }
 
@@ -56,7 +59,7 @@ export async function GET(
 
   if (!actor) {
     return NextResponse.json(
-      { message: "ابتدا وارد حساب شوید" },
+      { message: "ابتدا وارد شوید." },
       { status: 401 }
     );
   }
@@ -65,23 +68,30 @@ export async function GET(
 
   if (!z.uuid().safeParse(id).success) {
     return NextResponse.json(
-      { message: "شناسه تسک نامعتبر است" },
+      { message: "شناسه نامعتبر است." },
       { status: 400 }
     );
   }
 
-  const task = await getAccessibleTask(actor, id);
-
-  if (!task) {
+  if (!(await accessibleTask(actor, id))) {
     return NextResponse.json(
-      { message: "تسک قابل مشاهده نیست" },
+      { message: "دسترسی مجاز نیست." },
       { status: 403 }
     );
   }
 
   const comments = await prisma.taskComment.findMany({
-    where: { taskId: id },
-    orderBy: { createdAt: "asc" },
+    where: {
+      taskId: id,
+      NOT: {
+        content: {
+          startsWith: ASSIGNMENT_PREFIX,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
     take: 200,
     select: {
       id: true,
@@ -99,15 +109,13 @@ export async function GET(
   return NextResponse.json(
     {
       success: true,
-      comments: comments.map((comment) => ({
-        ...comment,
-        createdAt: comment.createdAt.toISOString(),
+      comments: comments.map((item) => ({
+        ...item,
+        createdAt: item.createdAt.toISOString(),
       })),
     },
     {
-      headers: {
-        "Cache-Control": "no-store",
-      },
+      headers: { "Cache-Control": "no-store" },
     }
   );
 }
@@ -120,17 +128,16 @@ export async function POST(
 
   if (!actor) {
     return NextResponse.json(
-      { message: "ابتدا وارد حساب شوید" },
+      { message: "ابتدا وارد شوید." },
       { status: 401 }
     );
   }
 
   if (
-    !request.headers.get("origin") ||
     request.headers.get("origin") !== request.nextUrl.origin
   ) {
     return NextResponse.json(
-      { message: "درخواست نامعتبر است" },
+      { message: "درخواست نامعتبر است." },
       { status: 403 }
     );
   }
@@ -139,26 +146,34 @@ export async function POST(
 
   if (!z.uuid().safeParse(id).success) {
     return NextResponse.json(
-      { message: "شناسه تسک نامعتبر است" },
+      { message: "شناسه تسک نامعتبر است." },
       { status: 400 }
     );
   }
 
-  const task = await getAccessibleTask(actor, id);
-
-  if (!task) {
+  if (!(await accessibleTask(actor, id))) {
     return NextResponse.json(
-      { message: "اجازه ثبت کامنت ندارید" },
+      { message: "اجازه ثبت کامنت ندارید." },
       { status: 403 }
     );
   }
 
-  const body = await request.json().catch(() => null);
-  const parsed = commentSchema.safeParse(body);
+  const parsed = schema.safeParse(
+    await request.json().catch(() => null)
+  );
 
   if (!parsed.success) {
     return NextResponse.json(
-      { message: "متن کامنت باید بین ۱ تا ۲۰۰۰ کاراکتر باشد" },
+      { message: "متن کامنت معتبر نیست." },
+      { status: 400 }
+    );
+  }
+
+  if (
+    parsed.data.content.startsWith(ASSIGNMENT_PREFIX)
+  ) {
+    return NextResponse.json(
+      { message: "متن کامنت معتبر نیست." },
       { status: 400 }
     );
   }
@@ -186,7 +201,6 @@ export async function POST(
     return NextResponse.json(
       {
         success: true,
-        message: "کامنت ثبت شد",
         comment: {
           ...comment,
           createdAt: comment.createdAt.toISOString(),
@@ -195,10 +209,10 @@ export async function POST(
       { status: 201 }
     );
   } catch (error) {
-    console.error("Create task comment failed:", error);
+    console.error("Create comment:", error);
 
     return NextResponse.json(
-      { message: "خطا در ثبت کامنت" },
+      { message: "خطا در ثبت کامنت." },
       { status: 500 }
     );
   }

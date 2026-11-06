@@ -5,32 +5,28 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
+import {
+  encodeAssignmentEvent,
+} from "@/lib/task-assignment-history";
 
 type Context = {
   params: Promise<{ id: string }>;
 };
 
-const createTaskSchema = z
-  .object({
-    title: z.string().trim().min(3).max(200),
-    description: z.string().trim().max(5000),
-    priority: z.enum([
-      "LOW",
-      "MEDIUM",
-      "HIGH",
-      "URGENT",
-    ]),
-    status: z.enum([
-      "TODO",
-      "IN_PROGRESS",
-      "IN_REVIEW",
-      "DONE",
-    ]),
-    assigneeId: z.uuid().nullable(),
-    startDate: z.iso.date().nullable(),
-    dueDate: z.iso.date().nullable(),
-  })
-  .strict();
+const taskSchema = z.object({
+  title: z.string().trim().min(3).max(200),
+  description: z.string().trim().max(5000),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+  status: z.enum([
+    "TODO",
+    "IN_PROGRESS",
+    "IN_REVIEW",
+    "DONE",
+  ]),
+  assigneeId: z.uuid().nullable(),
+  startDate: z.iso.date().nullable(),
+  dueDate: z.iso.date().nullable(),
+}).strict();
 
 function toDate(value: string | null) {
   return value
@@ -44,10 +40,6 @@ const taskSelect = {
   description: true,
   status: true,
   priority: true,
-  startDate: true,
-  dueDate: true,
-  createdAt: true,
-  updatedAt: true,
   assigneeId: true,
   assignee: {
     select: {
@@ -55,10 +47,12 @@ const taskSelect = {
       name: true,
     },
   },
+  startDate: true,
+  dueDate: true,
+  createdAt: true,
+  updatedAt: true,
   _count: {
-    select: {
-      comments: true,
-    },
+    select: { comments: true },
   },
 } as const;
 
@@ -68,18 +62,13 @@ function serializeTask(task: {
   description: string | null;
   status: string;
   priority: string;
+  assigneeId: string | null;
+  assignee: { id: string; name: string } | null;
   startDate: Date | null;
   dueDate: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  assigneeId: string | null;
-  assignee: {
-    id: string;
-    name: string;
-  } | null;
-  _count: {
-    comments: number;
-  };
+  _count: { comments: number };
 }) {
   return {
     ...task,
@@ -98,7 +87,7 @@ export async function GET(
 
   if (!actor) {
     return NextResponse.json(
-      { message: "ابتدا وارد حساب شوید" },
+      { message: "ابتدا وارد حساب شوید." },
       { status: 401 }
     );
   }
@@ -107,7 +96,7 @@ export async function GET(
 
   if (!z.uuid().safeParse(id).success) {
     return NextResponse.json(
-      { message: "شناسه پروژه نامعتبر است" },
+      { message: "شناسه پروژه معتبر نیست." },
       { status: 400 }
     );
   }
@@ -116,7 +105,7 @@ export async function GET(
 
   if (!access) {
     return NextResponse.json(
-      { message: "دسترسی به پروژه مجاز نیست" },
+      { message: "دسترسی به پروژه مجاز نیست." },
       { status: 403 }
     );
   }
@@ -128,23 +117,26 @@ export async function GET(
         ? {}
         : { assigneeId: actor.id }),
     },
-    select: taskSelect,
     orderBy: [
       { position: "asc" },
       { createdAt: "desc" },
     ],
     take: 200,
+    select: taskSelect,
   });
 
   return NextResponse.json(
     {
       success: true,
-      tasks: tasks.map(serializeTask),
+      tasks: tasks.map((task) => ({
+        ...serializeTask(task),
+        _count: {
+          comments: 0,
+        },
+      })),
     },
     {
-      headers: {
-        "Cache-Control": "no-store",
-      },
+      headers: { "Cache-Control": "no-store" },
     }
   );
 }
@@ -157,17 +149,16 @@ export async function POST(
 
   if (!actor) {
     return NextResponse.json(
-      { message: "ابتدا وارد حساب شوید" },
+      { message: "ابتدا وارد حساب شوید." },
       { status: 401 }
     );
   }
 
   if (
-    !request.headers.get("origin") ||
     request.headers.get("origin") !== request.nextUrl.origin
   ) {
     return NextResponse.json(
-      { message: "درخواست نامعتبر است" },
+      { message: "درخواست نامعتبر است." },
       { status: 403 }
     );
   }
@@ -176,7 +167,7 @@ export async function POST(
 
   if (!z.uuid().safeParse(id).success) {
     return NextResponse.json(
-      { message: "شناسه پروژه نامعتبر است" },
+      { message: "شناسه پروژه معتبر نیست." },
       { status: 400 }
     );
   }
@@ -185,21 +176,18 @@ export async function POST(
 
   if (!access?.canManage) {
     return NextResponse.json(
-      { message: "اجازه ایجاد تسک ندارید" },
+      { message: "اجازه ایجاد تسک ندارید." },
       { status: 403 }
     );
   }
 
-  const body = await request.json().catch(() => null);
-  const parsed = createTaskSchema.safeParse(body);
+  const parsed = taskSchema.safeParse(
+    await request.json().catch(() => null)
+  );
 
   if (!parsed.success) {
     return NextResponse.json(
-      {
-        message:
-          parsed.error.issues[0]?.message ||
-          "اطلاعات تسک نامعتبر است",
-      },
+      { message: "اطلاعات تسک نامعتبر است." },
       { status: 400 }
     );
   }
@@ -212,66 +200,116 @@ export async function POST(
     data.startDate > data.dueDate
   ) {
     return NextResponse.json(
-      { message: "تاریخ پایان قبل از تاریخ شروع است" },
+      { message: "تاریخ پایان قبل از شروع است." },
       { status: 400 }
     );
   }
 
   try {
-    if (data.assigneeId) {
-      const membership =
-        await prisma.projectMember.findFirst({
-          where: {
-            projectId: id,
-            userId: data.assigneeId,
-            role: "MEMBER",
-            user: {
-              isActive: true,
-              role: "EMPLOYEE",
+    const task = await prisma.$transaction(async (tx) => {
+      let assigneeName: string | null = null;
+
+      if (data.assigneeId) {
+        const member =
+          await tx.projectMember.findFirst({
+            where: {
+              projectId: id,
+              userId: data.assigneeId,
+              user: { isActive: true },
+              ...(actor.role === "ADMIN"
+                ? {}
+                : { role: "MEMBER" }),
             },
-          },
-          select: { id: true },
-        });
+            select: {
+              role: true,
+              user: {
+                select: {
+                  name: true,
+                  role: true,
+                },
+              },
+            },
+          });
 
-      if (!membership) {
-        return NextResponse.json(
-          {
-            message:
-              "مسئول تسک باید یکی از کارمندان فعال پروژه باشد",
-          },
-          { status: 400 }
-        );
+        const valid =
+          member &&
+          (
+            (member.role === "MANAGER" &&
+              member.user.role === "MANAGER") ||
+            (member.role === "MEMBER" &&
+              member.user.role === "EMPLOYEE")
+          );
+
+        if (!valid) {
+          throw new Error("INVALID_ASSIGNEE");
+        }
+
+        assigneeName = member.user.name;
       }
-    }
 
-    const task = await prisma.task.create({
-      data: {
-        title: data.title,
-        description: data.description || null,
-        status: data.status,
-        priority: data.priority,
-        startDate: toDate(data.startDate),
-        dueDate: toDate(data.dueDate),
-        projectId: id,
-        createdById: actor.id,
-        assigneeId: data.assigneeId,
-      },
-      select: taskSelect,
+      const created = await tx.task.create({
+        data: {
+          title: data.title,
+          description: data.description || null,
+          priority: data.priority,
+          status: data.status,
+          startDate: toDate(data.startDate),
+          dueDate: toDate(data.dueDate),
+          projectId: id,
+          createdById: actor.id,
+          assigneeId: data.assigneeId,
+        },
+        select: taskSelect,
+      });
+
+      if (data.assigneeId) {
+        await tx.taskComment.create({
+          data: {
+            taskId: created.id,
+            authorId: actor.id,
+            content: encodeAssignmentEvent({
+              fromUserId: null,
+              fromUserName: null,
+              toUserId: data.assigneeId,
+              toUserName: assigneeName,
+              note: "واگذاری اولیه تسک",
+            }),
+          },
+        });
+      }
+
+      return created;
     });
 
     return NextResponse.json(
       {
         success: true,
-        message: "تسک با موفقیت ایجاد شد",
-        task: serializeTask(task),
+        task: {
+          ...serializeTask(task),
+          _count: { comments: 0 },
+        },
+        message: "تسک ایجاد شد.",
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Create task failed:", error);
+    if (
+      error instanceof Error &&
+      error.message === "INVALID_ASSIGNEE"
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "مسئول باید مدیر یا کارمند فعال همین پروژه باشد.",
+        },
+        { status: 400 }
+      );
+    }
+
+    console.error("Create task:", error);
 
     return NextResponse.json(
-      { message: "خطا در ایجاد تسک" },
+      { message: "خطا در ایجاد تسک." },
       { status: 500 }
     );
   }

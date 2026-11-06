@@ -1,7 +1,14 @@
+
 import { Suspense } from "react";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { ArrowRight, FolderKanban, LoaderCircle } from "lucide-react";
+import {
+  notFound,
+  redirect,
+} from "next/navigation";
+import {
+  ArrowRight,
+  LoaderCircle,
+} from "lucide-react";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
@@ -12,19 +19,24 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
-export default function ProjectDetailsPage({ params }: Props) {
+export default function ProjectDetailsPage({
+  params,
+}: Props) {
   return (
-    <main className="min-h-screen bg-[#f7f8fc] px-4 py-8 text-slate-900 sm:px-8">
+    <main
+      dir="rtl"
+      className="min-h-screen bg-[#f7f8fc] px-4 py-8 text-slate-900 sm:px-8"
+    >
       <div className="mx-auto max-w-6xl">
-        <Suspense fallback={<PageLoading />}>
-          <ProjectContent params={params} />
+        <Suspense fallback={<Loading />}>
+          <Content params={params} />
         </Suspense>
       </div>
     </main>
   );
 }
 
-async function ProjectContent({ params }: Props) {
+async function Content({ params }: Props) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -45,9 +57,7 @@ async function ProjectContent({ params }: Props) {
         ? {}
         : {
             members: {
-              some: {
-                userId: user.id,
-              },
+              some: { userId: user.id },
             },
           }),
     },
@@ -104,71 +114,58 @@ async function ProjectContent({ params }: Props) {
     notFound();
   }
 
-  const canEdit =
+  const canManage =
     user.role === "ADMIN" ||
-    (user.role === "MANAGER" &&
+    (
+      user.role === "MANAGER" &&
       project.members.some(
-        (member) => member.user.id === user.id && member.role === "MANAGER",
-      ));
-
-  const availableUsers = canEdit
-    ? (
-        await prisma.user.findMany({
-          where: {
-            isActive: true,
-            role: { in: ["MANAGER", "EMPLOYEE"] },
-          },
-          select: {
-            id: true,
-            name: true,
-            role: true,
-          },
-          orderBy: { name: "asc" },
-        })
+        (member) =>
+          member.user.id === user.id &&
+          member.role === "MANAGER"
       )
-        .filter((item) => item.role === "MANAGER" || item.role === "EMPLOYEE")
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          role: item.role as "MANAGER" | "EMPLOYEE",
-        }))
-    : [];
+    );
 
   const serializedProject = {
     ...project,
-    startDate: project.startDate?.toISOString() ?? null,
-    dueDate: project.dueDate?.toISOString() ?? null,
+    startDate:
+      project.startDate?.toISOString() ?? null,
+    dueDate:
+      project.dueDate?.toISOString() ?? null,
     createdAt: project.createdAt.toISOString(),
-    progressHistory: project.progressHistory.map((entry) => ({
-      ...entry,
-      createdAt: entry.createdAt.toISOString(),
-    })),
+    progressHistory:
+      project.progressHistory.map((entry) => ({
+        ...entry,
+        createdAt: entry.createdAt.toISOString(),
+      })),
   };
 
   return (
     <>
       <Link
         href="/projects"
-        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-500 transition hover:text-indigo-600"
+        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600"
       >
         <ArrowRight size={17} />
         بازگشت به پروژه‌ها
       </Link>
-      <ProjectDetails project={serializedProject} canEdit={canEdit} />
+
+      <ProjectDetails
+        project={serializedProject}
+        canEdit={canManage}
+        actorRole={user.role}
+      />
     </>
   );
 }
 
-function PageLoading() {
+function Loading() {
   return (
-    <div className="flex min-h-[65vh] flex-col items-center justify-center gap-3">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-        <FolderKanban size={26} />
-      </div>
-
-      <LoaderCircle size={24} className="animate-spin text-indigo-600" />
-
-      <p className="text-sm text-slate-500">در حال دریافت اطلاعات پروژه...</p>
+    <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-slate-500">
+      <LoaderCircle
+        size={24}
+        className="animate-spin text-indigo-600"
+      />
+      در حال دریافت پروژه...
     </div>
   );
 }

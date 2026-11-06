@@ -3,37 +3,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
-import { canEditProject } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
+import { canEditProject } from "@/lib/project-access";
 
 type Context = {
   params: Promise<{ id: string }>;
 };
 
-const dateSchema = z.union([
-  z.iso.date(),
-  z.null(),
-]);
+const statusSchema = z.object({
+  status: z.enum([
+    "DRAFT",
+    "PLANNED",
+    "ACTIVE",
+    "ON_HOLD",
+    "COMPLETED",
+    "CANCELLED",
+  ]),
+}).strict();
 
-const updateProjectSchema = z
-  .object({
-    name: z.string().trim().min(3).max(150),
-    description: z.string().trim().max(3000),
-    status: z.enum([
-      "DRAFT",
-      "PLANNED",
-      "ACTIVE",
-      "ON_HOLD",
-      "COMPLETED",
-      "CANCELLED",
-    ]),
-    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
-    startDate: dateSchema,
-    dueDate: dateSchema,
-  })
-  .strict();
+const adminSchema = statusSchema.extend({
+  name: z.string().trim().min(3).max(150),
+  description: z.string().trim().max(3000),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+  startDate: z.iso.date().nullable(),
+  dueDate: z.iso.date().nullable(),
+}).strict();
 
-function toDatabaseDate(value: string | null) {
+function toDate(value: string | null) {
   return value
     ? new Date(`${value}T00:00:00.000Z`)
     : null;
@@ -47,17 +43,16 @@ export async function PATCH(
 
   if (!actor) {
     return NextResponse.json(
-      { message: "ابتدا وارد حساب شوید" },
+      { message: "ابتدا وارد حساب شوید." },
       { status: 401 }
     );
   }
 
   if (
-    !request.headers.get("origin") ||
     request.headers.get("origin") !== request.nextUrl.origin
   ) {
     return NextResponse.json(
-      { message: "درخواست نامعتبر است" },
+      { message: "درخواست نامعتبر است." },
       { status: 403 }
     );
   }
@@ -66,28 +61,73 @@ export async function PATCH(
 
   if (!z.uuid().safeParse(id).success) {
     return NextResponse.json(
-      { message: "شناسه پروژه نامعتبر است" },
+      { message: "شناسه پروژه نامعتبر است." },
       { status: 400 }
     );
   }
 
   if (!(await canEditProject(actor, id))) {
     return NextResponse.json(
-      { message: "اجازه ویرایش این پروژه را ندارید" },
+      { message: "دسترسی به این پروژه مجاز نیست." },
       { status: 403 }
     );
   }
 
   const body = await request.json().catch(() => null);
-  const parsed = updateProjectSchema.safeParse(body);
+
+  if (actor.role === "MANAGER") {
+    const parsed = statusSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          message:
+            "مدیر پروژه فقط می‌تواند وضعیت پروژه را تغییر دهد.",
+        },
+        { status: 403 }
+      );
+    }
+
+    const result = await prisma.project.updateMany({
+      where: {
+        id,
+        archivedAt: null,
+        members: {
+          some: {
+            userId: actor.id,
+            role: "MANAGER",
+          },
+        },
+      },
+      data: {
+        status: parsed.data.status,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: result.count === 1,
+        message:
+          result.count === 1
+            ? "وضعیت پروژه ثبت شد."
+            : "دسترسی مجاز نیست.",
+      },
+      { status: result.count === 1 ? 200 : 403 }
+    );
+  }
+
+  if (actor.role !== "ADMIN") {
+    return NextResponse.json(
+      { message: "دسترسی غیرمجاز." },
+      { status: 403 }
+    );
+  }
+
+  const parsed = adminSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
-      {
-        message:
-          parsed.error.issues[0]?.message ||
-          "اطلاعات پروژه معتبر نیست",
-      },
+      { message: "اطلاعات پروژه معتبر نیست." },
       { status: 400 }
     );
   }
@@ -102,33 +142,35 @@ export async function PATCH(
     return NextResponse.json(
       {
         message:
-          "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد",
+          "تاریخ پایان نمی‌تواند قبل از شروع باشد.",
       },
       { status: 400 }
     );
   }
 
-  try {
-    await prisma.project.update({
-      where: { id },
-      data: {
-        name: data.name,
-        description: data.description || null,
-        status: data.status,
-        priority: data.priority,
-        startDate: toDatabaseDate(data.startDate),
-        dueDate: toDatabaseDate(data.dueDate),
-      },
-    });
+  const result = await prisma.project.updateMany({
+    where: {
+      id,
+      archivedAt: null,
+    },
+    data: {
+      name: data.name,
+      description: data.description || null,
+      priority: data.priority,
+      status: data.status,
+      startDate: toDate(data.startDate),
+      dueDate: toDate(data.dueDate),
+    },
+  });
 
-    return NextResponse.json({
-      success: true,
-      message: "اطلاعات پروژه ذخیره شد",
-    });
-  } catch {
-    return NextResponse.json(
-      { message: "خطا در ذخیره پروژه" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(
+    {
+      success: result.count === 1,
+      message:
+        result.count === 1
+          ? "اطلاعات پروژه ذخیره شد."
+          : "پروژه یافت نشد.",
+    },
+    { status: result.count === 1 ? 200 : 404 }
+  );
 }

@@ -1,10 +1,16 @@
 
 "use client";
 
+import { useMemo } from "react";
 import DatePicker from "react-multi-date-picker";
+import DateObject from "react-date-object";
+
 import persian from "react-date-object/calendars/persian";
 import persianFa from "react-date-object/locales/persian_fa";
+
 import gregorian from "react-date-object/calendars/gregorian";
+import gregorianEn from "react-date-object/locales/gregorian_en";
+
 import { CalendarDays, X } from "lucide-react";
 
 type Props = {
@@ -20,6 +26,46 @@ export default function PersianDatePicker({
   onChange,
   disabled = false,
 }: Props) {
+  // Input: Gregorian YYYY-MM-DD (English digits)
+  // Display: Persian calendar and Persian digits
+  const selectedDate = useMemo(() => {
+    if (!value) return null;
+
+    try {
+      return new DateObject({
+        date: value,
+        format: "YYYY-MM-DD",
+        calendar: gregorian,
+        locale: gregorianEn,
+      }).convert(persian, persianFa);
+    } catch {
+      return null;
+    }
+  }, [value]);
+
+  function handleDateChange(date: DateObject | null) {
+    if (!date) {
+      onChange(null);
+      return;
+    }
+
+    // Copy the selected object to prevent mutating the
+    // calendar's internal date object.
+    const converted = new DateObject(date).convert(
+      gregorian,
+      gregorianEn
+    );
+
+    // Always returns ASCII digits and YYYY-MM-DD format.
+    const isoDate = converted.format("YYYY-MM-DD");
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+      return;
+    }
+
+    onChange(isoDate);
+  }
+
   return (
     <div className="min-w-0">
       <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -37,20 +83,13 @@ export default function PersianDatePicker({
           locale={persianFa}
           format="YYYY/MM/DD"
           calendarPosition="bottom-right"
-          value={
-            value
-              ? new Date(`${value}T12:00:00`)
-              : null
-          }
+          value={selectedDate}
           onChange={(date) => {
-            if (!date || Array.isArray(date)) {
-              onChange(null);
+            if (Array.isArray(date)) {
               return;
             }
 
-            onChange(
-              date.convert(gregorian).format("YYYY-MM-DD")
-            );
+            handleDateChange(date);
           }}
           editable={false}
           disabled={disabled}
@@ -64,7 +103,7 @@ export default function PersianDatePicker({
             type="button"
             aria-label={`پاک کردن ${label}`}
             onClick={() => onChange(null)}
-            className="absolute left-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100"
+            className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-rose-600"
           >
             <X size={16} />
           </button>

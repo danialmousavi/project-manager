@@ -29,27 +29,21 @@ export async function getTaskProjectAccess(
     select: {
       id: true,
       members: {
-        where: {
-          userId: actor.id,
-        },
-        select: {
-          role: true,
-        },
+        where: { userId: actor.id },
+        select: { role: true },
       },
     },
   });
 
   if (!project) return null;
 
-  const canManage =
-    actor.role === "ADMIN" ||
-    (actor.role === "MANAGER" &&
-      project.members.some(
-        (member) => member.role === "MANAGER"
-      ));
-
   return {
-    projectId: project.id,
-    canManage,
+    projectId,
+    canManage:
+      actor.role === "ADMIN" ||
+      (actor.role === "MANAGER" &&
+        project.members.some(
+          (member) => member.role === "MANAGER"
+        )),
   };
 }
