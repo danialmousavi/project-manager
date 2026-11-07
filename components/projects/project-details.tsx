@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   ListTodo,
   LoaderCircle,
@@ -113,7 +114,7 @@ const taskStatusColors: Record<TaskStatus, string> = {
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 " +
-  "bg-white px-4 py-3 text-sm text-slate-800 " +
+  "min-h-11 bg-white px-3 py-2 text-sm text-slate-800 " +
   "outline-none transition " +
   "focus:border-emerald-500 " +
   "focus:ring-4 focus:ring-emerald-500/10 " +
@@ -299,20 +300,20 @@ export default function ProjectDetails({
   }
 
   return (
-    <div className="space-y-4">
-      <section aria-labelledby="overview-heading" className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-3">
+      <section aria-labelledby="overview-heading" className="rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 id="overview-heading" className="text-lg font-extrabold text-[var(--foreground)]">نمای کلی پروژه</h2>
-            <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{project.description || "توضیحی ثبت نشده است."}</p>
+            <h2 id="overview-heading" className="text-base font-extrabold text-[var(--foreground)]">نمای کلی پروژه</h2>
+            <p className="mt-0.5 text-sm leading-6 text-[var(--muted)]">{project.description || "توضیحی ثبت نشده است."}</p>
           </div>
 
-          <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+          <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
             {statusLabels[project.status]}
           </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-2 border-t border-[var(--border)] pt-4 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-3 xl:grid-cols-4">
           <Info
             label="اعضای پروژه"
             value={`${project.members.length.toLocaleString("fa-IR")} نفر`}
@@ -333,6 +334,12 @@ export default function ProjectDetails({
               "fa-IR"
             )}
             icon={<CalendarDays size={20} />}
+          />
+
+          <Info
+            label="پیشرفت"
+            value={`${progress.toLocaleString("fa-IR")}٪`}
+            icon={<Activity size={20} />}
           />
         </div>
       </section>
@@ -355,15 +362,24 @@ export default function ProjectDetails({
         </p>
       )}
 
-      <div className="grid items-start gap-4 lg:grid-cols-5">
-        <div className="space-y-4 lg:col-span-3">
-          <section className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
-            <h2 className="text-lg font-bold text-slate-900">
-              اطلاعات پروژه
-            </h2>
+      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <section className="rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">اطلاعات پروژه</h2>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">مشخصات و زمان‌بندی پروژه</p>
+              </div>
+              <span className="rounded-lg bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">{priorityLabels[priority]}</span>
+            </div>
+
+            <details className="group mt-3 border-t border-[var(--border)] pt-2">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-emerald-700">
+                {canEdit ? "ویرایش اطلاعات پروژه" : "مشاهده اطلاعات پروژه"}
+                <ChevronDown aria-hidden="true" size={18} className="mr-auto text-[var(--muted)] transition-transform group-open:rotate-180" />
+              </summary>
 
             {!isAdmin && (
-              <p className="mt-2 text-xs leading-6 text-slate-500">
+              <p className="mt-1 text-xs leading-6 text-slate-500">
                 نام، توضیحات، اولویت و تاریخ‌های
                 پروژه فقط توسط مدیر اصلی تنظیم
                 می‌شوند.
@@ -375,9 +391,9 @@ export default function ProjectDetails({
 
             <form
               onSubmit={saveDetails}
-              className="mt-6 space-y-4"
+              className="mt-3 grid gap-3 sm:grid-cols-2"
             >
-              <Field label="نام پروژه">
+              <Field label="نام پروژه" className="sm:col-span-2">
                 <input
                   className={inputClass}
                   value={name}
@@ -391,10 +407,10 @@ export default function ProjectDetails({
                 />
               </Field>
 
-              <Field label="توضیحات">
+              <Field label="توضیحات" className="sm:col-span-2">
                 <textarea
                   className={inputClass}
-                  rows={3}
+                  rows={2}
                   maxLength={3000}
                   disabled={!isAdmin}
                   value={description}
@@ -406,8 +422,7 @@ export default function ProjectDetails({
                 />
               </Field>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="وضعیت پروژه">
+              <Field label="وضعیت پروژه">
                   <select
                     className={inputClass}
                     value={status}
@@ -429,9 +444,9 @@ export default function ProjectDetails({
                       </option>
                     ))}
                   </select>
-                </Field>
+              </Field>
 
-                <Field label="اولویت">
+              <Field label="اولویت">
                   <select
                     className={inputClass}
                     value={priority}
@@ -453,28 +468,21 @@ export default function ProjectDetails({
                       </option>
                     ))}
                   </select>
-                </Field>
+              </Field>
 
-                <PersianDatePicker
-                  label="تاریخ شروع"
-                  value={startDate}
-                  onChange={setStartDate}
-                  disabled={!isAdmin}
-                />
+              <div>
+                <PersianDatePicker label="تاریخ شروع" value={startDate} onChange={setStartDate} disabled={!isAdmin} />
+              </div>
 
-                <PersianDatePicker
-                  label="تاریخ پایان"
-                  value={dueDate}
-                  onChange={setDueDate}
-                  disabled={!isAdmin}
-                />
+              <div>
+                <PersianDatePicker label="تاریخ پایان" value={dueDate} onChange={setDueDate} disabled={!isAdmin} />
               </div>
 
               {canEdit && (
                 <button
                   type="submit"
                   disabled={Boolean(busy)}
-                  className="mt-3 inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 sm:col-span-2 sm:w-fit"
                 >
                   {busy === "details" ? (
                     <LoaderCircle
@@ -491,19 +499,29 @@ export default function ProjectDetails({
                 </button>
               )}
             </form>
+            </details>
           </section>
-
-          <section className="overflow-visible rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
-            <h2 className="flex items-center gap-2 text-lg font-bold">
+          <section className="overflow-visible rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-base font-bold">
               <Users
-                size={20}
+                size={18}
                 className="text-emerald-600"
               />
               اعضای پروژه
-            </h2>
+              </h2>
+              <span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                {project.members.length.toLocaleString("fa-IR")} نفر
+              </span>
+            </div>
 
+            <details className="group mt-3 border-t border-[var(--border)] pt-2">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-emerald-700">
+                {canEdit ? "مدیریت اعضا" : "مشاهده اعضا"}
+                <ChevronDown aria-hidden="true" size={18} className="mr-auto text-[var(--muted)] transition-transform group-open:rotate-180" />
+              </summary>
             {canEdit ? (
-              <div className="mt-6 space-y-5">
+              <div className="mt-3 grid gap-3">
                 {isAdmin ? (
                   <UserMultiSelect
                     label="مدیران پروژه"
@@ -513,8 +531,8 @@ export default function ProjectDetails({
                     onChange={setManagers}
                   />
                 ) : (
-                  <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="mb-2 text-xs text-slate-500">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="mb-1 text-xs text-slate-500">
                       مدیران پروژه (فقط نمایشی)
                     </p>
 
@@ -539,7 +557,7 @@ export default function ProjectDetails({
                   type="button"
                   disabled={Boolean(busy)}
                   onClick={() => void saveMembers()}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {busy === "members" ? (
                     <LoaderCircle
@@ -553,7 +571,7 @@ export default function ProjectDetails({
                 </button>
               </div>
             ) : (
-              <div className="mt-5 space-y-2">
+              <div className="mt-3 space-y-1.5">
                 {project.members.length === 0 ? (
                   <p className="text-sm text-slate-500">
                     هنوز عضوی ثبت نشده است.
@@ -562,7 +580,7 @@ export default function ProjectDetails({
                   project.members.map((member) => (
                     <div
                       key={member.user.id}
-                      className="flex justify-between gap-3 rounded-xl bg-slate-50 p-4 text-sm"
+                      className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm"
                     >
                       <span>{member.user.name}</span>
 
@@ -576,13 +594,11 @@ export default function ProjectDetails({
                 )}
               </div>
             )}
+            </details>
           </section>
-        </div>
-
-        <div className="space-y-4 lg:col-span-2">
-          <section className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
+          <section className="rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+              <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
                 <Activity
                   size={20}
                   className="text-emerald-600"
@@ -590,17 +606,18 @@ export default function ProjectDetails({
                 پیشرفت پروژه
               </h2>
 
-              <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-700">
+              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
                 محاسبه خودکار
               </span>
             </div>
 
-            <p className="mt-4 text-center text-3xl font-extrabold text-emerald-700">
-              {progress.toLocaleString("fa-IR")}٪
-            </p>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <p className="text-2xl font-extrabold tabular-nums text-emerald-700">{progress.toLocaleString("fa-IR")}٪</p>
+              <p className="text-xs text-[var(--muted)]">از {totalTasks.toLocaleString("fa-IR")} تسک فعال</p>
+            </div>
 
             <div
-              className="mt-5 h-3 overflow-hidden rounded-full bg-emerald-100"
+              className="mt-3 h-2 overflow-hidden rounded-full bg-emerald-100"
               role="progressbar"
               aria-label="پیشرفت خودکار پروژه"
               aria-valuenow={progress}
@@ -615,18 +632,14 @@ export default function ProjectDetails({
               />
             </div>
 
-            <p className="mt-4 text-center text-xs leading-6 text-slate-500">
-              محاسبه‌شده از وضعیت تمام تسک‌های پروژه
-            </p>
-
             {totalTasks === 0 && (
-              <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-center text-xs leading-6 text-amber-800">
+              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-center text-xs leading-5 text-amber-800">
                 هنوز تسکی در پروژه وجود ندارد؛
                 پیشرفت صفر درصد است.
               </p>
             )}
 
-            <div className="mt-6 space-y-3 border-t border-slate-100 pt-5">
+            <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-slate-100 pt-3">
               {(Object.keys(
                 taskStatusLabels
               ) as TaskStatus[]).map(
@@ -655,51 +668,34 @@ export default function ProjectDetails({
               )}
             </div>
 
-            <div className="mt-5 rounded-xl bg-emerald-50 p-4">
-              <div className="flex items-center justify-between gap-3 text-xs text-emerald-800">
-                <span>مجموع تسک‌ها</span>
-                <strong>
-                  {totalTasks.toLocaleString("fa-IR")}
-                </strong>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-emerald-800">
-                <span>تسک‌های تکمیل‌شده</span>
-                <strong>
-                  {taskStats.DONE.toLocaleString(
-                    "fa-IR"
-                  )}
-                </strong>
-              </div>
-            </div>
-
             <Link
               href={`/projects/${project.id}/tasks`}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+              className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
             >
               <ListTodo size={17} />
-              مدیریت وظایف پروژه
+              وظایف پروژه
               <ArrowLeft size={15} />
             </Link>
           </section>
 
-          <section className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
-            <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+          <details className="group rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-base font-bold text-slate-900">
               <CheckCircle2
                 size={20}
                 className="text-emerald-600"
               />
               نحوه محاسبه پیشرفت
-            </h2>
+              <ChevronDown aria-hidden="true" size={18} className="mr-auto text-[var(--muted)] transition-transform group-open:rotate-180" />
+            </summary>
 
-            <p className="mt-4 text-sm leading-7 text-slate-500">
+            <p className="mt-3 text-sm leading-6 text-slate-500">
               پیشرفت براساس وضعیت واقعی تسک‌ها
               محاسبه می‌شود. ایجاد، حذف یا تغییر
               وضعیت تسک‌ها روی درصد پروژه اثر
               می‌گذارد.
             </p>
 
-            <div className="mt-5 space-y-3">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <WeightRow
                 label="برای انجام"
                 weight="۰٪"
@@ -725,7 +721,7 @@ export default function ProjectDetails({
               />
             </div>
 
-            <div className="mt-5 flex items-start gap-2 rounded-xl bg-slate-50 p-4">
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 p-3">
               <Clock3
                 size={16}
                 className="mt-0.5 shrink-0 text-emerald-600"
@@ -737,8 +733,7 @@ export default function ProjectDetails({
                 منعکس می‌شوند.
               </p>
             </div>
-          </section>
-        </div>
+          </details>
       </div>
     </div>
   );
@@ -754,17 +749,17 @@ function Info({
   icon: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl bg-emerald-50/60 px-3 py-2.5">
-      <div className="flex size-9 items-center justify-center rounded-lg bg-white text-emerald-700">
+    <div className="flex min-h-12 items-center gap-2 rounded-xl bg-emerald-50/60 px-2.5 py-2">
+      <div className="flex size-8 items-center justify-center rounded-lg bg-white text-emerald-700">
         {icon}
       </div>
 
       <div>
-        <p className="text-xs text-slate-500">
+        <p className="text-[11px] text-slate-500">
           {label}
         </p>
 
-        <p className="text-base font-bold">
+        <p className="text-sm font-bold">
           {value}
         </p>
       </div>
@@ -775,13 +770,15 @@ function Info({
 function Field({
   label,
   children,
+  className = "",
 }: {
   label: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-semibold text-slate-700">
+    <label className={`block ${className}`}>
+      <span className="mb-1.5 block text-xs font-semibold text-slate-700">
         {label}
       </span>
       {children}
@@ -799,7 +796,7 @@ function WeightRow({
   colorClass: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
       <div className="flex items-center gap-2">
         <span
           className={`size-2.5 rounded-full ${colorClass}`}
