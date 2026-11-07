@@ -59,6 +59,7 @@ services:
     environment:
       NODE_ENV: production
       APP_URL: ${APP_URL:-}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       DATABASE_URL: postgresql://project_user:local_dev_password@postgres:5432/project_manager?schema=public
       LOGIN_RATE_LIMIT_SECRET: ${LOGIN_RATE_LIMIT_SECRET:-local-development-rate-limit-secret}
       PORT: 3000
