@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "db:seed": "tsx scripts/seed.ts",
     "lint": "eslint",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",
@@ -34,7 +35,7 @@
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/jalaali-js": "^1.2.0",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -44,6 +45,7 @@
     "prisma": "^7.10.1",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "tsx": "^4",
     "vite": "^8.3.6",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^5.1.0"

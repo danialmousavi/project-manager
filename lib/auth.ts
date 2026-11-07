@@ -16,7 +16,12 @@ function hashToken(token: string) {
 
 export const sessionCookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
+  // The current deployment is HTTP. Set SESSION_COOKIE_SECURE=true when the
+  // app is placed behind HTTPS; production defaults to secure cookies.
+  secure:
+    process.env.SESSION_COOKIE_SECURE === "false"
+      ? false
+      : process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
   maxAge: SESSION_DAYS * 24 * 60 * 60,
