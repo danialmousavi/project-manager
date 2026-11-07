@@ -37,15 +37,14 @@ services:
     restart: "no"
 
   seed:
-    profiles: ["seed"]
     build:
       context: .
       target: seed
     container_name: project_manager_seed
     environment:
       DATABASE_URL: postgresql://project_user:local_dev_password@postgres:5432/project_manager?schema=public
-      ADMIN_NAME: ${ADMIN_NAME:-}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_NAME: ${ADMIN_NAME:-System Admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on:
       migrate:
@@ -59,6 +58,7 @@ services:
     container_name: project_manager_app
     environment:
       NODE_ENV: production
+      APP_URL: ${APP_URL:-}
       DATABASE_URL: postgresql://project_user:local_dev_password@postgres:5432/project_manager?schema=public
       LOGIN_RATE_LIMIT_SECRET: ${LOGIN_RATE_LIMIT_SECRET:-local-development-rate-limit-secret}
       PORT: 3000
@@ -66,7 +66,7 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
-      migrate:
+      seed:
         condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:

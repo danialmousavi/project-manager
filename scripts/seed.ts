@@ -1,16 +1,9 @@
 import "dotenv/config";
 
+import { randomBytes } from "node:crypto";
 import argon2 from "argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
-
-const requiredEnv = ["ADMIN_NAME", "ADMIN_EMAIL", "ADMIN_PASSWORD"] as const;
-
-for (const key of requiredEnv) {
-  if (!process.env[key]?.trim()) {
-    throw new Error(`${key} environment variable is required`);
-  }
-}
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL environment variable is required");
@@ -21,20 +14,30 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  const passwordHash = await argon2.hash(process.env.ADMIN_PASSWORD!);
+  const name = process.env.ADMIN_NAME?.trim() || "System Admin";
+  const email = process.env.ADMIN_EMAIL?.trim() || "admin@example.com";
+  const existing = await prisma.user.findUnique({ where: { email } });
+  const configuredPassword = process.env.ADMIN_PASSWORD?.trim();
+  const generatedPassword =
+    !existing && !configuredPassword
+      ? randomBytes(24).toString("base64url")
+      : undefined;
+  const password = configuredPassword || generatedPassword;
+
+  const passwordHash = password ? await argon2.hash(password) : undefined;
 
   const admin = await prisma.user.upsert({
-    where: { email: process.env.ADMIN_EMAIL! },
+    where: { email },
     update: {
-      name: process.env.ADMIN_NAME!,
-      passwordHash,
+      name,
       role: "ADMIN",
       isActive: true,
+      ...(passwordHash ? { passwordHash } : {}),
     },
     create: {
-      name: process.env.ADMIN_NAME!,
-      email: process.env.ADMIN_EMAIL!,
-      passwordHash,
+      name,
+      email,
+      passwordHash: passwordHash!,
       role: "ADMIN",
       isActive: true,
     },
@@ -47,6 +50,12 @@ async function main() {
   });
 
   console.log("Admin user created/updated:", admin);
+
+  if (generatedPassword) {
+    console.log("Generated ADMIN password (save it now):", generatedPassword);
+  } else if (!configuredPassword && existing) {
+    console.log("Existing ADMIN password was preserved.");
+  }
 }
 
 main()

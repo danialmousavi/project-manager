@@ -13,6 +13,7 @@ import {
   recordLoginResult,
   trustedClientIp,
 } from "@/lib/login-rate-limit";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 const loginSchema = z.object({
   email: z.email().trim().toLowerCase(),
@@ -24,10 +25,7 @@ const DUMMY_PASSWORD_HASH =
 
 export async function POST(request: NextRequest) {
   // Only accept requests from the same origin.
-  if (
-    !request.headers.get("origin") ||
-    request.headers.get("origin") !== request.nextUrl.origin
-  ) {
+  if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است" },
       { status: 403 }

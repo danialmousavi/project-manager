@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { syncProjectProgressCache } from "@/lib/project-progress";
 import { getTaskProjectAccess } from "@/lib/task-access";
+import { isAllowedOrigin } from "@/lib/security/origin";
 import {
   encodeAssignmentEvent,
 } from "@/lib/task-assignment-history";
@@ -56,10 +57,7 @@ const detailsSchema = z.object({
 type TaskDetails = z.infer<typeof detailsSchema>;
 
 function validOrigin(request: NextRequest) {
-  return (
-    request.headers.get("origin") ===
-    request.nextUrl.origin
-  );
+  return isAllowedOrigin(request);
 }
 
 function dateString(date: Date | null) {

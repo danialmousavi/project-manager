@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 const schema = z.object({
   name: z.string().trim().min(3).max(150),
@@ -38,9 +39,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (
-    request.headers.get("origin") !== request.nextUrl.origin
-  ) {
+  if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است." },
       { status: 403 }

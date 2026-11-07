@@ -10,6 +10,7 @@ import {
   normalizeNationalId,
   normalizePhone,
 } from "@/lib/iranian-identity";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 const updateSchema = z
   .object({
@@ -54,10 +55,7 @@ export async function PATCH(
     );
   }
 
-  if (
-    !request.headers.get("origin") ||
-    request.headers.get("origin") !== request.nextUrl.origin
-  ) {
+  if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است" },
       { status: 403 }

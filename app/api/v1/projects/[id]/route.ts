@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditProject } from "@/lib/project-access";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -48,9 +49,7 @@ export async function PATCH(
     );
   }
 
-  if (
-    request.headers.get("origin") !== request.nextUrl.origin
-  ) {
+  if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است." },
       { status: 403 }

@@ -11,6 +11,7 @@ import {
   normalizeNationalId,
   normalizePhone,
 } from "@/lib/iranian-identity";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 const createUserSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -40,10 +41,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (
-    !request.headers.get("origin") ||
-    request.headers.get("origin") !== request.nextUrl.origin
-  ) {
+  if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است" },
       { status: 403 }
