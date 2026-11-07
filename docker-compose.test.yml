@@ -1,0 +1,20 @@
+services:
+  postgres-audit-test:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: pm_audit_runner
+      POSTGRES_PASSWORD: test_only_local_9f47a6
+      POSTGRES_DB: pm_audit_test
+    ports:
+      - "127.0.0.1:55433:5432"
+    volumes:
+      - pm_audit_test_data:/var/lib/postgresql/data
+      - ./tests/database/marker.sql:/docker-entrypoint-initdb.d/00-marker.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pm_audit_runner -d pm_audit_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  pm_audit_test_data:

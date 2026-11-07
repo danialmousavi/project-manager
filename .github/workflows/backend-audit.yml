@@ -1,0 +1,36 @@
+name: Backend audit tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      TEST_DATABASE_URL: postgresql://pm_audit_runner:test_only_local_9f47a6@127.0.0.1:55433/pm_audit_test?schema=public
+      DATABASE_URL: postgresql://pm_audit_runner:test_only_local_9f47a6@127.0.0.1:55433/pm_audit_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: docker compose -f docker-compose.test.yml -p pm-audit-isolated up -d --wait
+      - run: node scripts/verify-test-db.mjs
+      - run: npx prisma migrate deploy
+      - run: npx prisma generate
+      - run: npm run test:unit
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - id: lint
+        continue-on-error: true
+        run: npm run lint
+      - id: integration
+        continue-on-error: true
+        run: npm run test:integration
+      - if: steps.lint.outcome == 'failure' || steps.integration.outcome == 'failure'
+        run: exit 1
+      - if: always()
+        run: docker compose -f docker-compose.test.yml -p pm-audit-isolated down

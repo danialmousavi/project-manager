@@ -145,6 +145,7 @@ export async function GET(
       prisma.task.findMany({
         where: {
           projectId,
+          deletedAt: null,
           ...(access.canManage
             ? {}
             : { assigneeId: actor.id }),
@@ -381,6 +382,7 @@ export async function PATCH(
         where: {
           id: data.taskId,
           projectId,
+          deletedAt: null,
           OR: [
             { sprintId: null },
             { sprintId: data.sprintId },
@@ -409,6 +411,7 @@ export async function PATCH(
       where: {
         id: data.taskId,
         projectId,
+        deletedAt: null,
         sprintId: data.sprintId,
       },
       data: {
@@ -490,6 +493,7 @@ export async function DELETE(
           where: {
             projectId,
             sprintId: sprint.id,
+            deletedAt: null,
           },
           data: {
             sprintId: null,

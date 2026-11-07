@@ -11,26 +11,12 @@ import {
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  calculateProjectProgress,
+  type TaskStatusCount,
+} from "@/lib/project-progress";
 
 import ProjectsManager from "@/components/projects/projects-manager";
-
-type TaskStatus =
-  | "TODO"
-  | "IN_PROGRESS"
-  | "IN_REVIEW"
-  | "DONE";
-
-const taskWeights: Record<TaskStatus, number> = {
-  TODO: 0,
-  IN_PROGRESS: 50,
-  IN_REVIEW: 90,
-  DONE: 100,
-};
-
-type ProgressAccumulator = {
-  total: number;
-  weightedSum: number;
-};
 
 export default function ProjectsPage() {
   return (
@@ -96,17 +82,11 @@ async function ProjectsContent() {
     (project) => project.id
   );
 
-  const progressByProject = new Map<
-    string,
-    ProgressAccumulator
-  >();
+  const progressByProject = new Map<string, TaskStatusCount[]>();
 
   // Initialize every project with zero progress.
   for (const projectId of projectIds) {
-    progressByProject.set(projectId, {
-      total: 0,
-      weightedSum: 0,
-    });
+    progressByProject.set(projectId, []);
   }
 
   // Read only grouped task counts.
@@ -119,6 +99,7 @@ async function ProjectsContent() {
         projectId: {
           in: projectIds,
         },
+        deletedAt: null,
       },
 
       _count: {
@@ -127,17 +108,6 @@ async function ProjectsContent() {
     });
 
     for (const group of groupedTasks) {
-      const status = group.status as TaskStatus;
-
-      if (
-        !Object.prototype.hasOwnProperty.call(
-          taskWeights,
-          status
-        )
-      ) {
-        continue;
-      }
-
       const current = progressByProject.get(
         group.projectId
       );
@@ -146,27 +116,18 @@ async function ProjectsContent() {
         continue;
       }
 
-      const count = group._count._all;
-
-      current.total += count;
-
-      current.weightedSum +=
-        count * taskWeights[status];
+      current.push({
+        status: group.status,
+        count: group._count._all,
+      });
     }
   }
 
   const serializedProjects = projects.map(
     (project) => {
-      const stats = progressByProject.get(
-        project.id
+      const progress = calculateProjectProgress(
+        progressByProject.get(project.id) ?? []
       );
-
-      const progress =
-        stats && stats.total > 0
-          ? Math.round(
-              stats.weightedSum / stats.total
-            )
-          : 0;
 
       return {
         ...project,

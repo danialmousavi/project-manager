@@ -57,6 +57,11 @@ enum ProgressTarget {
   SPRINT
 }
 
+enum LoginAttemptScope {
+  ACCOUNT
+  IP
+}
+
 // ==================================
 // USERS
 // ==================================
@@ -81,6 +86,7 @@ model User {
   createdTasks       Task[]            @relation("TaskCreator")
   comments           TaskComment[]
   progressUpdates    ProgressHistory[]
+  deletedTasks       Task[]            @relation("TaskDeletedBy")
 
   @@index([role])
 }
@@ -181,6 +187,10 @@ model Task {
   position Float @default(0)
   version  Int   @default(1)
 
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?    @relation("TaskDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -202,6 +212,8 @@ model Task {
   @@index([assigneeId, status])
   @@index([sprintId])
   @@index([dueDate])
+  @@index([projectId, deletedAt, status, position])
+  @@index([deletedAt])
 }
 
 // ==================================
@@ -259,4 +271,14 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model LoginAttempt {
+  id          String            @id @default(uuid())
+  scope       LoginAttemptScope
+  keyHash     String
+  attemptedAt DateTime          @default(now())
+
+  @@index([scope, keyHash, attemptedAt])
+  @@index([attemptedAt])
 }

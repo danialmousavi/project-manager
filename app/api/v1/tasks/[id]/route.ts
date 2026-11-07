@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncProjectProgressCache } from "@/lib/project-progress";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import {
   encodeAssignmentEvent,
@@ -147,8 +148,8 @@ export async function PATCH(
     .json()
     .catch(() => null);
 
-  const currentTask = await prisma.task.findUnique({
-    where: { id },
+  const currentTask = await prisma.task.findFirst({
+    where: { id, deletedAt: null },
     select: {
       id: true,
       projectId: true,
@@ -191,8 +192,8 @@ export async function PATCH(
 
     try {
       await prisma.$transaction(async (tx) => {
-        const current = await tx.task.findUnique({
-          where: { id },
+        const current = await tx.task.findFirst({
+          where: { id, deletedAt: null },
           select: {
             status: true,
             version: true,
@@ -217,6 +218,7 @@ export async function PATCH(
           where: {
             id,
             version: current.version,
+            deletedAt: null,
             ...(!access.canManage
               ? { assigneeId: actor.id }
               : {}),
@@ -245,6 +247,11 @@ export async function PATCH(
             }),
           },
         });
+
+        await syncProjectProgressCache(
+          tx,
+          currentTask.projectId
+        );
       });
 
       return NextResponse.json({
@@ -310,8 +317,8 @@ export async function PATCH(
   try {
     const changed = await prisma.$transaction(
       async (tx) => {
-        const current = await tx.task.findUnique({
-          where: { id },
+        const current = await tx.task.findFirst({
+          where: { id, deletedAt: null },
           select: {
             id: true,
             projectId: true,
@@ -432,6 +439,7 @@ export async function PATCH(
           where: {
             id,
             version: current.version,
+            deletedAt: null,
           },
           data: {
             ...(details
@@ -482,6 +490,16 @@ export async function PATCH(
               }),
             },
           });
+        }
+
+        if (
+          details &&
+          current.status !== details.status
+        ) {
+          await syncProjectProgressCache(
+            tx,
+            current.projectId
+          );
         }
 
         return true;
@@ -543,19 +561,26 @@ export async function DELETE(
           where: {
             id,
             project: { archivedAt: null },
+            deletedAt: null,
           },
-          select: { id: true },
+          select: { id: true, projectId: true },
         });
 
         if (!task) return false;
 
-        await tx.taskComment.deleteMany({
-          where: { taskId: id },
+        await tx.task.update({
+          where: { id: task.id },
+          data: {
+            deletedAt: new Date(),
+            deletedById: actor.id,
+            version: { increment: 1 },
+          },
         });
 
-        await tx.task.delete({
-          where: { id },
-        });
+        await syncProjectProgressCache(
+          tx,
+          task.projectId
+        );
 
         return true;
       }

@@ -52,9 +52,10 @@ export async function GET(_request: NextRequest, context: Context) {
     );
   }
 
-  const task = await prisma.task.findUnique({
+  const task = await prisma.task.findFirst({
     where: {
       id,
+      deletedAt: null,
     },
     select: {
       projectId: true,

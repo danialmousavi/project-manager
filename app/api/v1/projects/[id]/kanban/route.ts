@@ -58,6 +58,7 @@ export async function GET(
   try {
     const taskWhere = {
       projectId,
+      deletedAt: null,
       ...(access.canManage
         ? {}
         : { assigneeId: actor.id }),

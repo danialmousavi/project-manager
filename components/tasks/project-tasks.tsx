@@ -283,7 +283,11 @@ export default function ProjectTasks({
   }, [projectId]);
 
   useEffect(() => {
-    void loadTasks();
+    const timer = window.setTimeout(() => {
+      void loadTasks();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadTasks]);
 
   async function changeStatus(

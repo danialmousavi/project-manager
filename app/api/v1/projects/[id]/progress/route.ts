@@ -1,10 +1,10 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { canEditProject } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
+import { syncProjectProgressCache } from "@/lib/project-progress";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -12,7 +12,8 @@ type Context = {
 
 const progressSchema = z
   .object({
-    progress: z.number().int().min(0).max(100),
+    // Legacy clients may still send this value. It is validated but ignored.
+    progress: z.number().int().min(0).max(100).optional(),
     note: z.string().trim().max(1000),
   })
   .strict();
@@ -61,13 +62,13 @@ export async function POST(
 
   if (!parsed.success) {
     return NextResponse.json(
-      { message: "مقدار پیشرفت باید بین صفر و صد باشد" },
+      { message: "اطلاعات پیشرفت نامعتبر است" },
       { status: 400 }
     );
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
+    const progress = await prisma.$transaction(async (tx) => {
       const project = await tx.project.findFirst({
         where: {
           id,
@@ -83,37 +84,32 @@ export async function POST(
                 },
               }),
         },
-        select: {
-          id: true,
-          progress: true,
-        },
+        select: { id: true },
       });
 
       if (!project) {
         throw new Error("ACCESS_DENIED");
       }
 
-      await tx.project.update({
-        where: { id },
-        data: {
-          progress: parsed.data.progress,
-        },
-      });
+      const calculated = await syncProjectProgressCache(tx, id);
 
       await tx.progressHistory.create({
         data: {
           target: "PROJECT",
           projectId: id,
-          progress: parsed.data.progress,
+          progress: calculated,
           note: parsed.data.note || null,
           updatedById: actor.id,
         },
       });
+
+      return calculated;
     });
 
     return NextResponse.json({
       success: true,
-      message: "پیشرفت پروژه ثبت شد",
+      progress,
+      message: "پیشرفت پروژه براساس تسک‌ها محاسبه شد",
     });
   } catch (error) {
     if (
@@ -129,7 +125,7 @@ export async function POST(
     console.error("Project progress update failed:", error);
 
     return NextResponse.json(
-      { message: "خطا در ثبت پیشرفت" },
+      { message: "خطا در محاسبه پیشرفت" },
       { status: 500 }
     );
   }

@@ -29,8 +29,8 @@ async function accessibleTask(
   },
   id: string
 ) {
-  const task = await prisma.task.findUnique({
-    where: { id },
+  const task = await prisma.task.findFirst({
+    where: { id, deletedAt: null },
     select: {
       id: true,
       projectId: true,
