@@ -1,10 +1,8 @@
 
 import { Suspense } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import {
-  ArrowRight,
   FolderKanban,
   LoaderCircle,
 } from "lucide-react";
@@ -21,10 +19,11 @@ import ProjectsManager from "@/components/projects/projects-manager";
 export default function ProjectsPage() {
   return (
     <main
+      id="main-content"
       dir="rtl"
-      className="min-h-screen bg-[#f7fcf9] px-4 py-8 text-slate-900 sm:px-8"
+      className="min-h-dvh bg-[var(--background)] px-4 py-5 text-slate-900 sm:px-6 lg:px-8"
     >
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-[1440px]">
         <Suspense fallback={<Loading />}>
           <ProjectsContent />
         </Suspense>
@@ -144,25 +143,17 @@ async function ProjectsContent() {
 
   return (
     <>
-      <Link
-        href="/dashboard"
-        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-emerald-600"
-      >
-        <ArrowRight size={17} />
-        بازگشت به داشبورد
-      </Link>
-
-      <div className="mb-8 flex items-center gap-4">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-200">
-          <FolderKanban size={27} />
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+          <FolderKanban size={21} aria-hidden="true" />
         </div>
 
         <div>
-          <h1 className="text-2xl font-extrabold sm:text-3xl">
+          <h1 className="text-xl font-extrabold sm:text-2xl">
             مدیریت پروژه‌ها
           </h1>
 
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-0.5 text-sm text-[var(--muted)]">
             پروژه‌ها، اعضا و پیشرفت واقعی فعالیت‌ها
           </p>
         </div>
@@ -178,7 +169,7 @@ async function ProjectsContent() {
 
 function Loading() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-slate-500">
+    <div role="status" className="flex min-h-[40vh] items-center justify-center gap-3 text-sm text-[var(--muted)]">
       <LoaderCircle
         size={24}
         className="animate-spin text-emerald-600"

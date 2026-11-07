@@ -16,7 +16,6 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
-  FolderKanban,
   ListTodo,
   LoaderCircle,
   Save,
@@ -300,32 +299,20 @@ export default function ProjectDetails({
   }
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+    <div className="space-y-4">
+      <section aria-labelledby="overview-heading" className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex gap-4">
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white">
-              <FolderKanban size={27} />
-            </div>
-
-            <div>
-              <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">
-                {project.name}
-              </h1>
-
-              <p className="mt-3 text-sm leading-7 text-slate-500">
-                {project.description ||
-                  "توضیحی ثبت نشده است."}
-              </p>
-            </div>
+          <div className="min-w-0">
+            <h2 id="overview-heading" className="text-lg font-extrabold text-[var(--foreground)]">نمای کلی پروژه</h2>
+            <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{project.description || "توضیحی ثبت نشده است."}</p>
           </div>
 
-          <span className="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">
+          <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
             {statusLabels[project.status]}
           </span>
         </div>
 
-        <div className="mt-8 grid gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-2 border-t border-[var(--border)] pt-4 sm:grid-cols-3">
           <Info
             label="اعضای پروژه"
             value={`${project.members.length.toLocaleString("fa-IR")} نفر`}
@@ -348,7 +335,7 @@ export default function ProjectDetails({
             icon={<CalendarDays size={20} />}
           />
         </div>
-      </header>
+      </section>
 
       {error && (
         <p
@@ -368,9 +355,9 @@ export default function ProjectDetails({
         </p>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-5">
-        <div className="space-y-6 lg:col-span-3">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="grid items-start gap-4 lg:grid-cols-5">
+        <div className="space-y-4 lg:col-span-3">
+          <section className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
             <h2 className="text-lg font-bold text-slate-900">
               اطلاعات پروژه
             </h2>
@@ -506,7 +493,7 @@ export default function ProjectDetails({
             </form>
           </section>
 
-          <section className="overflow-visible rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="overflow-visible rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <Users
                 size={20}
@@ -592,8 +579,8 @@ export default function ProjectDetails({
           </section>
         </div>
 
-        <div className="space-y-6 lg:col-span-2">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="space-y-4 lg:col-span-2">
+          <section className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
             <div className="flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
                 <Activity
@@ -608,7 +595,7 @@ export default function ProjectDetails({
               </span>
             </div>
 
-            <p className="mt-7 text-center text-5xl font-extrabold text-emerald-600">
+            <p className="mt-4 text-center text-3xl font-extrabold text-emerald-700">
               {progress.toLocaleString("fa-IR")}٪
             </p>
 
@@ -696,7 +683,7 @@ export default function ProjectDetails({
             </Link>
           </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
             <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
               <CheckCircle2
                 size={20}
@@ -767,8 +754,8 @@ function Info({
   icon: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-4">
-      <div className="flex size-11 items-center justify-center rounded-xl bg-white text-emerald-600">
+    <div className="flex items-center gap-2 rounded-xl bg-emerald-50/60 px-3 py-2.5">
+      <div className="flex size-9 items-center justify-center rounded-lg bg-white text-emerald-700">
         {icon}
       </div>
 
@@ -777,7 +764,7 @@ function Info({
           {label}
         </p>
 
-        <p className="mt-1 text-xl font-bold">
+        <p className="text-base font-bold">
           {value}
         </p>
       </div>

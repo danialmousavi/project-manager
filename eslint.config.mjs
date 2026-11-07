@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "coverage/**",
     "generated/**",
     "prisma/migrations/**",
+    ".agents/**",
     "next-env.d.ts",
   ]),
 ]);

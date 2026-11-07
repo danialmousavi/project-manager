@@ -36,12 +36,13 @@ export default function LogoutButton() {
     <div>
       <button
         type="button"
+        aria-label="خروج از حساب"
         disabled={loading}
         onClick={logout}
-        className="flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+        className="flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--muted)] transition hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
       >
-        <LogOut size={18} />
-        {loading ? "در حال خروج..." : "خروج از حساب"}
+        <LogOut size={16} aria-hidden="true" />
+        <span className="hidden lg:inline">{loading ? "در حال خروج..." : "خروج از حساب"}</span>
       </button>
 
       {error && (

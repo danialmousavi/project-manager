@@ -18,8 +18,8 @@ type Props = {
 
 export default function TasksPage({ params }: Props) {
   return (
-    <main className="px-4 py-7 sm:px-8">
-      <div className="mx-auto max-w-6xl">
+    <main id="main-content" className="px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1440px]">
         <Suspense fallback={<Loading />}>
           <TasksContent params={params} />
         </Suspense>
@@ -50,7 +50,6 @@ async function TasksContent({ params }: Props) {
     },
     select: {
       id: true,
-      name: true,
       members: {
         select: {
           role: true,
@@ -69,28 +68,12 @@ async function TasksContent({ params }: Props) {
   if (!project) notFound();
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex items-center gap-4">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-            <ListTodo size={27} />
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold text-emerald-600">
-              فضای کاری پروژه
-            </p>
-
-            <h1 className="mt-1 text-xl font-extrabold text-slate-900 sm:text-2xl">
-              وظایف {project.name}
-            </h1>
-
-            <p className="mt-2 text-sm text-slate-500">
-              برنامه‌ریزی، واگذاری و پیگیری فعالیت‌ها
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <ListTodo size={19} className="text-emerald-700" aria-hidden="true" />
+        <h2 className="text-lg font-extrabold">وظایف پروژه</h2>
+        <span className="text-xs text-[var(--muted)]">برنامه‌ریزی و پیگیری کارها</span>
+      </div>
 
       <ProjectTasks
         projectId={project.id}

@@ -100,9 +100,10 @@
 :root {
   --background: #f7fcf9;
   --foreground: #173b2b;
-  --muted: #648276;
+  --muted: #526a5d;
   --primary: #16a34a;
   --primary-hover: #15803d;
+  --primary-deep: #166534;
   --primary-soft: #f0fdf4;
   --primary-soft-strong: #dcfce7;
   --primary-border: #bbf7d0;
@@ -116,8 +117,8 @@
   --color-emerald-300: color-mix(in srgb, var(--primary) 45%, white);
   --color-emerald-400: color-mix(in srgb, var(--primary) 70%, white);
   --color-emerald-500: var(--primary);
-  --color-emerald-600: var(--primary);
-  --color-emerald-700: var(--primary-hover);
+  --color-emerald-600: var(--primary-hover);
+  --color-emerald-700: var(--primary-deep);
 }
 
 * {
@@ -151,4 +152,30 @@ button {
 ::selection {
   background: var(--primary-soft-strong);
   color: var(--primary-hover);
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary-hover);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  inset-block-start: 0.75rem;
+  inset-inline-start: 0.75rem;
+  transform: translateY(-160%);
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.75rem 1rem;
+  color: var(--primary-hover);
+  font-weight: 700;
+}
+
+.skip-link:focus-visible { transform: translateY(0); }
+
+[id^="task-"]:target { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

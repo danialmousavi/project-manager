@@ -16,6 +16,7 @@ export default function RootLayout({
     <html lang="fa" dir="rtl">
       <body>
         <>
+          <a href="#main-content" className="skip-link">رفتن به محتوای اصلی</a>
           <ActionFeedback />
           {children}
         </>

@@ -1,12 +1,10 @@
 
 import { Suspense } from "react";
-import Link from "next/link";
 import {
   notFound,
   redirect,
 } from "next/navigation";
 import {
-  ArrowRight,
   LoaderCircle,
 } from "lucide-react";
 import { z } from "zod";
@@ -31,10 +29,11 @@ export default function ProjectDetailsPage({
 }: Props) {
   return (
     <main
+      id="main-content"
       dir="rtl"
-      className="min-h-screen bg-[#f7fcf9] px-4 py-8 text-slate-900 sm:px-8"
+      className="px-4 py-5 text-slate-900 sm:px-6 lg:px-8"
     >
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-[1440px]">
         <Suspense fallback={<Loading />}>
           <Content params={params} />
         </Suspense>
@@ -167,14 +166,6 @@ async function Content({ params }: Props) {
 
   return (
     <>
-      <Link
-        href="/projects"
-        className="mb-7 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-emerald-600"
-      >
-        <ArrowRight size={17} />
-        بازگشت به پروژه‌ها
-      </Link>
-
       <ProjectDetails
         project={serializedProject}
         taskStats={taskStats}
