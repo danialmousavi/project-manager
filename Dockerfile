@@ -6,7 +6,9 @@ WORKDIR /app
 FROM base AS deps
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# Keep the lockfile resolver consistent with the npm version used to create it.
+RUN npm install --global npm@11.1.0 \
+  && npm ci --no-audit --no-fund
 
 FROM deps AS migrator
 
