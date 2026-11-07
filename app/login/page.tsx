@@ -47,6 +47,7 @@ const features = [
 export default function LoginPage() {
   return (
     <main
+      id="main-content"
       dir="rtl"
       className="min-h-dvh lg:h-dvh lg:overflow-hidden"
       style={{

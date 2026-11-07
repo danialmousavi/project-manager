@@ -75,7 +75,7 @@ const priorityColors: Record<Priority, string> = {
 };
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10";
+  "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base transition focus-visible:border-emerald-700 focus-visible:outline-2 focus-visible:outline-emerald-700 sm:text-sm";
 
 export default function ProjectsManager({
   initialProjects,
@@ -84,6 +84,7 @@ export default function ProjectsManager({
   const [projects, setProjects] = useState(initialProjects);
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "ALL">("ALL");
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -108,10 +109,10 @@ export default function ProjectsManager({
     string | null
   >(null);
 
-  const filteredProjects = projects.filter((project) =>
-    project.name
-      .toLocaleLowerCase()
-      .includes(search.trim().toLocaleLowerCase())
+  const filteredProjects = projects.filter(
+    (project) =>
+      project.name.toLocaleLowerCase("fa-IR").includes(search.trim().toLocaleLowerCase("fa-IR")) &&
+      (statusFilter === "ALL" || project.status === statusFilter)
   );
 
   function resetForm() {
@@ -223,12 +224,12 @@ export default function ProjectsManager({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
+    <div className="space-y-4">
+      <div role="group" aria-label="آمار پروژه‌ها" className="grid grid-cols-3 gap-2 sm:gap-3">
         <Stat
           label="همه پروژه‌ها"
           value={projects.length}
-          icon={<FolderKanban size={21} />}
+          icon={<FolderKanban size={18} aria-hidden="true" />}
         />
 
         <Stat
@@ -238,7 +239,7 @@ export default function ProjectsManager({
               (project) => project.status === "ACTIVE"
             ).length
           }
-          icon={<Users size={21} />}
+          icon={<Users size={18} aria-hidden="true" />}
         />
 
         <Stat
@@ -248,36 +249,37 @@ export default function ProjectsManager({
               (project) => project.status === "COMPLETED"
             ).length
           }
-          icon={<CheckCircle2 size={21} />}
+          icon={<CheckCircle2 size={18} aria-hidden="true" />}
         />
       </div>
 
-      <section className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 p-6">
+      <section aria-labelledby="projects-list-title" className="rounded-2xl border border-[var(--border)] bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3 sm:px-5">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 id="projects-list-title" className="text-base font-bold text-slate-900">
               پروژه‌ها
             </h2>
-            <p className="mt-2 text-xs text-slate-500">
-              {projects.length.toLocaleString("fa-IR")} پروژه
-              ثبت شده است.
+            <p aria-live="polite" className="mt-0.5 text-xs text-[var(--muted)]">
+              {filteredProjects.length.toLocaleString("fa-IR")} از {projects.length.toLocaleString("fa-IR")} پروژه
             </p>
           </div>
 
           {canCreate && (
             <button
               type="button"
+              aria-expanded={showForm}
+              aria-controls="project-create-form"
               onClick={() => {
                 setShowForm((previous) => !previous);
                 setError("");
                 setNotice("");
               }}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
             >
               {showForm ? (
-                <X size={18} />
+                <X size={18} aria-hidden="true" />
               ) : (
-                <Plus size={18} />
+                <Plus size={18} aria-hidden="true" />
               )}
               {showForm
                 ? "بستن فرم"
@@ -288,22 +290,26 @@ export default function ProjectsManager({
 
         {showForm && canCreate && (
           <form
+            id="project-create-form"
             onSubmit={createProject}
-            className="relative z-20 space-y-6 border-b border-emerald-100 bg-emerald-50/30 p-5 sm:p-6"
+            className="relative z-20 space-y-4 border-b border-[var(--border)] bg-emerald-50/30 p-4 sm:p-5"
           >
             <div>
-              <h3 className="text-lg font-bold text-slate-900">
+              <h3 className="text-base font-bold text-slate-900">
                 ایجاد پروژه جدید
               </h3>
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-[var(--muted)]">
                 مشخصات، زمان‌بندی و اعضای پروژه را
                 انتخاب کنید.
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            {error && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="نام پروژه">
                 <input
+                  autoFocus
                   className={inputClass}
                   value={name}
                   required
@@ -340,7 +346,7 @@ export default function ProjectsManager({
                 <Field label="توضیحات">
                   <textarea
                     className={inputClass}
-                    rows={3}
+                    rows={2}
                     maxLength={3000}
                     value={description}
                     onChange={(event) =>
@@ -364,7 +370,7 @@ export default function ProjectsManager({
               />
             </div>
 
-            <div className="grid items-start gap-5 md:grid-cols-2">
+            <div className="grid items-start gap-3 md:grid-cols-2">
               <UserMultiSelect
                 label="مدیران پروژه"
                 role="MANAGER"
@@ -382,12 +388,12 @@ export default function ProjectsManager({
               />
             </div>
 
-            <p className="text-xs leading-6 text-slate-500">
+            <p className="text-xs leading-5 text-[var(--muted)]">
               حداقل یک مدیر پروژه الزامی است. جست‌وجوی
               کاربران از سمت سرور انجام می‌شود.
             </p>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end border-t border-[var(--border)] pt-3">
               <button
                 type="submit"
                 disabled={saving}
@@ -409,21 +415,12 @@ export default function ProjectsManager({
           </form>
         )}
 
-        {(error || notice) && (
-          <div className="space-y-2 px-6 pt-5">
-            {error && (
-              <p
-                role="alert"
-                className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700"
-              >
-                {error}
-              </p>
-            )}
-
+        {notice && (
+          <div className="px-4 pt-3 sm:px-5">
             {notice && (
               <p
                 role="status"
-                className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700"
+                className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
               >
                 {notice}
               </p>
@@ -431,37 +428,40 @@ export default function ProjectsManager({
           </div>
         )}
 
-        <div className="p-5 sm:p-6">
-          <div className="relative mb-6">
-            <Search
-              size={18}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              type="search"
-              className={`${inputClass} pr-11`}
-              value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="جست‌وجوی پروژه..."
-            />
+        <div className="p-4 sm:p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <label htmlFor="project-search" className="mb-1 block text-xs font-semibold text-slate-700">جست‌وجوی پروژه</label>
+              <div className="relative">
+                <Search aria-hidden="true" size={17} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
+                <input id="project-search" type="search" className={`${inputClass} pr-10`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="نام پروژه..." />
+              </div>
+            </div>
+            <div className="sm:w-48">
+              <label htmlFor="project-status-filter" className="mb-1 block text-xs font-semibold text-slate-700">وضعیت</label>
+              <select id="project-status-filter" className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ProjectStatus | "ALL")}>
+                <option value="ALL">همه وضعیت‌ها</option>
+                {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
           </div>
 
           {filteredProjects.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 py-16 text-center">
+            <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-8 text-center">
               <FolderKanban
-                size={36}
-                className="mx-auto text-slate-300"
+                size={26}
+                aria-hidden="true"
+                className="mx-auto text-[var(--muted)]"
               />
-              <p className="mt-4 text-sm text-slate-500">
-                {search
-                  ? "پروژه‌ای با این نام پیدا نشد."
+              <p className="mt-2 text-sm text-[var(--muted)]">
+                {search || statusFilter !== "ALL"
+                  ? "پروژه‌ای با این فیلترها پیدا نشد."
                   : "هنوز پروژه‌ای ثبت نشده است."}
               </p>
+              {(search || statusFilter !== "ALL") && <button type="button" onClick={() => { setSearch(""); setStatusFilter("ALL"); }} className="mt-3 min-h-11 rounded-lg px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">پاک کردن فیلترها</button>}
             </div>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
               {filteredProjects.map((project) => {
                 const managersOfProject =
                   project.members.filter(
@@ -472,93 +472,34 @@ export default function ProjectsManager({
                 return (
                   <article
                     key={project.id}
-                    className="rounded-2xl border border-slate-200 p-5 transition hover:border-emerald-200 hover:shadow-md"
+                    className="relative min-w-0 rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--primary-border)] hover:bg-emerald-50/30 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-emerald-700 sm:p-4"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                        <FolderKanban size={22} />
-                      </div>
-
-                      <span
-                        className={`rounded-lg px-3 py-1.5 text-xs ${priorityColors[project.priority]}`}
-                      >
-                        اولویت{" "}
-                        {priorityLabels[project.priority]}
-                      </span>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <h3 className="min-w-0 break-words text-base font-bold text-slate-900">
+                        <Link href={`/projects/${project.id}`} className="outline-none after:absolute after:inset-0">{project.name}</Link>
+                      </h3>
+                      <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${priorityColors[project.priority]}`}>اولویت {priorityLabels[project.priority]}</span>
                     </div>
 
-                    <h3 className="mt-4 text-lg font-bold text-slate-900">
-                      {project.name}
-                    </h3>
+                    {project.description && <p className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--muted)]">{project.description}</p>}
 
-                    <p className="mt-2 line-clamp-2 min-h-12 text-sm leading-7 text-slate-500">
-                      {project.description ||
-                        "توضیحی ثبت نشده است."}
-                    </p>
-
-                    <div className="mt-4 flex flex-wrap gap-3 text-xs">
-                      <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-slate-600">
-                        {statusLabels[project.status]}
-                      </span>
-
-                      <span className="inline-flex items-center gap-1 text-slate-500">
-                        <Users size={14} />
-                        {project.members.length.toLocaleString(
-                          "fa-IR"
-                        )}{" "}
-                        عضو
-                      </span>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+                      <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700">{statusLabels[project.status]}</span>
+                      <span className="inline-flex items-center gap-1"><Users aria-hidden="true" size={14} />{project.members.length.toLocaleString("fa-IR")} عضو</span>
+                      <span className="min-w-0 break-words">مدیر: {managersOfProject.map((member) => member.user.name).join("، ") || "تعیین نشده"}</span>
                     </div>
 
-                    <p className="mt-4 line-clamp-1 text-xs text-slate-500">
-                      مدیران:{" "}
-                      {managersOfProject
-                        .map((member) => member.user.name)
-                        .join("، ") || "تعیین نشده"}
-                    </p>
-
-                    <div className="mt-6">
-                      <div className="mb-2 flex justify-between text-xs">
-                        <span className="text-slate-500">
-                          پیشرفت
-                        </span>
-                        <strong className="text-emerald-600">
-                          {project.progress.toLocaleString(
-                            "fa-IR"
-                          )}٪
-                        </strong>
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className="shrink-0 text-xs text-[var(--muted)]">پیشرفت</span>
+                      <div role="progressbar" aria-label={`پیشرفت پروژه ${project.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={project.progress} className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-emerald-100">
+                        <div className="h-full rounded-full bg-emerald-600" style={{ width: `${Math.max(0, Math.min(100, project.progress))}%` }} />
                       </div>
-
-                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className="h-full rounded-full bg-emerald-600"
-                          style={{
-                            width: `${Math.max(
-                              0,
-                              Math.min(
-                                100,
-                                project.progress
-                              )
-                            )}%`,
-                          }}
-                        />
-                      </div>
+                      <strong className="shrink-0 text-xs text-emerald-700 tabular-nums">{project.progress.toLocaleString("fa-IR")}٪</strong>
                     </div>
 
-                    <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
-                      <span className="text-xs text-slate-400">
-                        {new Date(
-                          project.createdAt
-                        ).toLocaleDateString("fa-IR")}
-                      </span>
-
-                      <Link
-                        href={`/projects/${project.id}`}
-                        className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold text-emerald-600 hover:bg-emerald-50"
-                      >
-                        مشاهده جزئیات
-                        <ChevronLeft size={16} />
-                      </Link>
+                    <div className="mt-3 flex items-center justify-between border-t border-[var(--border)] pt-2 text-xs text-[var(--muted)]">
+                      <span>ایجاد: {new Date(project.createdAt).toLocaleDateString("fa-IR")}</span>
+                      <span aria-hidden="true" className="inline-flex items-center gap-1 font-semibold text-emerald-700">مشاهده پروژه <ChevronLeft size={15} /></span>
                     </div>
                   </article>
                 );
@@ -581,15 +522,15 @@ function Stat({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-white px-3 py-2.5 sm:gap-3 sm:px-4">
+      <div className="hidden size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:flex">
         {icon}
       </div>
-      <div>
-        <p className="text-xs text-slate-500">
+      <div className="min-w-0">
+        <p className="text-xs leading-5 text-[var(--muted)]">
           {label}
         </p>
-        <p className="mt-1 text-2xl font-bold text-slate-900">
+        <p className="text-lg font-bold text-slate-900 tabular-nums sm:text-xl">
           {value.toLocaleString("fa-IR")}
         </p>
       </div>
@@ -606,7 +547,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-semibold text-slate-700">
+      <span className="mb-1 block text-sm font-semibold text-slate-700">
         {label}
       </span>
       {children}

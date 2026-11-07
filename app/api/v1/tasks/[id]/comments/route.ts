@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 import {
   ASSIGNMENT_PREFIX,
@@ -142,10 +143,7 @@ export async function POST(
     );
   }
 
-  if (
-    request.headers.get("origin") !==
-    request.nextUrl.origin
-  ) {
+  if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است." },
       { status: 403 }

@@ -132,6 +132,7 @@ const previewColumns = [
 export default function HomePage() {
   return (
     <main
+      id="main-content"
       dir="rtl"
       className="min-h-screen overflow-hidden"
       style={{

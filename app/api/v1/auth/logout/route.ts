@@ -1,12 +1,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { deleteCurrentSession } from "@/lib/auth";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 export async function POST(request: NextRequest) {
-  if (
-    !request.headers.get("origin") ||
-    request.headers.get("origin") !== request.nextUrl.origin
-  ) {
+  if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است" },
       { status: 403 }

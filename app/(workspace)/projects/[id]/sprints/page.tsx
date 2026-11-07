@@ -20,8 +20,8 @@ export default function ProjectSprintsPage({
   params,
 }: Props) {
   return (
-    <main className="px-4 py-7 sm:px-8">
-      <div className="mx-auto max-w-6xl">
+    <main id="main-content" className="px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1440px]">
         <Suspense fallback={<Loading />}>
           <SprintsContent params={params} />
         </Suspense>
@@ -52,35 +52,18 @@ async function SprintsContent({ params }: Props) {
     },
     select: {
       id: true,
-      name: true,
     },
   });
 
   if (!project) notFound();
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex items-center gap-4">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-            <CalendarRange size={27} />
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold text-emerald-600">
-              برنامه‌ریزی پروژه
-            </p>
-
-            <h1 className="mt-1 text-xl font-extrabold text-slate-900 sm:text-2xl">
-              اسپرینت‌های {project.name}
-            </h1>
-
-            <p className="mt-2 text-sm text-slate-500">
-              سازمان‌دهی تسک‌ها در دوره‌های زمانی مشخص
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <CalendarRange size={19} className="text-emerald-700" aria-hidden="true" />
+        <h2 className="text-lg font-extrabold">اسپرینت‌های پروژه</h2>
+        <span className="text-xs text-[var(--muted)]">زمان‌بندی و پیگیری</span>
+      </div>
 
       <SprintsManager
         projectId={project.id}

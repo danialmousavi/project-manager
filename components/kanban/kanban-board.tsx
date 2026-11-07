@@ -531,7 +531,7 @@ export default function KanbanBoard({
   return (
     <div
       dir="rtl"
-      className="space-y-6"
+      className="space-y-4"
       style={{
         color: "var(--foreground)",
         fontFamily: "inherit",
@@ -543,23 +543,23 @@ export default function KanbanBoard({
         <div>
           <div className="flex items-center gap-3">
             <div
-              className="flex size-12 items-center justify-center rounded-2xl text-white shadow-sm"
+              className="flex size-10 items-center justify-center rounded-xl text-white"
               style={{
                 backgroundColor: "var(--primary)",
               }}
             >
-              <Layers3 size={24} />
+              <Layers3 size={20} aria-hidden="true" />
             </div>
 
             <div>
-              <h1
-                className="text-2xl font-extrabold"
+              <h2
+                className="text-lg font-extrabold"
                 style={{
                   color: "var(--foreground)",
                 }}
               >
                 برد کانبان
-              </h1>
+              </h2>
 
               <p
                 className="mt-1 text-sm"
@@ -573,7 +573,7 @@ export default function KanbanBoard({
           </div>
 
           <p
-            className="mt-4 max-w-2xl text-sm leading-7"
+            className="mt-2 max-w-2xl text-sm leading-6"
             style={{
               color: "var(--muted)",
             }}

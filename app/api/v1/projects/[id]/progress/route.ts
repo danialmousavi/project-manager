@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { canEditProject } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { syncProjectProgressCache } from "@/lib/project-progress";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -31,10 +32,7 @@ export async function POST(
     );
   }
 
-  if (
-    !request.headers.get("origin") ||
-    request.headers.get("origin") !== request.nextUrl.origin
-  ) {
+  if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است" },
       { status: 403 }

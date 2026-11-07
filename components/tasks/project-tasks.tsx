@@ -275,6 +275,10 @@ export default function ProjectTasks({
       }
 
       setTasks(data.tasks ?? []);
+      const taskId = window.location.hash.match(/^#task-([0-9a-f-]{36})$/i)?.[1];
+      if (taskId && data.tasks?.some((task: Task) => task.id === taskId)) {
+        window.setTimeout(() => document.getElementById(`task-${taskId}`)?.scrollIntoView({ block: "center" }), 0);
+      }
     } catch (error) {
       setError(messageOf(error));
     } finally {
@@ -590,6 +594,7 @@ export default function ProjectTasks({
 
           <input
             type="search"
+            aria-label="جست‌وجو در وظایف"
             value={query}
             onChange={(event) =>
               setQuery(event.target.value)
@@ -645,6 +650,7 @@ export default function ProjectTasks({
             return (
               <article
                 key={task.id}
+                id={`task-${task.id}`}
                 className={`overflow-hidden rounded-2xl border transition ${
                   expanded
                     ? "border-emerald-300 shadow-md"
@@ -654,10 +660,11 @@ export default function ProjectTasks({
                 <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"
+                    aria-expanded={expanded}
                     onClick={() =>
                       void openDetails(task)
                     }
-                    className="min-w-0 flex-1 text-right"
+                    className="min-h-11 min-w-0 flex-1 text-right"
                   >
                     <div className="flex items-center gap-2">
                       <ChevronDown
