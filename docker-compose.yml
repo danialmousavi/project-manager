@@ -36,6 +36,22 @@ services:
         condition: service_healthy
     restart: "no"
 
+  seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      target: seed
+    container_name: project_manager_seed
+    environment:
+      DATABASE_URL: postgresql://project_user:local_dev_password@postgres:5432/project_manager?schema=public
+      ADMIN_NAME: ${ADMIN_NAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
   app:
     build:
       context: .

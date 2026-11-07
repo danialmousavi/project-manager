@@ -17,6 +17,14 @@ COPY prisma7.config.ts ./
 RUN npx prisma generate
 CMD ["npx", "prisma", "migrate", "deploy"]
 
+FROM deps AS seed
+
+COPY prisma ./prisma
+COPY prisma7.config.ts ./
+COPY scripts ./scripts
+RUN npx prisma generate
+CMD ["npm", "run", "db:seed"]
+
 FROM deps AS builder
 
 COPY . .
