@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
+import { isAllowedOrigin } from "@/lib/security/origin";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -67,10 +68,7 @@ function asIso(value: Date | null) {
 }
 
 function validOrigin(request: NextRequest) {
-  return (
-    request.headers.get("origin") ===
-    request.nextUrl.origin
-  );
+  return isAllowedOrigin(request);
 }
 
 function fail(message: string, status: number) {
