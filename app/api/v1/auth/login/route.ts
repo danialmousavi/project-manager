@@ -1,6 +1,5 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import argon2 from "argon2";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
@@ -14,6 +13,7 @@ import {
   trustedClientIp,
 } from "@/lib/login-rate-limit";
 import { isAllowedOrigin } from "@/lib/security/origin";
+import { verifyPassword } from "@/lib/password";
 
 const loginSchema = z.object({
   email: z.email().trim().toLowerCase(),
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       where: { email },
     });
 
-    const isValid = await argon2.verify(
+    const isValid = await verifyPassword(
       user?.isActive
         ? user.passwordHash
         : DUMMY_PASSWORD_HASH,

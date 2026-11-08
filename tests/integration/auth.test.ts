@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import argon2 from "argon2";
 import { NextRequest } from "next/server";
 import { PrismaClient } from "../../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { assertTestDatabase } from "../database/guard";
 import { sessionFactory, userFactory } from "../database/fixtures";
+import { hashPassword } from "../../lib/password";
 
 let token: string | undefined;
 const deleteCookie = vi.fn();
@@ -69,7 +69,7 @@ describe("real session and login flow on isolated database", () => {
   it("accepts correct password, rejects wrong password and avoids password hash in response", async () => {
     const user = await userFactory(db);
     const password = "synthetic-test-only-password";
-    await db.user.update({ where: { id: user.id }, data: { passwordHash: await argon2.hash(password) } });
+    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(password) } });
     const bad = await login.POST(loginRequest(user.email, "wrong-password"));
     expect(bad.status).toBe(401);
     const good = await login.POST(loginRequest(user.email, password));
@@ -115,7 +115,7 @@ describe("real session and login flow on isolated database", () => {
 
   it("limits repeated failed login attempts without disclosing account state", async () => {
     const user = await userFactory(db);
-    await db.user.update({ where: { id: user.id }, data: { passwordHash: await argon2.hash("synthetic-test-only-password") } });
+    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword("synthetic-test-only-password") } });
     const statuses: number[] = [];
     for (let attempt = 0; attempt < 6; attempt++) {
       statuses.push((await login.POST(loginRequest(user.email, "incorrect"))).status);
@@ -129,7 +129,7 @@ describe("real session and login flow on isolated database", () => {
   it("clears account failures after a successful login", async () => {
     const user = await userFactory(db);
     const password = "synthetic-test-only-password";
-    await db.user.update({ where: { id: user.id }, data: { passwordHash: await argon2.hash(password) } });
+    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(password) } });
     for (let attempt = 0; attempt < 4; attempt++) {
       expect((await login.POST(loginRequest(user.email, "incorrect"))).status).toBe(401);
     }

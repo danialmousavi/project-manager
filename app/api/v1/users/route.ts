@@ -1,6 +1,5 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import argon2 from "argon2";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
@@ -12,6 +11,7 @@ import {
   normalizePhone,
 } from "@/lib/iranian-identity";
 import { isAllowedOrigin } from "@/lib/security/origin";
+import { hashPassword } from "@/lib/password";
 
 const createUserSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -66,9 +66,7 @@ export async function POST(request: NextRequest) {
     const { name, email, password, role, nationalId, phone } =
       parsed.data;
 
-    const passwordHash = await argon2.hash(password, {
-      type: argon2.argon2id,
-    });
+    const passwordHash = await hashPassword(password);
 
     const user = await prisma.user.create({
       data: {

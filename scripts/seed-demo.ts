@@ -1,8 +1,8 @@
 import "dotenv/config";
 
-import argon2 from "argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
+import { hashPassword } from "../lib/password";
 
 if (process.env.DEMO_SEED !== "true") {
   throw new Error(
@@ -60,7 +60,7 @@ const dates = {
 } as const;
 
 async function main() {
-  const passwordHash = await argon2.hash(demoPassword);
+  const passwordHash = await hashPassword(demoPassword);
 
   await prisma.user.upsert({
     where: { id: ids.admin },

@@ -1,9 +1,9 @@
 import "dotenv/config";
 
 import { randomBytes } from "node:crypto";
-import argon2 from "argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
+import { hashPassword } from "../lib/password";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL environment variable is required");
@@ -24,7 +24,7 @@ async function main() {
       : undefined;
   const password = configuredPassword || generatedPassword;
 
-  const passwordHash = password ? await argon2.hash(password) : undefined;
+  const passwordHash = password ? await hashPassword(password) : undefined;
 
   const admin = await prisma.user.upsert({
     where: { email },
