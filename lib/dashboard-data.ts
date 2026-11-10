@@ -68,7 +68,7 @@ export async function getDashboardData(actor: DashboardActor) {
     dueSoonTasks,
     reviewTasks,
     myTasks,
-    sprints,
+    upcomingTasks,
     comments,
     workload,
     overdueWorkload,
@@ -93,11 +93,11 @@ export async function getDashboardData(actor: DashboardActor) {
       orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
       take: 8,
     }),
-    prisma.sprint.findMany({
-      where: { projectId: { in: ids }, status: "ACTIVE" },
-      select: { id: true, name: true, endDate: true, projectId: true, project: { select: { name: true } } },
-      orderBy: { endDate: "asc" },
-      take: 5,
+    prisma.task.findMany({
+      where: { ...openWhere, dueDate: { not: null } },
+      select: { id: true, title: true, startDate: true, dueDate: true, projectId: true, project: { select: { name: true } } },
+      orderBy: { dueDate: "asc" },
+      take: 3,
     }),
     prisma.taskComment.findMany({
       where: { task: taskWhere, AND: [
@@ -149,7 +149,7 @@ export async function getDashboardData(actor: DashboardActor) {
       overdue: overdueById.get(project.id) ?? 0,
     })).sort((a, b) => b.overdue - a.overdue || (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity)).slice(0, 6),
     myTasks,
-    sprints,
+    upcomingTasks,
     comments,
     workload: Array.from(totalByAssignee, ([id, count]) => ({
       id,
