@@ -4,7 +4,6 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  CalendarRange,
   FolderKanban,
   LayoutDashboard,
   ListTodo,
@@ -33,14 +32,9 @@ export default function ProjectWorkspaceNav({
       icon: LayoutDashboard,
     },
     {
-      href: `${base}/tasks`,
+      href: `${base}/sprints`,
       label: "وظایف",
       icon: ListTodo,
-    },
-    {
-      href: `${base}/sprints`,
-      label: "اسپرینت‌ها",
-      icon: CalendarRange,
     },
     {
       href: `${base}/kanban`,
@@ -69,7 +63,7 @@ export default function ProjectWorkspaceNav({
 
         <nav
           aria-label="بخش‌های پروژه"
-          className="grid grid-cols-2 gap-1 p-1.5 sm:grid-cols-4"
+          className="grid grid-cols-2 gap-1 p-1.5 sm:grid-cols-3"
         >
           {tabs.map((tab) => {
             const active = pathname === tab.href;

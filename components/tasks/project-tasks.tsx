@@ -32,7 +32,7 @@ import PersianDatePicker from "@/components/ui/persian-date-picker";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { isoToJalali } from "@/lib/jalali";
 
-type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
+export type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
 
 type Status =
   | "TODO"
@@ -46,7 +46,7 @@ type Priority =
   | "HIGH"
   | "URGENT";
 
-type Member = {
+export type Member = {
   role: "MANAGER" | "MEMBER";
   user: {
     id: string;
@@ -1063,7 +1063,7 @@ export default function ProjectTasks({
   );
 }
 
-type FormValues = {
+export type FormValues = {
   title: string;
   description: string;
   status: Status;
@@ -1074,7 +1074,7 @@ type FormValues = {
   note: string;
 };
 
-function TaskFormModal({
+export function TaskFormModal({
   title: modalTitle,
   submitLabel,
   task,

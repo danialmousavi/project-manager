@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import {
-  CalendarRange,
+  ListTodo,
   LoaderCircle,
 } from "lucide-react";
 
@@ -52,6 +52,18 @@ async function SprintsContent({ params }: Props) {
     },
     select: {
       id: true,
+      members: {
+        select: {
+          role: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -60,13 +72,15 @@ async function SprintsContent({ params }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <CalendarRange size={19} className="text-emerald-700" aria-hidden="true" />
-        <h2 className="text-lg font-extrabold">اسپرینت‌های پروژه</h2>
+        <ListTodo size={19} className="text-emerald-700" aria-hidden="true" />
+        <h2 className="text-lg font-extrabold">وظایف پروژه</h2>
         <span className="text-xs text-[var(--muted)]">زمان‌بندی و پیگیری</span>
       </div>
 
       <SprintsManager
         projectId={project.id}
+        members={project.members}
+        actorRole={actor.role}
         canManage={access.canManage}
         canDelete={actor.role === "ADMIN"}
       />
@@ -81,7 +95,7 @@ function Loading() {
         size={23}
         className="animate-spin text-emerald-600"
       />
-      در حال بارگذاری اسپرینت‌ها...
+      در حال بارگذاری وظایف...
     </div>
   );
 }

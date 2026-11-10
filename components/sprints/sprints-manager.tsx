@@ -29,6 +29,12 @@ import {
 
 import PersianDatePicker from "@/components/ui/persian-date-picker";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import {
+  TaskFormModal,
+  type FormValues,
+  type Member,
+  type Role,
+} from "@/components/tasks/project-tasks";
 
 type TaskStatus =
   | "TODO"
@@ -74,6 +80,8 @@ type Task = {
 
 type Props = {
   projectId: string;
+  members: Member[];
+  actorRole: Role;
   canManage: boolean;
   canDelete: boolean;
 };
@@ -106,6 +114,13 @@ const statusColors: Record<TaskStatus, string> = {
   IN_PROGRESS: "#0ea5e9",
   IN_REVIEW: "#f59e0b",
   DONE: "#16a34a",
+};
+
+const priorityLabels: Record<Priority, string> = {
+  LOW: "کم",
+  MEDIUM: "متوسط",
+  HIGH: "زیاد",
+  URGENT: "فوری",
 };
 
 const sprintLabels: Record<SprintStatus, string> = {
@@ -218,6 +233,8 @@ function calculateDrag(
 
 export default function SprintsManager({
   projectId,
+  members,
+  actorRole,
   canManage,
   canDelete,
 }: Props) {
@@ -245,12 +262,6 @@ export default function SprintsManager({
   const [deletingSprint, setDeletingSprint] =
     useState<string | null>(null);
 
-  const [sprintName, setSprintName] = useState("");
-  const [sprintStart, setSprintStart] =
-    useState<string | null>(null);
-  const [sprintEnd, setSprintEnd] =
-    useState<string | null>(null);
-
   const [editingTask, setEditingTask] =
     useState<Task | null>(null);
 
@@ -258,6 +269,13 @@ export default function SprintsManager({
     useState<string | null>(null);
   const [taskEnd, setTaskEnd] =
     useState<string | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] =
+    useState("");
+  const [taskStatus, setTaskStatus] =
+    useState<TaskStatus>("TODO");
+  const [taskPriority, setTaskPriority] =
+    useState<Priority>("MEDIUM");
 
   const [formError, setFormError] = useState("");
 
@@ -265,6 +283,7 @@ export default function SprintsManager({
     useState<DragState | null>(null);
 
   const dragRef = useRef<DragState | null>(null);
+  const didDragRef = useRef(false);
 
   const rangeStart = addDays(anchor, -7);
   const rangeEnd = addDays(
@@ -317,7 +336,7 @@ export default function SprintsManager({
   }, [load]);
 
   async function api(
-    method: "POST" | "PATCH" | "DELETE",
+    method: "PATCH" | "DELETE",
     body: unknown
   ) {
     const response = await fetch(
@@ -483,6 +502,7 @@ export default function SprintsManager({
     };
 
     dragRef.current = initial;
+    didDragRef.current = false;
     setDrag(initial);
   }
 
@@ -502,6 +522,10 @@ export default function SprintsManager({
       nextStart: next.startDate,
       nextEnd: next.dueDate,
     };
+
+    if (Math.abs(event.clientX - current.pointerX) > 3) {
+      didDragRef.current = true;
+    }
 
     dragRef.current = updated;
     setDrag(updated);
@@ -528,6 +552,13 @@ export default function SprintsManager({
 
     if (!task) return;
 
+    if (!didDragRef.current) {
+      if (current.mode === "move") {
+        openTaskEditor(task);
+      }
+      return;
+    }
+
     void updateTaskDates(
       task,
       next.startDate,
@@ -537,14 +568,23 @@ export default function SprintsManager({
 
   function cancelDrag() {
     dragRef.current = null;
+    didDragRef.current = false;
     setDrag(null);
   }
 
-  function openTaskDates(task: Task) {
+  function openTaskEditor(task: Task) {
     setEditingTask(task);
+    setTaskTitle(task.title);
+    setTaskDescription(task.description ?? "");
+    setTaskStatus(task.status);
+    setTaskPriority(task.priority);
     setTaskStart(task.startDate);
     setTaskEnd(task.dueDate);
     setFormError("");
+  }
+
+  function openTaskDates(task: Task) {
+    openTaskEditor(task);
   }
 
   function saveTaskForm(
@@ -552,59 +592,138 @@ export default function SprintsManager({
   ) {
     event.preventDefault();
 
-    if (!editingTask || busy) return;
+    if (!editingTask || !canManage || busy) return;
 
-    if (!taskStart || !taskEnd) {
-      setFormError("هر دو تاریخ را انتخاب کنید.");
+    const title = taskTitle.trim();
+
+    if (title.length < 3) {
+      setFormError("عنوان تسک باید حداقل ۳ کاراکتر باشد.");
       return;
     }
 
-    if (taskStart > taskEnd) {
+    if (Boolean(taskStart) !== Boolean(taskEnd)) {
+      setFormError("برای زمان‌بندی، هر دو تاریخ را انتخاب کنید.");
+      return;
+    }
+
+    if (taskStart && taskEnd && taskStart > taskEnd) {
       setFormError("تاریخ پایان قبل از شروع است.");
       return;
     }
 
-    void updateTaskDates(
-      editingTask,
-      taskStart,
-      taskEnd
+    const originalTask = editingTask;
+    const updatedTask: Task = {
+      ...editingTask,
+      title,
+      description: taskDescription.trim() || null,
+      status: taskStatus,
+      priority: taskPriority,
+      startDate: taskStart,
+      dueDate: taskEnd,
+    };
+
+    busyRef.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setFormError("");
+    setTasks((previous) =>
+      previous.map((task) =>
+        task.id === updatedTask.id ? updatedTask : task
+      )
     );
+
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/v1/tasks/${updatedTask.id}`,
+          {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              title: updatedTask.title,
+              description: updatedTask.description ?? "",
+              priority: updatedTask.priority,
+              status: updatedTask.status,
+              startDate: updatedTask.startDate,
+              dueDate: updatedTask.dueDate,
+              assigneeId: updatedTask.assigneeId,
+              note: "ویرایش از صفحه اسپرینت",
+            }),
+          }
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message || "ذخیره تغییرات تسک انجام نشد."
+          );
+        }
+
+        setEditingTask(null);
+        setNotice(`تغییرات تسک «${updatedTask.title}» ذخیره شد.`);
+      } catch (err) {
+        setTasks((previous) =>
+          previous.map((task) =>
+            task.id === originalTask.id ? originalTask : task
+          )
+        );
+        setFormError(getError(err));
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    })();
   }
 
-  function createSprint(
-    event: FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-
-    if (!sprintStart || !sprintEnd) {
-      setFormError("هر دو تاریخ را انتخاب کنید.");
-      return;
+  async function createTask(values: FormValues) {
+    if (busyRef.current) {
+      throw new Error("عملیات دیگری در حال انجام است.");
     }
 
-    if (sprintStart > sprintEnd) {
-      setFormError("تاریخ پایان قبل از شروع است.");
-      return;
-    }
+    busyRef.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
 
-    void runAction(async () => {
-      const data = await api("POST", {
-        name: sprintName,
-        startDate: sprintStart,
-        endDate: sprintEnd,
-      });
+    try {
+      const response = await fetch(
+        `/api/v1/projects/${projectId}/tasks`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: values.title,
+            description: values.description,
+            status: values.status,
+            priority: values.priority,
+            assigneeId: values.assigneeId,
+            startDate: values.startDate,
+            dueDate: values.dueDate,
+          }),
+        }
+      );
+      const data = await response.json();
 
-      setSprints((previous) => [
-        ...previous,
-        data.sprint,
-      ]);
+      if (!response.ok) {
+        throw new Error(
+          data.message || "ایجاد تسک انجام نشد."
+        );
+      }
 
+      setTasks((previous) => [data.task, ...previous]);
       setCreating(false);
-      setSprintName("");
-      setSprintStart(null);
-      setSprintEnd(null);
-
-      setNotice("اسپرینت جدید ساخته شد.");
-    });
+      setNotice("تسک جدید ایجاد شد.");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   }
 
   function setSprintStatus(
@@ -731,6 +850,15 @@ export default function SprintsManager({
     (task) => task.sprintId === null
   );
 
+  const assignees = members.filter(
+    (member) =>
+      (member.role === "MEMBER" &&
+        member.user.role === "EMPLOYEE") ||
+      (actorRole === "ADMIN" &&
+        member.role === "MANAGER" &&
+        member.user.role === "MANAGER")
+  );
+
   const completedCount = displayedTasks.filter(
     (task) => task.status === "DONE"
   ).length;
@@ -750,7 +878,7 @@ export default function SprintsManager({
               size={24}
               className="text-emerald-600"
             />
-            تایم‌لاین اسپرینت‌ها و تسک‌ها
+            زمان‌بندی وظایف
           </h2>
 
           <p
@@ -778,13 +906,12 @@ export default function SprintsManager({
             <button
               type="button"
               onClick={() => {
-                setFormError("");
                 setCreating(true);
               }}
               className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white"
             >
               <Plus size={17} />
-              اسپرینت جدید
+              تسک جدید
             </button>
           )}
         </div>
@@ -1173,6 +1300,11 @@ export default function SprintsManager({
                             onPointerMove={moveDrag}
                             onPointerUp={finishDrag}
                             onPointerCancel={cancelDrag}
+                            onClick={() => {
+                              if (!canManage) {
+                                openTaskEditor(task);
+                              }
+                            }}
                           >
                             {canManage && (
                               <div
@@ -1249,7 +1381,7 @@ export default function SprintsManager({
       {/* Sprint management remains available */}
       <section className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
         <h3 className="text-base font-extrabold">
-          مدیریت اسپرینت‌ها و تسک‌های مرتبط
+          مدیریت وظایف و اسپرینت‌ها
         </h3>
 
         <div className="mt-5 space-y-3">
@@ -1453,26 +1585,28 @@ export default function SprintsManager({
         </div>
       </section>
 
-      {/* Set task dates */}
+      {/* Task details */}
       {editingTask && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4">
           <div
             dir="rtl"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="task-dates-title"
-            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"
+            aria-labelledby="task-details-title"
+            className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
           >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3
-                  id="task-dates-title"
+                  id="task-details-title"
                   className="text-lg font-extrabold"
                 >
-                  زمان‌بندی تسک
+                  مشخصات تسک
                 </h3>
                 <p className="mt-2 text-sm text-slate-500">
-                  {editingTask.title}
+                  {canManage
+                    ? "اطلاعات موردنیاز را ویرایش و ذخیره کنید."
+                    : "مشخصات این تسک"}
                 </p>
               </div>
 
@@ -1490,17 +1624,92 @@ export default function SprintsManager({
               onSubmit={saveTaskForm}
               className="mt-6 space-y-5"
             >
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold">
+                  عنوان
+                </span>
+                <input
+                  required
+                  minLength={3}
+                  maxLength={200}
+                  value={taskTitle}
+                  disabled={!canManage || busy}
+                  onChange={(event) => setTaskTitle(event.target.value)}
+                  className={inputClass}
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold">
+                  توضیحات
+                </span>
+                <textarea
+                  rows={4}
+                  maxLength={5000}
+                  value={taskDescription}
+                  disabled={!canManage || busy}
+                  onChange={(event) =>
+                    setTaskDescription(event.target.value)
+                  }
+                  className={inputClass}
+                />
+              </label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold">
+                    وضعیت
+                  </span>
+                  <select
+                    value={taskStatus}
+                    disabled={!canManage || busy}
+                    onChange={(event) =>
+                      setTaskStatus(event.target.value as TaskStatus)
+                    }
+                    className={inputClass}
+                  >
+                    {Object.entries(statusLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold">
+                    اولویت
+                  </span>
+                  <select
+                    value={taskPriority}
+                    disabled={!canManage || busy}
+                    onChange={(event) =>
+                      setTaskPriority(event.target.value as Priority)
+                    }
+                    className={inputClass}
+                  >
+                    {Object.entries(priorityLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <PersianDatePicker
                   label="تاریخ شروع تسک"
                   value={taskStart}
                   onChange={setTaskStart}
+                  disabled={!canManage || busy}
                 />
 
                 <PersianDatePicker
                   label="تاریخ پایان تسک"
                   value={taskEnd}
                   onChange={setTaskEnd}
+                  disabled={!canManage || busy}
                 />
               </div>
 
@@ -1522,109 +1731,33 @@ export default function SprintsManager({
                   }
                   className="rounded-xl border border-emerald-200 px-5 py-3 text-sm"
                 >
-                  انصراف
+                  بستن
                 </button>
 
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  ذخیره تاریخ تسک
-                </button>
+                {canManage && (
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    ذخیره تغییرات
+                  </button>
+                )}
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Create sprint */}
+      {/* Create task */}
       {creating && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-sprint-title"
-            className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"
-          >
-            <div className="flex items-center justify-between">
-              <h3
-                id="create-sprint-title"
-                className="text-lg font-extrabold"
-              >
-                اسپرینت جدید
-              </h3>
-
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setCreating(false)}
-                aria-label="بستن"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={createSprint}
-              className="mt-6 space-y-5"
-            >
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold">
-                  عنوان اسپرینت
-                </span>
-                <input
-                  required
-                  minLength={3}
-                  maxLength={150}
-                  value={sprintName}
-                  onChange={(event) =>
-                    setSprintName(event.target.value)
-                  }
-                  className={inputClass}
-                />
-              </label>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <PersianDatePicker
-                  label="تاریخ شروع"
-                  value={sprintStart}
-                  onChange={setSprintStart}
-                />
-                <PersianDatePicker
-                  label="تاریخ پایان"
-                  value={sprintEnd}
-                  onChange={setSprintEnd}
-                />
-              </div>
-
-              {formError && (
-                <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
-                  {formError}
-                </p>
-              )}
-
-              <div className="flex justify-end gap-3 border-t border-emerald-100 pt-5">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setCreating(false)}
-                  className="rounded-xl border border-emerald-200 px-5 py-3 text-sm"
-                >
-                  انصراف
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  ساخت اسپرینت
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <TaskFormModal
+          title="ایجاد وظیفه جدید"
+          submitLabel="ثبت وظیفه"
+          assignees={assignees}
+          onClose={() => setCreating(false)}
+          onSubmit={createTask}
+        />
       )}
 
       {deletingSprint && (
