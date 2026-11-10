@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
+  FileDown,
   ListTodo,
   LoaderCircle,
   PieChart,
@@ -204,6 +205,123 @@ export default function ProjectDetails({
     Math.min(100, project.progress)
   );
 
+  function printProjectReport() {
+    const printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      setError("مرورگر اجازه باز کردن پنجره گزارش را نداد. لطفاً پاپ‌آپ‌ها را فعال کنید.");
+      return;
+    }
+
+    const taskRows = (Object.keys(taskStatusLabels) as TaskStatus[])
+      .map(
+        (taskStatus) => `
+          <tr class="task-row">
+            <td><span class="status-dot" style="background: ${taskStatusChartColors[taskStatus]}"></span>${escapeHtml(taskStatusLabels[taskStatus])}</td>
+            <td class="number">${taskStats[taskStatus].toLocaleString("fa-IR")}</td>
+          </tr>`
+      )
+      .join("");
+
+    const memberRows = project.members.length
+      ? project.members
+          .map(
+            (member) => `
+              <tr>
+                <td>${escapeHtml(member.user.name)}</td>
+                <td><span class="role">${member.role === "MANAGER" ? "مدیر پروژه" : "کارمند"}</span></td>
+              </tr>`
+          )
+          .join("")
+      : '<tr><td colspan="2">عضوی ثبت نشده است.</td></tr>';
+
+    const report = `<!doctype html>
+      <html lang="fa" dir="rtl">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>گزارش پروژه ${escapeHtml(project.name)}</title>
+          <style>
+            @page { size: A4; margin: 13mm; }
+            * { box-sizing: border-box; }
+            body { margin: 0; direction: rtl; background: #f8fafc; color: #172033; font-family: Tahoma, Arial, sans-serif; font-size: 12px; line-height: 1.75; }
+            .report { max-width: 794px; margin: 0 auto; background: #fff; }
+            .hero { position: relative; overflow: hidden; padding: 27px 30px 24px; color: #fff; background: linear-gradient(125deg, #064e3b, #047857 62%, #0f9f76); border-radius: 16px; }
+            .hero::after { content: ""; position: absolute; width: 160px; height: 160px; left: -55px; top: -62px; border: 28px solid rgba(255,255,255,.12); border-radius: 50%; }
+            .eyebrow { position: relative; z-index: 1; margin: 0 0 5px; color: #d1fae5; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+            h1 { position: relative; z-index: 1; margin: 0; font-size: 23px; line-height: 1.45; }
+            .meta { position: relative; z-index: 1; margin: 7px 0 0; color: #ecfdf5; font-size: 10px; }
+            .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 17px 0; }
+            .stat { min-height: 72px; padding: 12px 14px; border: 1px solid #d1fae5; border-radius: 11px; background: #f0fdf4; }
+            .stat-label { display: block; color: #477565; font-size: 10px; }
+            .stat-value { display: block; margin-top: 2px; color: #065f46; font-size: 19px; font-weight: 800; line-height: 1.4; }
+            .content { padding: 0 4px; }
+            .section { margin-top: 20px; break-inside: avoid; }
+            h2 { display: flex; align-items: center; gap: 7px; margin: 0 0 9px; color: #064e3b; font-size: 14px; }
+            h2::before { content: ""; width: 4px; height: 18px; border-radius: 99px; background: #10b981; }
+            .description { margin: 0 0 11px; padding: 11px 13px; border-right: 3px solid #6ee7b7; border-radius: 8px; background: #f8fafc; color: #475569; }
+            table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 9px; }
+            th, td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; vertical-align: top; }
+            tr:last-child td { border-bottom: 0; }
+            th { width: 28%; color: #475569; background: #f8fafc; font-weight: 700; }
+            .task-table th { width: auto; color: #334155; background: #ecfdf5; }
+            .task-row:nth-child(even) td, .member-row:nth-child(even) td { background: #fcfdfd; }
+            .number { font-weight: 800; color: #065f46; }
+            .status-dot { display: inline-block; width: 8px; height: 8px; margin-left: 7px; border-radius: 50%; vertical-align: middle; }
+            .role { display: inline-block; padding: 1px 7px; border-radius: 999px; background: #ecfdf5; color: #047857; font-size: 10px; font-weight: 700; }
+            .footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 9px; text-align: center; }
+            @media print { body { background: #fff; } .report { max-width: none; } .hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .stats, .stat, th, .task-row:nth-child(even) td, .role { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+          </style>
+        </head>
+        <body>
+          <main class="report">
+            <header class="hero">
+              <p class="eyebrow">گزارش وضعیت پروژه</p>
+              <h1>${escapeHtml(project.name)}</h1>
+              <p class="meta">تهیه‌شده در ${formatReportDate(new Date().toISOString())}</p>
+            </header>
+            <div class="content">
+              <section class="stats">
+                <div class="stat"><span class="stat-label">پیشرفت کلی</span><strong class="stat-value">${progress.toLocaleString("fa-IR")}٪</strong></div>
+                <div class="stat"><span class="stat-label">کل وظایف</span><strong class="stat-value">${totalTasks.toLocaleString("fa-IR")}</strong></div>
+                <div class="stat"><span class="stat-label">تعداد اسپرینت‌ها</span><strong class="stat-value">${project._count.sprints.toLocaleString("fa-IR")}</strong></div>
+              </section>
+              <section class="section">
+                <h2>اطلاعات پروژه</h2>
+                <p class="description">${escapeHtml(project.description || "توضیحی برای این پروژه ثبت نشده است.")}</p>
+                <table>
+                  <tbody>
+                    <tr><th>وضعیت</th><td>${escapeHtml(statusLabels[project.status])}</td></tr>
+                    <tr><th>اولویت</th><td>${escapeHtml(priorityLabels[project.priority])}</td></tr>
+                    <tr><th>تاریخ شروع</th><td>${formatReportDate(project.startDate)}</td></tr>
+                    <tr><th>تاریخ پایان</th><td>${formatReportDate(project.dueDate)}</td></tr>
+                  </tbody>
+                </table>
+              </section>
+              <section class="section">
+                <h2>وضعیت وظایف</h2>
+                <table class="task-table"><thead><tr><th>وضعیت</th><th>تعداد</th></tr></thead><tbody>${taskRows}</tbody></table>
+              </section>
+              <section class="section">
+                <h2>اعضای پروژه</h2>
+                <table><thead><tr><th>نام</th><th>نقش</th></tr></thead><tbody>${memberRows}</tbody></table>
+              </section>
+              <p class="footer">این گزارش به‌صورت خودکار از اطلاعات ثبت‌شده در سامانه تهیه شده است.</p>
+            </div>
+          </main>
+        </body>
+      </html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(report);
+    printWindow.document.close();
+
+    window.setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 250);
+  }
+
   async function sendRequest(
     url: string,
     method: "PATCH" | "PUT",
@@ -318,9 +436,20 @@ export default function ProjectDetails({
             <p className="mt-0.5 text-sm leading-6 text-[var(--muted)]">{project.description || "توضیحی ثبت نشده است."}</p>
           </div>
 
-          <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-            {statusLabels[project.status]}
-          </span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+              {statusLabels[project.status]}
+            </span>
+            <button
+              type="button"
+              onClick={printProjectReport}
+              title="در پنجره چاپ، ذخیره به صورت PDF را انتخاب کنید"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            >
+              <FileDown size={15} />
+              دریافت PDF
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-3 xl:grid-cols-4">
@@ -1001,6 +1130,31 @@ function WeightRow({
       </strong>
     </div>
   );
+}
+
+function escapeHtml(value: string) {
+  return value.replace(
+    /[&<>'"]/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "'": "&#39;",
+        '"': "&quot;",
+      })[character] ?? character
+  );
+}
+
+function formatReportDate(value: string | null) {
+  if (!value) return "ثبت نشده";
+
+  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    timeZone: "Asia/Tehran",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function messageOf(error: unknown) {
