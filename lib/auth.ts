@@ -4,6 +4,7 @@ import "server-only";
 import { randomBytes, createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { shouldUseSecureSessionCookie } from "@/lib/session-cookie";
 
 const COOKIE_NAME = "pm_session";
 const SESSION_DAYS = 7;
@@ -16,12 +17,9 @@ function hashToken(token: string) {
 
 export const sessionCookieOptions = {
   httpOnly: true,
-  // The current deployment is HTTP. Set SESSION_COOKIE_SECURE=true when the
-  // app is placed behind HTTPS; production defaults to secure cookies.
-  secure:
-    process.env.SESSION_COOKIE_SECURE === "false"
-      ? false
-      : process.env.NODE_ENV === "production",
+  // An explicit setting wins. Otherwise an HTTP APP_URL keeps the cookie
+  // usable on deployments that do not terminate TLS.
+  secure: shouldUseSecureSessionCookie(),
   sameSite: "lax" as const,
   path: "/",
   maxAge: SESSION_DAYS * 24 * 60 * 60,
