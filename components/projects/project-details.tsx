@@ -13,13 +13,16 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowLeft,
+  BarChart3,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
   Clock3,
   ListTodo,
   LoaderCircle,
+  PieChart,
   Save,
+  TrendingUp,
   Users,
 } from "lucide-react";
 
@@ -110,6 +113,13 @@ const taskStatusColors: Record<TaskStatus, string> = {
   IN_PROGRESS: "bg-sky-500",
   IN_REVIEW: "bg-amber-500",
   DONE: "bg-emerald-600",
+};
+
+const taskStatusChartColors: Record<TaskStatus, string> = {
+  TODO: "#94a3b8",
+  IN_PROGRESS: "#0ea5e9",
+  IN_REVIEW: "#f59e0b",
+  DONE: "#16a34a",
 };
 
 const inputClass =
@@ -344,6 +354,12 @@ export default function ProjectDetails({
         </div>
       </section>
 
+      <ProjectCharts
+        progress={progress}
+        taskStats={taskStats}
+        totalTasks={totalTasks}
+      />
+
       {error && (
         <p
           role="alert"
@@ -362,7 +378,7 @@ export default function ProjectDetails({
         </p>
       )}
 
-      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid items-start gap-3 md:grid-cols-2">
           <section className="rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -372,7 +388,7 @@ export default function ProjectDetails({
               <span className="rounded-lg bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600">{priorityLabels[priority]}</span>
             </div>
 
-            <details className="group mt-3 border-t border-[var(--border)] pt-2">
+            <details open className="group mt-3 border-t border-[var(--border)] pt-2">
               <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-emerald-700">
                 {canEdit ? "ویرایش اطلاعات پروژه" : "مشاهده اطلاعات پروژه"}
                 <ChevronDown aria-hidden="true" size={18} className="mr-auto text-[var(--muted)] transition-transform group-open:rotate-180" />
@@ -515,7 +531,7 @@ export default function ProjectDetails({
               </span>
             </div>
 
-            <details className="group mt-3 border-t border-[var(--border)] pt-2">
+            <details open className="group mt-3 border-t border-[var(--border)] pt-2">
               <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-emerald-700">
                 {canEdit ? "مدیریت اعضا" : "مشاهده اعضا"}
                 <ChevronDown aria-hidden="true" size={18} className="mr-auto text-[var(--muted)] transition-transform group-open:rotate-180" />
@@ -596,7 +612,7 @@ export default function ProjectDetails({
             )}
             </details>
           </section>
-          <section className="rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
+          <section className="hidden rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
                 <Activity
@@ -678,7 +694,7 @@ export default function ProjectDetails({
             </Link>
           </section>
 
-          <details className="group rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
+          <details className="hidden group rounded-2xl border border-[var(--border)] bg-white p-3.5 sm:p-4">
             <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-base font-bold text-slate-900">
               <CheckCircle2
                 size={20}
@@ -736,6 +752,179 @@ export default function ProjectDetails({
           </details>
       </div>
     </div>
+  );
+}
+
+function ProjectCharts({
+  progress,
+  taskStats,
+  totalTasks,
+}: {
+  progress: number;
+  taskStats: TaskStats;
+  totalTasks: number;
+}) {
+  const entries = Object.keys(taskStatusLabels).map(
+    (status) => {
+      const key = status as TaskStatus;
+
+      return {
+        status: key,
+        label: taskStatusLabels[key],
+        value: taskStats[key],
+        color: taskStatusChartColors[key],
+      };
+    }
+  );
+
+  const highestValue = Math.max(
+    1,
+    ...entries.map((entry) => entry.value)
+  );
+
+  const circumference = 2 * Math.PI * 42;
+  const dashOffset = circumference * (1 - progress / 100);
+
+  return (
+    <section aria-labelledby="project-charts-title">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2
+            id="project-charts-title"
+            className="text-base font-extrabold text-slate-900"
+          >
+            وضعیت پروژه
+          </h2>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
+            نمای زنده از پیشرفت و توزیع وظایف
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-3">
+        <article className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <TrendingUp size={17} className="text-emerald-600" />
+            پیشرفت کلی
+          </div>
+
+          <div className="mt-4 flex items-center gap-4">
+            <div className="relative size-28 shrink-0">
+              <svg
+                viewBox="0 0 100 100"
+                className="size-full -rotate-90"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke="#d1fae5"
+                  strokeWidth="10"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke="#16a34a"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={dashOffset}
+                  className="transition-all duration-500"
+                />
+              </svg>
+              <strong className="absolute inset-0 flex items-center justify-center text-lg font-extrabold text-emerald-700">
+                {progress.toLocaleString("fa-IR")}٪
+              </strong>
+            </div>
+
+            <p className="text-xs leading-6 text-[var(--muted)]">
+              پیشرفت براساس وضعیت واقعی تمام وظایف محاسبه می‌شود.
+            </p>
+          </div>
+        </article>
+
+        <article className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <PieChart size={17} className="text-sky-600" />
+            توزیع وضعیت‌ها
+          </div>
+
+          <div className="mt-5 flex h-3 overflow-hidden rounded-full bg-slate-100">
+            {entries.map((entry) => (
+              <span
+                key={entry.status}
+                title={`${entry.label}: ${entry.value.toLocaleString("fa-IR")}`}
+                className="transition-all duration-500"
+                style={{
+                  width: `${totalTasks ? (entry.value / totalTasks) * 100 : 0}%`,
+                  backgroundColor: entry.color,
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2">
+            {entries.map((entry) => (
+              <div
+                key={entry.status}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="flex min-w-0 items-center gap-1.5 text-slate-600">
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: entry.color }}
+                  />
+                  <span className="truncate">{entry.label}</span>
+                </span>
+                <strong className="text-slate-800">
+                  {entry.value.toLocaleString("fa-IR")}
+                </strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <BarChart3 size={17} className="text-amber-600" />
+            حجم کار در مراحل
+          </div>
+
+          <div className="mt-5 flex h-28 items-end justify-between gap-3 border-b border-slate-100 px-1">
+            {entries.map((entry) => (
+              <div
+                key={entry.status}
+                className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2"
+              >
+                <strong className="text-xs text-slate-700">
+                  {entry.value.toLocaleString("fa-IR")}
+                </strong>
+                <div
+                  className="w-full max-w-9 rounded-t-md transition-all duration-500"
+                  style={{
+                    height: `${Math.max(8, (entry.value / highestValue) * 78)}px`,
+                    backgroundColor: entry.color,
+                  }}
+                  title={entry.label}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-2 grid grid-cols-4 gap-2 text-center text-[10px] text-slate-500">
+            {entries.map((entry) => (
+              <span key={entry.status} className="truncate">
+                {entry.label}
+              </span>
+            ))}
+          </div>
+        </article>
+      </div>
+    </section>
   );
 }
 
