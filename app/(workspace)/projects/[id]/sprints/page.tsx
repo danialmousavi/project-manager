@@ -2,10 +2,7 @@
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
-import {
-  ListTodo,
-  LoaderCircle,
-} from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -70,21 +67,13 @@ async function SprintsContent({ params }: Props) {
   if (!project) notFound();
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <ListTodo size={19} className="text-emerald-700" aria-hidden="true" />
-        <h2 className="text-lg font-extrabold">وظایف پروژه</h2>
-        <span className="text-xs text-[var(--muted)]">زمان‌بندی و پیگیری</span>
-      </div>
-
-      <SprintsManager
-        projectId={project.id}
-        members={project.members}
-        actorRole={actor.role}
-        canManage={access.canManage}
-        canDelete={actor.role === "ADMIN"}
-      />
-    </div>
+    <SprintsManager
+      projectId={project.id}
+      members={project.members}
+      actorRole={actor.role}
+      canManage={access.canManage}
+      canDelete={actor.role === "ADMIN"}
+    />
   );
 }
 

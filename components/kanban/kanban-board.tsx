@@ -146,12 +146,12 @@ const priorityStyles: Record<TaskPriority, string> = {
 };
 
 const inputClass =
-  "h-11 w-full rounded-xl border bg-white px-3 " +
-  "text-sm outline-none transition " +
+  "h-10 w-full rounded-lg border bg-white px-2.5 " +
+  "text-xs outline-none transition " +
   "focus:ring-4 focus:ring-emerald-500/10";
 
 const panelClass =
-  "rounded-2xl border bg-white shadow-sm";
+  "rounded-xl border bg-white shadow-sm";
 
 function errorMessage(error: unknown) {
   return error instanceof Error
@@ -531,7 +531,7 @@ export default function KanbanBoard({
   return (
     <div
       dir="rtl"
-      className="space-y-4"
+      className="space-y-3"
       style={{
         color: "var(--foreground)",
         fontFamily: "inherit",
@@ -539,21 +539,21 @@ export default function KanbanBoard({
     >
       {/* Header */}
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <div
-              className="flex size-10 items-center justify-center rounded-xl text-white"
+              className="flex size-9 items-center justify-center rounded-lg text-white"
               style={{
                 backgroundColor: "var(--primary)",
               }}
             >
-              <Layers3 size={20} aria-hidden="true" />
+              <Layers3 size={18} aria-hidden="true" />
             </div>
 
             <div>
               <h2
-                className="text-lg font-extrabold"
+                className="text-base font-extrabold"
                 style={{
                   color: "var(--foreground)",
                 }}
@@ -562,7 +562,7 @@ export default function KanbanBoard({
               </h2>
 
               <p
-                className="mt-1 text-sm"
+                className="mt-0.5 text-xs"
                 style={{
                   color: "var(--muted)",
                 }}
@@ -573,7 +573,7 @@ export default function KanbanBoard({
           </div>
 
           <p
-            className="mt-2 max-w-2xl text-sm leading-6"
+            className="mt-1.5 max-w-2xl text-xs leading-5"
             style={{
               color: "var(--muted)",
             }}
@@ -586,14 +586,14 @@ export default function KanbanBoard({
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href={`/projects/${projectId}/sprints`}
-            className="inline-flex h-11 items-center gap-2 rounded-xl border bg-white px-4 text-sm font-semibold transition hover:bg-emerald-50 hover:text-emerald-700"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-semibold transition hover:bg-emerald-50 hover:text-emerald-700"
             style={{
               borderColor: "var(--border)",
               color: "var(--foreground)",
             }}
           >
-            <CalendarDays size={17} />
-            اسپرینت‌ها
+            <CalendarDays size={15} />
+            وظایف
           </Link>
 
           <button
@@ -607,14 +607,14 @@ export default function KanbanBoard({
               refreshing ||
               Boolean(savingTaskId)
             }
-            className="inline-flex h-11 items-center gap-2 rounded-xl border bg-white px-4 text-sm font-semibold transition hover:bg-emerald-50 disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-semibold transition hover:bg-emerald-50 disabled:opacity-50"
             style={{
               borderColor: "var(--border)",
               color: "var(--foreground)",
             }}
           >
             <RefreshCw
-              size={17}
+              size={15}
               className={
                 refreshing ? "animate-spin" : ""
               }
@@ -629,10 +629,10 @@ export default function KanbanBoard({
       {error && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+          className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
         >
           <AlertCircle
-            size={19}
+            size={17}
             className="shrink-0"
           />
 
@@ -653,15 +653,15 @@ export default function KanbanBoard({
       {notice && (
         <div
           role="status"
-          className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
+          className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700"
         >
-          <CheckCircle2 size={19} />
+          <CheckCircle2 size={17} />
           {notice}
         </div>
       )}
 
       {truncated && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
           تعداد تسک‌ها بیشتر از ظرفیت این نمایش است.
           اکنون{" "}
           {tasks.length.toLocaleString("fa-IR")}
@@ -673,7 +673,7 @@ export default function KanbanBoard({
 
       {/* Statistics */}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Stat
           label="تسک‌های قابل مشاهده"
           value={totalTasks}
@@ -687,7 +687,7 @@ export default function KanbanBoard({
         />
 
         <div
-          className={`${panelClass} p-5`}
+          className={`${panelClass} p-3`}
           style={{
             borderColor: "var(--border)",
           }}
@@ -701,9 +701,9 @@ export default function KanbanBoard({
             پیشرفت تسک‌های بارگذاری‌شده
           </p>
 
-          <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="mt-2 flex items-center justify-between gap-2">
             <strong
-              className="text-2xl font-extrabold"
+              className="text-xl font-extrabold"
               style={{
                 color: "var(--foreground)",
               }}
@@ -721,7 +721,7 @@ export default function KanbanBoard({
             </span>
           </div>
 
-          <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-emerald-100">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-emerald-100">
             <div
               className="h-full rounded-full bg-emerald-600 transition-all duration-300"
               style={{
@@ -735,14 +735,14 @@ export default function KanbanBoard({
       {/* Filters */}
 
       <div
-        className={`${panelClass} p-4 sm:p-5`}
+        className={`${panelClass} p-3`}
         style={{
           borderColor: "var(--border)",
         }}
       >
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           <Filter
-            size={18}
+            size={16}
             className="text-emerald-600"
           />
 
@@ -756,11 +756,11 @@ export default function KanbanBoard({
           </h2>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           <div className="relative">
             <Search
-              size={17}
-              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+              size={15}
+              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
               style={{
                 color: "var(--muted)",
               }}
@@ -774,7 +774,7 @@ export default function KanbanBoard({
                 setSearch(event.target.value)
               }
               placeholder="جست‌وجوی تسک..."
-              className={`${inputClass} pr-10`}
+              className={`${inputClass} pr-9`}
               style={{
                 borderColor: "var(--border)",
                 color: "var(--foreground)",
@@ -877,7 +877,7 @@ export default function KanbanBoard({
           </select>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <p
             className="text-xs"
             style={{
@@ -935,13 +935,11 @@ export default function KanbanBoard({
               color: "var(--muted)",
             }}
           >
-            در دسکتاپ کارت‌ها را بین ستون‌ها بکشید.
-            در موبایل یا هنگام استفاده از صفحه‌کلید،
-            وضعیت را از منوی داخل کارت تغییر دهید.
+            کارت‌ها را برای تغییر وضعیت بین ستون‌ها جابه‌جا کنید.
           </p>
 
-          <div className="overflow-x-auto pb-4">
-            <div className="grid min-w-[1120px] grid-cols-4 gap-4">
+          <div className="overflow-x-auto pb-3">
+            <div className="grid min-w-[960px] grid-cols-4 gap-3">
               {columns.map((column) => {
                 const columnTasks =
                   taskGroups[column.id];
@@ -974,42 +972,42 @@ export default function KanbanBoard({
                         setDragOverStatus(null);
                       }
                     }}
-                    className={`flex min-h-[480px] flex-col rounded-2xl border-2 p-3 transition-all duration-200 ${
+                    className={`flex min-h-[420px] flex-col rounded-xl border-2 p-2.5 transition-all duration-200 ${
                       isOver
                         ? "border-emerald-400 bg-emerald-50"
                         : "border-emerald-100 bg-white/65"
                     }`}
                   >
                     <div
-                      className={`rounded-xl p-3 ${column.headerClass}`}
+                      className={`rounded-lg p-2.5 ${column.headerClass}`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`size-2.5 rounded-full ${column.dotClass}`}
+                          className={`size-2 rounded-full ${column.dotClass}`}
                           />
 
-                          <h2 className="text-sm font-extrabold">
+                          <h2 className="text-xs font-extrabold">
                             {column.title}
                           </h2>
                         </div>
 
-                        <span className="rounded-lg bg-white/90 px-2 py-1 text-xs font-bold">
+                        <span className="rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] font-bold">
                           {columnTasks.length.toLocaleString(
                             "fa-IR"
                           )}
                         </span>
                       </div>
 
-                      <p className="mt-2 text-xs opacity-75">
+                      <p className="mt-1 text-[11px] opacity-75">
                         {column.description}
                       </p>
                     </div>
 
-                    <div className="mt-3 flex flex-1 flex-col gap-3">
+                    <div className="mt-2.5 flex flex-1 flex-col gap-2.5">
                       {columnTasks.length === 0 ? (
                         <div
-                          className={`flex min-h-32 items-center justify-center rounded-xl border border-dashed p-4 text-center text-xs ${column.emptyBorderClass}`}
+                          className={`flex min-h-28 items-center justify-center rounded-lg border border-dashed p-3 text-center text-[11px] ${column.emptyBorderClass}`}
                           style={{
                             color: "var(--muted)",
                           }}
@@ -1041,12 +1039,6 @@ export default function KanbanBoard({
                               )
                             }
                             onDragEnd={onDragEnd}
-                            onChangeStatus={(status) =>
-                              void moveTask(
-                                task.id,
-                                status
-                              )
-                            }
                           />
                         ))
                       )}
@@ -1058,7 +1050,7 @@ export default function KanbanBoard({
           </div>
 
           {canManage && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-7 text-emerald-700">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs leading-6 text-emerald-700">
               <strong>مدیریت تسک‌ها:</strong>{" "}
               برای ویرایش عنوان، مسئول، اولویت
               و تاریخ تسک، وارد بخش وظایف پروژه شوید.
@@ -1081,7 +1073,6 @@ function KanbanCard({
   dragging,
   onDragStart,
   onDragEnd,
-  onChangeStatus,
 }: {
   task: KanbanTask;
   sprints: Sprint[];
@@ -1093,9 +1084,6 @@ function KanbanCard({
     event: DragEvent<HTMLElement>
   ) => void;
   onDragEnd: () => void;
-  onChangeStatus: (
-    status: TaskStatus
-  ) => void;
 }) {
   const sprintName =
     sprints.find(
@@ -1107,7 +1095,7 @@ function KanbanCard({
       draggable={!locked}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`group rounded-2xl border bg-white p-4 shadow-sm transition-all duration-200 ${
+      className={`group rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 ${
         dragging
           ? "scale-[0.98] border-emerald-300 opacity-40"
           : "hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
@@ -1124,7 +1112,7 @@ function KanbanCard({
     >
       <div className="flex items-start justify-between gap-2">
         <span
-          className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${priorityStyles[task.priority]}`}
+          className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${priorityStyles[task.priority]}`}
         >
           اولویت {priorityLabels[task.priority]}
         </span>
@@ -1137,12 +1125,12 @@ function KanbanCard({
         >
           {saving ? (
             <LoaderCircle
-              size={16}
+              size={14}
               className="animate-spin text-emerald-600"
             />
           ) : (
             <GripVertical
-              size={17}
+              size={15}
               aria-hidden="true"
             />
           )}
@@ -1150,7 +1138,7 @@ function KanbanCard({
       </div>
 
       <h3
-        className="mt-4 break-words text-sm font-bold leading-7"
+        className="mt-3 break-words text-sm font-bold leading-6"
         style={{
           color: "var(--foreground)",
         }}
@@ -1160,7 +1148,7 @@ function KanbanCard({
 
       {task.description && (
         <p
-          className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-xs leading-6"
+          className="mt-1 line-clamp-2 whitespace-pre-wrap break-words text-xs leading-5"
           style={{
             color: "var(--muted)",
           }}
@@ -1170,10 +1158,10 @@ function KanbanCard({
       )}
 
       {sprintName && (
-        <div className="mt-4">
-          <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-700">
+        <div className="mt-3">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700">
             <Layers3
-              size={13}
+              size={12}
               className="shrink-0"
             />
 
@@ -1185,19 +1173,19 @@ function KanbanCard({
       )}
 
       <div
-        className="mt-4 space-y-2 border-t pt-3"
+        className="mt-3 space-y-1.5 border-t pt-2"
         style={{
           borderColor: "var(--border)",
         }}
       >
         <div
-          className="flex items-center gap-2 text-xs"
+          className="flex items-center gap-1.5 text-[11px]"
           style={{
             color: "var(--muted)",
           }}
         >
           <UserRound
-            size={15}
+            size={13}
             className="shrink-0"
           />
 
@@ -1209,13 +1197,13 @@ function KanbanCard({
 
         {task.dueDate && (
           <div
-            className="flex items-center gap-2 text-xs"
+            className="flex items-center gap-1.5 text-[11px]"
             style={{
               color: "var(--muted)",
             }}
           >
             <CalendarDays
-              size={15}
+              size={13}
               className="shrink-0"
             />
 
@@ -1226,53 +1214,12 @@ function KanbanCard({
         )}
       </div>
 
-      <div className="mt-4">
-        <label
-          htmlFor={`status-${task.id}`}
-          className="mb-2 block text-[11px] font-medium"
-          style={{
-            color: "var(--muted)",
-          }}
-        >
-          تغییر وضعیت
-        </label>
-
-        <select
-          id={`status-${task.id}`}
-          value={task.status}
-          disabled={locked}
-          onChange={(event) => {
-            const next = event.target.value;
-
-            if (validStatus(next)) {
-              onChangeStatus(next);
-            }
-          }}
-          className="w-full rounded-xl border bg-emerald-50 px-3 py-2.5 text-xs font-semibold outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-50"
-          style={{
-            borderColor: "var(--primary-border)",
-            color: "var(--foreground)",
-          }}
-        >
-          {Object.entries(statusLabels).map(
-            ([value, label]) => (
-              <option
-                key={value}
-                value={value}
-              >
-                {label}
-              </option>
-            )
-          )}
-        </select>
-      </div>
-
       <Link
-        href={`/projects/${projectId}/tasks`}
-        className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 transition hover:text-emerald-600"
+        href={`/projects/${projectId}/sprints`}
+        className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 transition hover:text-emerald-600"
       >
         مشاهده وظایف
-        <ArrowLeft size={13} />
+        <ArrowLeft size={12} />
       </Link>
     </article>
   );
@@ -1289,12 +1236,12 @@ function Stat({
 }) {
   return (
     <div
-      className="flex items-center gap-4 rounded-2xl border bg-white p-5 shadow-sm"
+      className="flex items-center gap-2.5 rounded-xl border bg-white p-3 shadow-sm"
       style={{
         borderColor: "var(--border)",
       }}
     >
-      <div className="flex size-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+      <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
         {icon}
       </div>
 
@@ -1309,7 +1256,7 @@ function Stat({
         </p>
 
         <p
-          className="mt-2 text-2xl font-extrabold"
+          className="mt-1 text-xl font-extrabold"
           style={{
             color: "var(--foreground)",
           }}

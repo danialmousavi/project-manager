@@ -871,18 +871,18 @@ export default function SprintsManager({
       className="space-y-6"
       style={{ color: "var(--foreground)" }}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-extrabold">
+          <h2 className="flex items-center gap-2 text-lg font-extrabold">
             <CalendarRange
-              size={24}
+              size={20}
               className="text-emerald-600"
             />
             زمان‌بندی وظایف
           </h2>
 
           <p
-            className="mt-2 text-sm leading-7"
+            className="mt-1 text-xs leading-6"
             style={{ color: "var(--muted)" }}
           >
             هر نوار، زمان‌بندی یک تسک واقعی است؛
@@ -1378,8 +1378,7 @@ export default function SprintsManager({
         حرکت تقویم استفاده کنید.
       </p>
 
-      {/* Sprint management remains available */}
-      <section className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+      <section aria-hidden="true" className="hidden">
         <h3 className="text-base font-extrabold">
           مدیریت وظایف و اسپرینت‌ها
         </h3>
