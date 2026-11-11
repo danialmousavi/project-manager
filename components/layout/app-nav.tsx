@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FolderKanban, LayoutDashboard, UsersRound } from "lucide-react";
+import { FolderKanban, LayoutDashboard, Timer, UsersRound } from "lucide-react";
 
 export default function AppNav({ role }: { role: "ADMIN" | "MANAGER" | "EMPLOYEE" }) {
   const pathname = usePathname();
   const links = [
     { href: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
     { href: "/projects", label: "پروژه‌ها", icon: FolderKanban },
+    { href: "/overtime", label: "اضافه‌کار", icon: Timer },
     ...(role === "ADMIN" ? [{ href: "/users", label: "کاربران", icon: UsersRound }] : []),
   ];
   return <nav aria-label="ناوبری اصلی" className="flex min-w-0 flex-wrap justify-center gap-1 sm:justify-start">{links.map(({ href, label, icon: Icon }) => {

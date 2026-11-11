@@ -32,6 +32,7 @@ let kanbanRoute: typeof import("../../app/api/v1/projects/[id]/kanban/route");
 let progressRoute: typeof import("../../app/api/v1/projects/[id]/progress/route");
 let usersRoute: typeof import("../../app/api/v1/users/route");
 let userRoute: typeof import("../../app/api/v1/users/[id]/route");
+let overtimeRoute: typeof import("../../app/api/v1/overtime/route");
 
 const url = (path: string) => `http://localhost:3000/api/v1/${path}`;
 const context = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -47,7 +48,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = testUrl;
   db = new PrismaClient({ adapter: new PrismaPg({ connectionString: testUrl }) });
   await db.$connect();
-  [projectsRoute, projectRoute, taskListRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute] = await Promise.all([
+  [projectsRoute, projectRoute, taskListRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute, overtimeRoute] = await Promise.all([
     import("../../app/api/v1/projects/route"),
     import("../../app/api/v1/projects/[id]/route"),
     import("../../app/api/v1/projects/[id]/tasks/route"),
@@ -58,6 +59,7 @@ beforeAll(async () => {
     import("../../app/api/v1/projects/[id]/progress/route"),
     import("../../app/api/v1/users/route"),
     import("../../app/api/v1/users/[id]/route"),
+    import("../../app/api/v1/overtime/route"),
   ]);
 });
 
@@ -70,6 +72,8 @@ beforeEach(async () => {
   await db.sprint.deleteMany();
   await db.projectMember.deleteMany();
   await db.project.deleteMany();
+  await db.overtimeSegment.deleteMany();
+  await db.overtimeEntry.deleteMany();
   await db.session.deleteMany();
   await db.loginAttempt.deleteMany();
   await db.user.deleteMany();
@@ -146,6 +150,48 @@ describe("authorization and input validation through real route handlers", () =>
     expect((await userRoute.PATCH(request("PATCH", `users/${admin.id}`, { isActive: false }), context(admin.id))).status).toBe(403);
     expect((await userRoute.PATCH(request("PATCH", `users/${employee.id}`, { role: "MANAGER" }), context(employee.id))).status).toBe(200);
     expect((await db.user.findUnique({ where: { id: employee.id } }))?.role).toBe("MANAGER");
+  });
+});
+
+describe("overtime timer route", () => {
+  it("keeps a user's timer private and supports pause, resume, and explicit save", async () => {
+    const user = await userFactory(db);
+    const otherUser = await userFactory(db);
+    actor = user;
+
+    expect((await overtimeRoute.POST(request("POST", "overtime", { action: "START", workMode: "REMOTE" }, false))).status).toBe(403);
+
+    const started = await overtimeRoute.POST(request("POST", "overtime", { action: "START", workMode: "REMOTE" }));
+    expect(started.status).toBe(201);
+    await expect(started.json()).resolves.toMatchObject({ entry: { workMode: "REMOTE", status: "RUNNING", segments: [{ stoppedAt: null }] } });
+    expect((await overtimeRoute.POST(request("POST", "overtime", { action: "START", workMode: "REMOTE" }))).status).toBe(409);
+
+    const paused = await overtimeRoute.POST(request("POST", "overtime", { action: "PAUSE" }));
+    expect(paused.status).toBe(200);
+    await expect(paused.json()).resolves.toMatchObject({ entry: { status: "PAUSED", segments: [{ stoppedAt: expect.any(String) }] } });
+
+    const resumed = await overtimeRoute.POST(request("POST", "overtime", { action: "RESUME" }));
+    expect(resumed.status).toBe(200);
+    await expect(resumed.json()).resolves.toMatchObject({ entry: { status: "RUNNING", segments: [{}, { stoppedAt: null }] } });
+    expect((await overtimeRoute.POST(request("POST", "overtime", { action: "SAVE" }))).status).toBe(409);
+
+    expect((await overtimeRoute.POST(request("POST", "overtime", { action: "PAUSE" }))).status).toBe(200);
+    const saved = await overtimeRoute.POST(request("POST", "overtime", { action: "SAVE" }));
+    expect(saved.status).toBe(200);
+    await expect(saved.json()).resolves.toMatchObject({ entry: { status: "SAVED", savedAt: expect.any(String), segments: [{ stoppedAt: expect.any(String) }, { stoppedAt: expect.any(String) }] } });
+
+    actor = otherUser;
+    await expect((await overtimeRoute.GET()).json()).resolves.toMatchObject({ draft: null, history: [] });
+    actor = user;
+    await expect((await overtimeRoute.GET()).json()).resolves.toMatchObject({ draft: null, history: [{ status: "SAVED", workMode: "REMOTE" }] });
+  });
+
+  it("requires authentication and validates the state transition payload", async () => {
+    expect((await overtimeRoute.GET()).status).toBe(401);
+    expect((await overtimeRoute.POST(request("POST", "overtime", { action: "PAUSE" }))).status).toBe(401);
+    actor = await userFactory(db);
+    expect((await overtimeRoute.POST(request("POST", "overtime", { action: "START", workMode: "INVALID" }))).status).toBe(400);
+    expect((await overtimeRoute.POST(request("POST", "overtime", { action: "PAUSE", workMode: "REMOTE" }))).status).toBe(400);
   });
 });
 
