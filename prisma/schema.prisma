@@ -15,6 +15,7 @@ enum UserRole {
   ADMIN
   MANAGER
   EMPLOYEE
+  CONTROLLER
 }
 
 enum ProjectStatus {

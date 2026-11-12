@@ -37,7 +37,7 @@ import {
 import ProjectTasks from "@/components/tasks/project-tasks";
 import { isoToJalali } from "@/lib/jalali";
 
-type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
+type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
 
 type Status =
   | "TODO"

@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 
-type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE";
+type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
 
 type UserItem = {
   id: string;
@@ -40,7 +40,7 @@ type Props = {
 };
 
 type UserChanges = {
-  role?: "MANAGER" | "EMPLOYEE";
+  role?: "MANAGER" | "EMPLOYEE" | "CONTROLLER";
   isActive?: boolean;
   nationalId?: string;
   phone?: string;
@@ -49,13 +49,15 @@ type UserChanges = {
 const roleLabels: Record<UserRole, string> = {
   ADMIN: "مدیر اصلی",
   MANAGER: "مدیر پروژه",
-  EMPLOYEE: "کارمند",
+  EMPLOYEE: "کارشناس عملیاتی",
+  CONTROLLER: "ناظر کنترل پروژه",
 };
 
 const roleClasses: Record<UserRole, string> = {
   ADMIN: "bg-violet-50 text-violet-700",
   MANAGER: "bg-blue-50 text-blue-700",
   EMPLOYEE: "bg-slate-100 text-slate-600",
+  CONTROLLER: "bg-amber-50 text-amber-700",
 };
 
 const inputClass =
@@ -354,7 +356,6 @@ export default function UsersManager({
                   className={inputClass}
                   dir="ltr"
                   inputMode="numeric"
-                  required
                   maxLength={10}
                   value={form.nationalId}
                   onChange={(event) =>
@@ -417,10 +418,13 @@ export default function UsersManager({
                   }
                 >
                   <option value="EMPLOYEE">
-                    کارمند
+                    کارشناس عملیاتی
                   </option>
                   <option value="MANAGER">
                     مدیر پروژه
+                  </option>
+                  <option value="CONTROLLER">
+                    ناظر کنترل پروژه
                   </option>
                   <option value="ADMIN">
                     مدیر اصلی
@@ -430,8 +434,7 @@ export default function UsersManager({
             </div>
 
             <p className="mt-4 text-xs leading-6 text-slate-500">
-              کد ملی و شماره موبایل باید معتبر و یکتا
-              باشند. رمز عبور حداقل ۱۰ کاراکتر است.
+              کد ملی اختیاری است؛ در صورت ورود باید معتبر و یکتا باشد. شماره موبایل معتبر و رمز عبور حداقل ۱۰ کاراکتر است.
             </p>
 
             <div className="mt-5 flex justify-end">
@@ -507,7 +510,8 @@ export default function UsersManager({
             <option value="ALL">همه نقش‌ها</option>
             <option value="ADMIN">مدیر اصلی</option>
             <option value="MANAGER">مدیر پروژه</option>
-            <option value="EMPLOYEE">کارمند</option>
+            <option value="EMPLOYEE">کارشناس عملیاتی</option>
+            <option value="CONTROLLER">ناظر کنترل پروژه</option>
           </select>
         </div>
 
@@ -638,16 +642,20 @@ export default function UsersManager({
                                 changeUser(user, {
                                   role: event.target.value as
                                     | "MANAGER"
-                                    | "EMPLOYEE",
+                                    | "EMPLOYEE"
+                                    | "CONTROLLER",
                                 })
                               }
                               className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs outline-none focus:border-emerald-500 disabled:opacity-50"
                             >
                               <option value="EMPLOYEE">
-                                کارمند
+                                کارشناس عملیاتی
                               </option>
                               <option value="MANAGER">
                                 مدیر پروژه
+                              </option>
+                              <option value="CONTROLLER">
+                                ناظر کنترل پروژه
                               </option>
                             </select>
 
@@ -938,7 +946,6 @@ function EditUserModal({
                 className={inputClass}
                 dir="ltr"
                 inputMode="numeric"
-                required
                 maxLength={10}
                 value={nationalId}
                 onChange={(event) =>
@@ -964,7 +971,7 @@ function EditUserModal({
             </Field>
 
             <p className="text-xs leading-6 text-slate-500">
-              کد ملی باید ۱۰ رقم و معتبر باشد. شماره
+              کد ملی اختیاری است و در صورت ورود باید ۱۰ رقم و معتبر باشد. شماره
               موبایل باید به قالب ایران ثبت شود؛
               مانند 09123456789.
             </p>

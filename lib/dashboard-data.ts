@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { calculateProjectProgress, type TaskStatusCount } from "@/lib/project-progress";
 import { TASK_CHANGE_PREFIX } from "@/lib/task-change-history";
 import { ASSIGNMENT_PREFIX } from "@/lib/task-assignment-history";
+import { canViewAllProjects, type AppRole } from "@/lib/role-access";
 
-type DashboardActor = { id: string; role: "ADMIN" | "MANAGER" | "EMPLOYEE" };
+type DashboardActor = { id: string; role: AppRole };
 
 function todayInTehran() {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -27,7 +28,7 @@ export async function getDashboardData(actor: DashboardActor) {
   const projects = await prisma.project.findMany({
     where: {
       archivedAt: null,
-      ...(actor.role === "ADMIN" ? {} : { members: { some: { userId: actor.id } } }),
+      ...(canViewAllProjects(actor.role) ? {} : { members: { some: { userId: actor.id } } }),
     },
     select: {
       id: true,
@@ -41,7 +42,7 @@ export async function getDashboardData(actor: DashboardActor) {
   });
 
   const ids = projects.map((project) => project.id);
-  const managedIds = actor.role === "ADMIN"
+  const managedIds = actor.role === "ADMIN" || actor.role === "CONTROLLER"
     ? ids
     : projects.filter((project) => actor.role === "MANAGER" && project.members.some((member) => member.role === "MANAGER")).map((project) => project.id);
 
@@ -51,7 +52,7 @@ export async function getDashboardData(actor: DashboardActor) {
     projectId: { in: ids },
     deletedAt: null,
     project: { archivedAt: null },
-    ...(actor.role === "ADMIN" ? {} : {
+    ...(canViewAllProjects(actor.role) ? {} : {
       OR: [
         { projectId: { in: managedIds } },
         { assigneeId: actor.id },

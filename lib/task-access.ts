@@ -2,10 +2,11 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { canViewAllProjects, type AppRole } from "@/lib/role-access";
 
 type Actor = {
   id: string;
-  role: "ADMIN" | "MANAGER" | "EMPLOYEE";
+  role: AppRole;
 };
 
 export async function getTaskProjectAccess(
@@ -16,7 +17,7 @@ export async function getTaskProjectAccess(
     where: {
       id: projectId,
       archivedAt: null,
-      ...(actor.role === "ADMIN"
+      ...(canViewAllProjects(actor.role)
         ? {}
         : {
             members: {

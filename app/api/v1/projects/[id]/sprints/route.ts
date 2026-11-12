@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
+import { isProjectController } from "@/lib/role-access";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -144,7 +145,7 @@ export async function GET(
         where: {
           projectId,
           deletedAt: null,
-          ...(access.canManage
+          ...(access.canManage || isProjectController(actor.role)
             ? {}
             : { assigneeId: actor.id }),
         },

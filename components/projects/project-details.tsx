@@ -33,7 +33,7 @@ import UserMultiSelect, {
 
 import PersianDatePicker from "@/components/ui/persian-date-picker";
 
-type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
+type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
 
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 

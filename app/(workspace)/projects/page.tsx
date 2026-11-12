@@ -13,6 +13,7 @@ import {
   calculateProjectProgress,
   type TaskStatusCount,
 } from "@/lib/project-progress";
+import { canViewAllProjects } from "@/lib/role-access";
 
 import ProjectsManager from "@/components/projects/projects-manager";
 
@@ -42,7 +43,7 @@ async function ProjectsContent() {
   const projects = await prisma.project.findMany({
     where: {
       archivedAt: null,
-      ...(user.role === "ADMIN"
+      ...(canViewAllProjects(user.role)
         ? {}
         : {
             members: {

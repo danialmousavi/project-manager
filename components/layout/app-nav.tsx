@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FolderKanban, LayoutDashboard, UsersRound } from "lucide-react";
 
-export default function AppNav({ role }: { role: "ADMIN" | "MANAGER" | "EMPLOYEE" }) {
+export default function AppNav({ role }: { role: "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER" }) {
   const pathname = usePathname();
   const links = [
     { href: "/dashboard", label: "داشبورد", icon: LayoutDashboard },

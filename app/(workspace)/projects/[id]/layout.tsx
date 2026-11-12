@@ -5,6 +5,7 @@ import { z } from "zod";
 import ProjectWorkspaceNav from "@/components/projects/project-workspace-nav";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canViewAllProjects } from "@/lib/role-access";
 
 type Props = {
   children: ReactNode;
@@ -45,7 +46,7 @@ async function WorkspaceNavigation({
     where: {
       id,
       archivedAt: null,
-      ...(user.role === "ADMIN" ? {} : { members: { some: { userId: user.id } } }),
+      ...(canViewAllProjects(user.role) ? {} : { members: { some: { userId: user.id } } }),
     },
     select: { name: true },
   });

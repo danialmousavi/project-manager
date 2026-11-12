@@ -6,7 +6,7 @@ import { CalendarClock, CircleAlert, ClipboardList, FolderKanban, ListTodo, Load
 import { getCurrentUser } from "@/lib/auth";
 import { getDashboardData } from "@/lib/dashboard-data";
 
-const roles = { ADMIN: "مدیر اصلی", MANAGER: "مدیر پروژه", EMPLOYEE: "کارمند" };
+const roles = { ADMIN: "مدیر اصلی", MANAGER: "مدیر پروژه", EMPLOYEE: "کارشناس عملیاتی", CONTROLLER: "ناظر کنترل پروژه" };
 const statuses = { TODO: "در انتظار", IN_PROGRESS: "در حال انجام", IN_REVIEW: "در بازبینی", DONE: "انجام‌شده" };
 const projectStatuses = { DRAFT: "پیش‌نویس", PLANNED: "برنامه‌ریزی‌شده", ACTIVE: "فعال", ON_HOLD: "متوقف", COMPLETED: "تکمیل‌شده", CANCELLED: "لغوشده" };
 const priorities = { LOW: "کم", MEDIUM: "متوسط", HIGH: "زیاد", URGENT: "فوری" };

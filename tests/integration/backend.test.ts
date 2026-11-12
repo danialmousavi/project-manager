@@ -16,7 +16,7 @@ import {
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth", () => ({ getCurrentUser: vi.fn() }));
 
-type Actor = { id: string; role: "ADMIN" | "MANAGER" | "EMPLOYEE" };
+type Actor = { id: string; role: "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER" };
 let actor: Actor | null = null;
 const auth = await import("@/lib/auth");
 vi.mocked(auth.getCurrentUser).mockImplementation(async () => actor as never);

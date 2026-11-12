@@ -32,7 +32,7 @@ import PersianDatePicker from "@/components/ui/persian-date-picker";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { isoToJalali } from "@/lib/jalali";
 
-export type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
+export type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
 
 type Status =
   | "TODO"
