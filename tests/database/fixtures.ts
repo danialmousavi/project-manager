@@ -49,6 +49,9 @@ export async function taskFactory(
     sprintId?: string;
     assigneeId?: string;
     status?: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
+    type?: "STORY" | "TASK" | "BUG";
+    storyPoints?: number | null;
+    rank?: number;
   } = {}
 ) {
   return db.task.create({

@@ -34,6 +34,8 @@ const priorityEnum = z.enum([
   "URGENT",
 ]);
 
+const taskTypeEnum = z.enum(["STORY", "TASK", "BUG"]);
+
 const statusSchema = z.object({
   status: statusEnum,
 }).strict();
@@ -47,6 +49,10 @@ const detailsSchema = z.object({
   title: z.string().trim().min(3).max(200),
   description: z.string().trim().max(5000),
   priority: priorityEnum,
+  type: taskTypeEnum.optional(),
+  storyPoints: z.number().int().min(0).max(100).nullable().optional(),
+  rank: z.number().finite().min(0).max(100_000).optional(),
+  acceptanceCriteria: z.string().trim().max(5000).nullable().optional(),
   status: statusEnum,
   startDate: z.iso.date().nullable(),
   dueDate: z.iso.date().nullable(),
@@ -323,6 +329,10 @@ export async function PATCH(
             version: true,
             title: true,
             description: true,
+            type: true,
+            storyPoints: true,
+            rank: true,
+            acceptanceCriteria: true,
             priority: true,
             status: true,
             startDate: true,
@@ -387,6 +397,14 @@ export async function PATCH(
         }
 
         const changes: TaskFieldChange[] = [];
+        const nextType = details?.type ?? current.type;
+        const nextStoryPoints = details?.storyPoints === undefined
+          ? current.storyPoints
+          : details.storyPoints;
+        const nextRank = details?.rank ?? current.rank;
+        const nextAcceptanceCriteria = details?.acceptanceCriteria === undefined
+          ? current.acceptanceCriteria
+          : details.acceptanceCriteria || null;
 
         if (details) {
           const before: Record<
@@ -395,6 +413,10 @@ export async function PATCH(
           > = {
             title: current.title,
             description: current.description,
+            type: current.type,
+            storyPoints: current.storyPoints === null ? null : String(current.storyPoints),
+            rank: String(current.rank),
+            acceptanceCriteria: current.acceptanceCriteria,
             priority: current.priority,
             status: current.status,
             startDate: dateString(current.startDate),
@@ -407,6 +429,10 @@ export async function PATCH(
           > = {
             title: details.title,
             description: details.description || null,
+            type: nextType,
+            storyPoints: nextStoryPoints === null ? null : String(nextStoryPoints),
+            rank: String(nextRank),
+            acceptanceCriteria: nextAcceptanceCriteria,
             priority: details.priority,
             status: details.status,
             startDate: details.startDate,
@@ -445,6 +471,10 @@ export async function PATCH(
                   title: details.title,
                   description:
                     details.description || null,
+                  type: nextType,
+                  storyPoints: nextStoryPoints,
+                  rank: nextRank,
+                  acceptanceCriteria: nextAcceptanceCriteria,
                   status: details.status,
                   priority: details.priority,
                   startDate: toDate(details.startDate),

@@ -135,6 +135,146 @@ describe("authorization and input validation through real route handlers", () =>
     expect(await db.task.count()).toBe(0);
   });
 
+  it("creates, reads, validates, and updates Scrum task fields", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const project = await projectFactory(db, admin.id, manager.id);
+    actor = manager;
+
+    const payload = {
+      title: "Plan the backlog",
+      description: "",
+      type: "STORY",
+      storyPoints: 8,
+      rank: 42,
+      acceptanceCriteria: "The backlog can be ordered.",
+      priority: "HIGH",
+      status: "TODO",
+      assigneeId: null,
+      startDate: null,
+      dueDate: null,
+    };
+
+    const created = await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, payload),
+      context(project.id)
+    );
+    expect(created.status).toBe(201);
+    await expect(created.json()).resolves.toMatchObject({
+      task: {
+        type: "STORY",
+        storyPoints: 8,
+        rank: 42,
+        acceptanceCriteria: "The backlog can be ordered.",
+      },
+    });
+
+    expect((await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, { ...payload, storyPoints: 2.5 }),
+      context(project.id)
+    )).status).toBe(400);
+
+    expect((await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, { ...payload, storyPoints: 101 }),
+      context(project.id)
+    )).status).toBe(400);
+
+    const task = await db.task.findFirstOrThrow({ where: { projectId: project.id } });
+    const updated = await taskRoute.PATCH(
+      request("PATCH", `tasks/${task.id}`, {
+        ...payload,
+        type: "BUG",
+        storyPoints: null,
+        rank: 84,
+        acceptanceCriteria: null,
+      }),
+      context(task.id)
+    );
+    expect(updated.status).toBe(200);
+    expect(await db.task.findUnique({ where: { id: task.id } })).toMatchObject({
+      type: "BUG",
+      storyPoints: null,
+      rank: 84,
+      acceptanceCriteria: null,
+    });
+
+    expect((await taskRoute.PATCH(
+      request("PATCH", `tasks/${task.id}`, { ...payload, rank: 100_001 }),
+      context(task.id)
+    )).status).toBe(400);
+  });
+
+  it("starts one future sprint and preserves its planned-task snapshot", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const project = await projectFactory(db, admin.id, manager.id);
+    const firstTask = await taskFactory(db, project.id, admin.id, {
+      type: "STORY",
+      storyPoints: 8,
+      rank: 1,
+    });
+    const secondTask = await taskFactory(db, project.id, admin.id, {
+      type: "BUG",
+      storyPoints: null,
+      rank: 2,
+    });
+    actor = manager;
+
+    const created = await sprintRoute.POST(
+      request("POST", `projects/${project.id}/sprints`, {
+        name: "Sprint one",
+        goal: "Deliver the first increment",
+        startDate: "2026-11-12",
+        endDate: "2026-11-26",
+      }),
+      context(project.id)
+    );
+    expect(created.status).toBe(201);
+    const { sprint } = await created.json() as { sprint: { id: string; status: string; goal: string | null } };
+    expect(sprint).toMatchObject({ status: "FUTURE", goal: "Deliver the first increment" });
+
+    for (const taskId of [firstTask.id, secondTask.id]) {
+      expect((await sprintRoute.PATCH(
+        request("PATCH", `projects/${project.id}/sprints`, {
+          action: "ASSIGN_TASK",
+          sprintId: sprint.id,
+          taskId,
+        }),
+        context(project.id)
+      )).status).toBe(200);
+    }
+
+    const started = await sprintRoute.PATCH(
+      request("PATCH", `projects/${project.id}/sprints`, {
+        action: "START",
+        sprintId: sprint.id,
+      }),
+      context(project.id)
+    );
+    expect(started.status).toBe(200);
+    expect(await db.sprint.findUnique({ where: { id: sprint.id } })).toMatchObject({ status: "ACTIVE" });
+    expect(await db.sprintStartSnapshot.findUnique({
+      where: { sprintId: sprint.id },
+      include: { tasks: { orderBy: { rank: "asc" } } },
+    })).toMatchObject({
+      plannedTaskCount: 2,
+      plannedStoryPoints: 8,
+      tasks: [
+        { taskId: firstTask.id, type: "STORY", storyPoints: 8 },
+        { taskId: secondTask.id, type: "BUG", storyPoints: null },
+      ],
+    });
+
+    const another = await sprintFactory(db, project.id);
+    expect((await sprintRoute.PATCH(
+      request("PATCH", `projects/${project.id}/sprints`, {
+        action: "START",
+        sprintId: another.id,
+      }),
+      context(project.id)
+    )).status).toBe(409);
+  });
+
   it("allows only an admin to change another user's role and protects admin accounts", async () => {
     const admin = await userFactory(db, "ADMIN");
     const manager = await userFactory(db, "MANAGER");

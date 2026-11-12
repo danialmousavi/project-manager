@@ -7,6 +7,10 @@ export type TaskFieldName =
   | "description"
   | "priority"
   | "status"
+  | "type"
+  | "storyPoints"
+  | "rank"
+  | "acceptanceCriteria"
   | "startDate"
   | "dueDate";
 
@@ -26,6 +30,10 @@ const allowedFields = new Set<TaskFieldName>([
   "description",
   "priority",
   "status",
+  "type",
+  "storyPoints",
+  "rank",
+  "acceptanceCriteria",
   "startDate",
   "dueDate",
 ]);

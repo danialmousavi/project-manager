@@ -46,8 +46,10 @@ type Priority =
   | "HIGH"
   | "URGENT";
 
+type TaskType = "STORY" | "TASK" | "BUG";
+
 export type Member = {
-  role: "MANAGER" | "MEMBER";
+  role: "MANAGER" | "MEMBER" | "CONTROLLER";
   user: {
     id: string;
     name: string;
@@ -59,6 +61,10 @@ type Task = {
   id: string;
   title: string;
   description: string | null;
+  type: TaskType;
+  storyPoints: number | null;
+  rank: number;
+  acceptanceCriteria: string | null;
   status: Status;
   priority: Priority;
   assigneeId: string | null;
@@ -88,6 +94,10 @@ type Comment = {
 type FieldName =
   | "title"
   | "description"
+  | "type"
+  | "storyPoints"
+  | "rank"
+  | "acceptanceCriteria"
   | "priority"
   | "status"
   | "startDate"
@@ -131,9 +141,25 @@ const priorityLabels: Record<Priority, string> = {
   URGENT: "فوری",
 };
 
+const taskTypeLabels: Record<TaskType, string> = {
+  STORY: "استوری",
+  TASK: "تسک",
+  BUG: "باگ",
+};
+
+const taskTypeColors: Record<TaskType, string> = {
+  STORY: "bg-violet-50 text-violet-700",
+  TASK: "bg-slate-100 text-slate-700",
+  BUG: "bg-rose-50 text-rose-700",
+};
+
 const fieldLabels: Record<FieldName, string> = {
   title: "عنوان",
   description: "توضیحات",
+  type: "نوع کار",
+  storyPoints: "Story Points",
+  rank: "Backlog Rank",
+  acceptanceCriteria: "معیارهای پذیرش",
   priority: "اولویت",
   status: "وضعیت",
   startDate: "تاریخ شروع",
@@ -175,6 +201,10 @@ function getFieldValue(
 
   if (field === "status") {
     return statusLabels[value as Status] ?? value;
+  }
+
+  if (field === "type") {
+    return taskTypeLabels[value as TaskType] ?? value;
   }
 
   if (field === "startDate" || field === "dueDate") {
@@ -682,6 +712,18 @@ export default function ProjectTasks({
                     </div>
 
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                      <span
+                        className={`rounded-md px-2 py-1 font-semibold ${taskTypeColors[task.type]}`}
+                      >
+                        {taskTypeLabels[task.type]}
+                      </span>
+
+                      {task.storyPoints !== null && (
+                        <span className="rounded-md bg-violet-50 px-2 py-1 font-semibold text-violet-700">
+                          {task.storyPoints.toLocaleString("fa-IR")} SP
+                        </span>
+                      )}
+
                       <span className="inline-flex items-center gap-1">
                         <UserRound size={14} />
                         {task.assignee?.name ||
@@ -787,6 +829,36 @@ export default function ProjectTasks({
                               {task.description ||
                                 "توضیحی ثبت نشده است."}
                             </p>
+
+                            <dl className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                              <div className="rounded-lg bg-white px-3 py-2">
+                                <dt className="text-slate-400">نوع کار</dt>
+                                <dd className="mt-1 font-semibold text-slate-700">
+                                  {taskTypeLabels[task.type]}
+                                </dd>
+                              </div>
+                              <div className="rounded-lg bg-white px-3 py-2">
+                                <dt className="text-slate-400">Story Points / Backlog Rank</dt>
+                                <dd className="mt-1 font-semibold text-slate-700">
+                                  {task.storyPoints === null
+                                    ? "بدون برآورد"
+                                    : `${task.storyPoints.toLocaleString("fa-IR")} SP`}
+                                  {" · "}
+                                  {task.rank.toLocaleString("fa-IR")}
+                                </dd>
+                              </div>
+                            </dl>
+
+                            {task.acceptanceCriteria && (
+                              <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/50 p-3">
+                                <h5 className="text-xs font-bold text-violet-800">
+                                  معیارهای پذیرش
+                                </h5>
+                                <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-violet-950">
+                                  {task.acceptanceCriteria}
+                                </p>
+                              </div>
+                            )}
 
                             {task.startDate && (
                               <p className="mt-3 text-xs text-slate-500">
@@ -1002,6 +1074,10 @@ export default function ProjectTasks({
               {
                 title: values.title,
                 description: values.description,
+                type: values.type,
+                storyPoints: values.storyPoints,
+                rank: values.rank,
+                acceptanceCriteria: values.acceptanceCriteria,
                 status: values.status,
                 priority: values.priority,
                 assigneeId: values.assigneeId,
@@ -1066,6 +1142,10 @@ export default function ProjectTasks({
 export type FormValues = {
   title: string;
   description: string;
+  type: TaskType;
+  storyPoints: number | null;
+  rank: number;
+  acceptanceCriteria: string;
   status: Status;
   priority: Priority;
   assigneeId: string | null;
@@ -1092,6 +1172,18 @@ export function TaskFormModal({
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(
     task?.description ?? ""
+  );
+  const [type, setType] = useState<TaskType>(
+    task?.type ?? "TASK"
+  );
+  const [storyPoints, setStoryPoints] = useState(
+    task?.storyPoints?.toString() ?? ""
+  );
+  const [rank, setRank] = useState(
+    task?.rank?.toString() ?? "0"
+  );
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState(
+    task?.acceptanceCriteria ?? ""
   );
   const [status, setStatus] = useState<Status>(
     task?.status ?? "TODO"
@@ -1142,6 +1234,24 @@ export function TaskFormModal({
       return;
     }
 
+    const parsedStoryPoints = storyPoints.trim() === ""
+      ? null
+      : Number(storyPoints);
+    const parsedRank = Number(rank);
+
+    if (
+      (parsedStoryPoints !== null &&
+        (!Number.isInteger(parsedStoryPoints) ||
+          parsedStoryPoints < 0 ||
+          parsedStoryPoints > 100)) ||
+      !Number.isFinite(parsedRank) ||
+      parsedRank < 0 ||
+      parsedRank > 100_000
+    ) {
+      setError("Story Points باید عدد صحیح بین ۰ تا ۱۰۰ و Backlog Rank بین ۰ تا ۱۰۰٬۰۰۰ باشد.");
+      return;
+    }
+
     setSaving(true);
     setError("");
 
@@ -1149,6 +1259,10 @@ export function TaskFormModal({
       await onSubmit({
         title,
         description,
+        type,
+        storyPoints: parsedStoryPoints,
+        rank: parsedRank,
+        acceptanceCriteria,
         status,
         priority,
         assigneeId: assigneeId || null,
@@ -1234,6 +1348,68 @@ export function TaskFormModal({
                   setDescription(event.target.value)
                 }
                 placeholder="شرح فعالیت و خروجی موردانتظار..."
+              />
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="نوع کار">
+                <select
+                  className={inputClass}
+                  value={type}
+                  onChange={(event) =>
+                    setType(event.target.value as TaskType)
+                  }
+                >
+                  {Object.entries(taskTypeLabels).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </Field>
+
+              <Field label="Story Points (اختیاری، حداکثر ۱۰۰)">
+                <input
+                  className={inputClass}
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={storyPoints}
+                  onChange={(event) =>
+                    setStoryPoints(event.target.value)
+                  }
+                  placeholder="مثلاً ۸"
+                />
+              </Field>
+
+              <Field label="Backlog Rank (۰ تا ۱۰۰٬۰۰۰)">
+                <input
+                  className={inputClass}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="100000"
+                  step="any"
+                  value={rank}
+                  onChange={(event) => setRank(event.target.value)}
+                />
+              </Field>
+            </div>
+
+            <Field label="معیارهای پذیرش (اختیاری)">
+              <textarea
+                className={inputClass}
+                rows={3}
+                maxLength={5000}
+                value={acceptanceCriteria}
+                onChange={(event) =>
+                  setAcceptanceCriteria(event.target.value)
+                }
+                placeholder="شرایطی که نشان می‌دهد این کار قابل پذیرش است..."
               />
             </Field>
 

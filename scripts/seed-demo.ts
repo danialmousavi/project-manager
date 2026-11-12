@@ -264,7 +264,7 @@ async function main() {
     update: {
       name: "اسپرینت آماده‌سازی اپلیکیشن",
       goal: "تعیین محدوده نسخه اول و آماده‌سازی طراحی.",
-      status: "PLANNED",
+      status: "FUTURE",
       progress: 20,
       startDate: dates.mobileSprintStart,
       endDate: dates.mobileSprintEnd,
@@ -274,7 +274,7 @@ async function main() {
       id: ids.mobileSprint,
       name: "اسپرینت آماده‌سازی اپلیکیشن",
       goal: "تعیین محدوده نسخه اول و آماده‌سازی طراحی.",
-      status: "PLANNED",
+      status: "FUTURE",
       progress: 20,
       startDate: dates.mobileSprintStart,
       endDate: dates.mobileSprintEnd,

@@ -19,6 +19,10 @@ type Context = {
 const taskSchema = z.object({
   title: z.string().trim().min(3).max(200),
   description: z.string().trim().max(5000),
+  type: z.enum(["STORY", "TASK", "BUG"]).optional().default("TASK"),
+  storyPoints: z.number().int().min(0).max(100).nullable().optional().default(null),
+  rank: z.number().finite().min(0).max(100_000).optional().default(0),
+  acceptanceCriteria: z.string().trim().max(5000).nullable().optional().default(null),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   status: z.enum([
     "TODO",
@@ -41,6 +45,10 @@ const taskSelect = {
   id: true,
   title: true,
   description: true,
+  type: true,
+  storyPoints: true,
+  rank: true,
+  acceptanceCriteria: true,
   status: true,
   priority: true,
   assigneeId: true,
@@ -63,6 +71,10 @@ function serializeTask(task: {
   id: string;
   title: string;
   description: string | null;
+  type: string;
+  storyPoints: number | null;
+  rank: number;
+  acceptanceCriteria: string | null;
   status: string;
   priority: string;
   assigneeId: string | null;
@@ -253,6 +265,10 @@ export async function POST(
         data: {
           title: data.title,
           description: data.description || null,
+          type: data.type,
+          storyPoints: data.storyPoints,
+          rank: data.rank,
+          acceptanceCriteria: data.acceptanceCriteria || null,
           priority: data.priority,
           status: data.status,
           startDate: toDate(data.startDate),

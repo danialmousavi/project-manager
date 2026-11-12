@@ -41,7 +41,7 @@ enum ProjectMemberRole {
 }
 
 enum SprintStatus {
-  PLANNED
+  FUTURE
   ACTIVE
   COMPLETED
   CANCELLED
@@ -52,6 +52,12 @@ enum TaskStatus {
   IN_PROGRESS
   IN_REVIEW
   DONE
+}
+
+enum TaskType {
+  STORY
+  TASK
+  BUG
 }
 
 enum ProgressTarget {
@@ -153,7 +159,7 @@ model Sprint {
   id       String       @id @default(uuid())
   name     String
   goal     String?
-  status   SprintStatus @default(PLANNED)
+  status   SprintStatus @default(FUTURE)
   progress Int          @default(0)
 
   startDate DateTime?
@@ -164,11 +170,41 @@ model Sprint {
 
   tasks           Task[]
   progressHistory ProgressHistory[]
+  startSnapshot   SprintStartSnapshot?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([projectId, status])
+}
+
+model SprintStartSnapshot {
+  id                 String   @id @default(uuid())
+  sprintId           String   @unique
+  startedAt          DateTime @default(now())
+  plannedTaskCount   Int
+  plannedStoryPoints Int
+
+  sprint Sprint                    @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  tasks  SprintStartSnapshotTask[]
+}
+
+model SprintStartSnapshotTask {
+  id              String   @id @default(uuid())
+  snapshotId      String
+  taskId          String
+  title           String
+  type            TaskType
+  storyPoints     Int?
+  rank            Float
+  statusAtStart   TaskStatus
+  assigneeId      String?
+  createdAt       DateTime @default(now())
+
+  snapshot SprintStartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, taskId])
+  @@index([taskId])
 }
 
 // ==================================
@@ -179,6 +215,11 @@ model Task {
   id          String  @id @default(uuid())
   title       String
   description String?
+
+  type               TaskType @default(TASK)
+  storyPoints        Int?
+  rank               Float    @default(0)
+  acceptanceCriteria String?
 
   status   TaskStatus @default(TODO)
   priority Priority   @default(MEDIUM)
@@ -211,6 +252,7 @@ model Task {
   updatedAt DateTime @updatedAt
 
   @@index([projectId, status, position])
+  @@index([projectId, rank])
   @@index([assigneeId, status])
   @@index([sprintId])
   @@index([dueDate])
