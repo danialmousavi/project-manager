@@ -25,6 +25,7 @@ let db: PrismaClient;
 let projectsRoute: typeof import("../../app/api/v1/projects/route");
 let projectRoute: typeof import("../../app/api/v1/projects/[id]/route");
 let taskListRoute: typeof import("../../app/api/v1/projects/[id]/tasks/route");
+let epicsRoute: typeof import("../../app/api/v1/projects/[id]/epics/route");
 let taskRoute: typeof import("../../app/api/v1/tasks/[id]/route");
 let sprintRoute: typeof import("../../app/api/v1/projects/[id]/sprints/route");
 let membersRoute: typeof import("../../app/api/v1/projects/[id]/members/route");
@@ -47,10 +48,11 @@ beforeAll(async () => {
   process.env.DATABASE_URL = testUrl;
   db = new PrismaClient({ adapter: new PrismaPg({ connectionString: testUrl }) });
   await db.$connect();
-  [projectsRoute, projectRoute, taskListRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute] = await Promise.all([
+  [projectsRoute, projectRoute, taskListRoute, epicsRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute] = await Promise.all([
     import("../../app/api/v1/projects/route"),
     import("../../app/api/v1/projects/[id]/route"),
     import("../../app/api/v1/projects/[id]/tasks/route"),
+    import("../../app/api/v1/projects/[id]/epics/route"),
     import("../../app/api/v1/tasks/[id]/route"),
     import("../../app/api/v1/projects/[id]/sprints/route"),
     import("../../app/api/v1/projects/[id]/members/route"),
@@ -67,6 +69,7 @@ beforeEach(async () => {
   await db.taskComment.deleteMany();
   await db.progressHistory.deleteMany();
   await db.task.deleteMany();
+  await db.epic.deleteMany();
   await db.sprintEndSnapshot.deleteMany();
   await db.sprintStartSnapshotTask.deleteMany();
   await db.sprintStartSnapshot.deleteMany();
@@ -205,6 +208,71 @@ describe("authorization and input validation through real route handlers", () =>
       request("PATCH", `tasks/${task.id}`, { ...payload, rank: 100_001 }),
       context(task.id)
     )).status).toBe(400);
+  });
+
+  it("creates project epics and permits one-level subtasks only within the project", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const project = await projectFactory(db, admin.id, manager.id);
+    const other = await projectFactory(db, admin.id, manager.id);
+    const foreignTask = await taskFactory(db, other.id, admin.id);
+    actor = manager;
+
+    const epicResponse = await epicsRoute.POST(
+      request("POST", `projects/${project.id}/epics`, { name: "Release foundation", description: "First release scope" }),
+      context(project.id)
+    );
+    expect(epicResponse.status).toBe(201);
+    const { epic } = await epicResponse.json() as { epic: { id: string } };
+
+    const parentResponse = await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, {
+        title: "Design the foundation", description: "", type: "STORY", storyPoints: 5, rank: 1,
+        acceptanceCriteria: null, epicId: epic.id, parentTaskId: null, priority: "HIGH", status: "TODO",
+        assigneeId: null, startDate: null, dueDate: null,
+      }),
+      context(project.id)
+    );
+    expect(parentResponse.status).toBe(201);
+    const { task: parent } = await parentResponse.json() as { task: { id: string; epicId: string | null } };
+    expect(parent.epicId).toBe(epic.id);
+
+    const subtaskResponse = await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, {
+        title: "Create wireframes", description: "", type: "TASK", storyPoints: 2, rank: 2,
+        acceptanceCriteria: null, epicId: epic.id, parentTaskId: parent.id, priority: "MEDIUM", status: "TODO",
+        assigneeId: null, startDate: null, dueDate: null,
+      }),
+      context(project.id)
+    );
+    expect(subtaskResponse.status).toBe(201);
+    const { task: subtask } = await subtaskResponse.json() as { task: { id: string } };
+
+    expect((await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, {
+        title: "Invalid nested task", description: "", type: "TASK", storyPoints: null, rank: 3,
+        acceptanceCriteria: null, epicId: epic.id, parentTaskId: subtask.id, priority: "LOW", status: "TODO",
+        assigneeId: null, startDate: null, dueDate: null,
+      }), context(project.id)
+    )).status).toBe(400);
+
+    expect((await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, {
+        title: "Foreign parent task", description: "", type: "TASK", storyPoints: null, rank: 4,
+        acceptanceCriteria: null, epicId: epic.id, parentTaskId: foreignTask.id, priority: "LOW", status: "TODO",
+        assigneeId: null, startDate: null, dueDate: null,
+      }), context(project.id)
+    )).status).toBe(400);
+
+    const listed = await epicsRoute.GET(request("GET", `projects/${project.id}/epics`), context(project.id));
+    expect(listed.status).toBe(200);
+    await expect(listed.json()).resolves.toMatchObject({ epics: [{ id: epic.id, _count: { tasks: 2 }, tasks: [{ id: parent.id }, { id: subtask.id }] }] });
+
+    const details = await taskRoute.GET(request("GET", `tasks/${parent.id}`), context(parent.id));
+    expect(details.status).toBe(200);
+    await expect(details.json()).resolves.toMatchObject({
+      task: { id: parent.id, epic: { id: epic.id }, subtasks: [{ id: subtask.id }] },
+    });
   });
 
   it("starts one future sprint and preserves its planned-task snapshot", async () => {

@@ -5,9 +5,10 @@ import { GripVertical, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
 
 type TaskType = "STORY" | "TASK" | "BUG";
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-type Task = { id: string; title: string; description: string | null; acceptanceCriteria: string | null; type: TaskType; storyPoints: number | null; rank: number; priority: Priority; status: string; sprintId: string | null; assignee: { id: string; name: string } | null };
+type Task = { id: string; title: string; description: string | null; acceptanceCriteria: string | null; type: TaskType; storyPoints: number | null; rank: number; priority: Priority; status: string; sprintId: string | null; epicId: string | null; parentTaskId: string | null; epic: { id: string; name: string } | null; parentTask: { id: string; title: string } | null; _count: { subtasks: number }; assignee: { id: string; name: string } | null };
 type Sprint = { id: string; name: string; goal: string | null; status: "ACTIVE" | "FUTURE"; tasks: Task[]; storyPoints: number };
 type Data = { canManage: boolean; activeSprint: Sprint | null; futureSprints: Sprint[]; backlog: Task[]; backlogStoryPoints: number };
+type Epic = { id: string; name: string; description: string | null; _count: { tasks: number } };
 
 const typeLabel: Record<TaskType, string> = { STORY: "Story", TASK: "Task", BUG: "Bug" };
 const priorityLabel: Record<Priority, string> = { LOW: "کم", MEDIUM: "متوسط", HIGH: "زیاد", URGENT: "فوری" };
@@ -20,6 +21,9 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
   const [assigneeId, setAssigneeId] = useState("");
   const [type, setType] = useState("");
   const [priority, setPriority] = useState("");
+  const [epicId, setEpicId] = useState("");
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [newEpicName, setNewEpicName] = useState("");
   const [dragged, setDragged] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
   const [search, setSearch] = useState("");
@@ -32,14 +36,16 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
       if (assigneeId) params.set("assigneeId", assigneeId);
       if (type) params.set("type", type);
       if (priority) params.set("priority", priority);
-      const response = await fetch(`/api/v1/projects/${projectId}/backlog?${params}`, { cache: "no-store", credentials: "same-origin" });
-      const body = await response.json();
+      if (epicId) params.set("epicId", epicId);
+      const [response, epicsResponse] = await Promise.all([fetch(`/api/v1/projects/${projectId}/backlog?${params}`, { cache: "no-store", credentials: "same-origin" }), fetch(`/api/v1/projects/${projectId}/epics`, { cache: "no-store", credentials: "same-origin" })]);
+      const [body, epicsBody] = await Promise.all([response.json(), epicsResponse.json()]);
       if (!response.ok) throw new Error(body.message || "دریافت بک‌لاگ ناموفق بود.");
       setData(body);
+      if (epicsResponse.ok) setEpics(epicsBody.epics ?? []);
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "خطایی رخ داد."); }
     finally { setLoading(false); }
-  }, [assigneeId, priority, projectId, type]);
+  }, [assigneeId, epicId, priority, projectId, type]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -75,6 +81,21 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
     finally { setBusy(false); }
   }
 
+  async function createEpic(event: React.FormEvent) {
+    event.preventDefault();
+    const name = newEpicName.trim();
+    if (name.length < 3) return setError("نام Epic باید حداقل ۳ کاراکتر باشد.");
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/v1/projects/${projectId}/epics`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description: null }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "ایجاد Epic ناموفق بود.");
+      setNewEpicName("");
+      await load();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "خطایی رخ داد."); }
+    finally { setBusy(false); }
+  }
+
   function dropOnTask(taskId: string, target: Task) {
     const source = allTasks.find((task) => task.id === taskId);
     if (!source || source.id === target.id) return;
@@ -92,7 +113,8 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
   return <div dir="rtl" className="space-y-3">
     <header className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-extrabold">Product Backlog</h2><p className="mt-0.5 text-xs text-slate-500">برنامه‌ریزی و اولویت‌بندی تسک‌های پروژه</p></div><button onClick={() => void load()} disabled={loading || busy} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50"><RefreshCw size={14} />به‌روزرسانی</button></header>
     {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-    <div className="grid gap-2 rounded-xl border border-emerald-100 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="جست‌وجو در تسک‌ها..." className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs" /><select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه مسئول‌ها</option>{assignees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه نوع‌ها</option>{Object.entries(typeLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><select value={priority} onChange={(event) => setPriority(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه اولویت‌ها</option>{Object.entries(priorityLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
+    {data?.canManage && <form onSubmit={createEpic} className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3"><span className="text-xs font-bold text-indigo-900">Epic جدید</span><input value={newEpicName} onChange={(event) => setNewEpicName(event.target.value)} maxLength={150} placeholder="مثلاً: نسخه اول محصول" className="min-w-48 flex-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-xs" /><button disabled={busy} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">ایجاد Epic</button></form>}
+    <div className="grid gap-2 rounded-xl border border-emerald-100 bg-white p-3 sm:grid-cols-2 lg:grid-cols-5"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="جست‌وجو در تسک‌ها..." className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs" /><select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه مسئول‌ها</option>{assignees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه نوع‌ها</option>{Object.entries(typeLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><select value={priority} onChange={(event) => setPriority(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه اولویت‌ها</option>{Object.entries(priorityLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><select value={epicId} onChange={(event) => setEpicId(event.target.value)} className="rounded-lg border border-indigo-200 bg-indigo-50/40 px-2.5 py-1.5 text-xs"><option value="">همه Epicها</option>{epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}</select></div>
     {data?.canManage && <form onSubmit={quickCreate} className="flex flex-wrap gap-2 rounded-xl border border-emerald-100 bg-white p-3"><input value={quickTitle} onChange={(event) => setQuickTitle(event.target.value)} maxLength={200} placeholder="ایجاد سریع تسک در بک‌لاگ..." className="min-w-52 flex-1 rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs" /><button disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"><Plus size={14} />افزودن تسک</button></form>}
     {data?.activeSprint && <SprintSection sprint={data.activeSprint} search={search} sprints={sprints} canManage={data.canManage} busy={busy} dragged={dragged} onDrag={setDragged} onOpen={setSelectedTask} onDropTask={dropOnTask} onDrop={(taskId) => void patch({ action: "MOVE_TASK", taskId, sprintId: data.activeSprint!.id })} onMove={(taskId, sprintId) => void patch({ action: "MOVE_TASK", taskId, sprintId })} onRank={(taskId, rank) => void patch({ action: "REORDER_TASK", taskId, rank })} />}
     {data?.futureSprints.map((sprint) => <SprintSection key={sprint.id} sprint={sprint} search={search} sprints={sprints} canManage={data.canManage} busy={busy} dragged={dragged} onDrag={setDragged} onOpen={setSelectedTask} onDropTask={dropOnTask} onDrop={(taskId) => void patch({ action: "MOVE_TASK", taskId, sprintId: sprint.id })} onMove={(taskId, sprintId) => void patch({ action: "MOVE_TASK", taskId, sprintId })} onRank={(taskId, rank) => void patch({ action: "REORDER_TASK", taskId, rank })} />)}
@@ -110,7 +132,7 @@ function TaskList({ tasks, search, canManage, busy, dragged, sprints, onDrag, on
   const visible = tasks.filter((task) => task.title.toLocaleLowerCase("fa-IR").includes(search.toLocaleLowerCase("fa-IR")) || (task.assignee?.name ?? "").toLocaleLowerCase("fa-IR").includes(search.toLocaleLowerCase("fa-IR")));
   const shown = visible.slice(0, limit);
   if (!visible.length) return <p className="py-5 text-sm text-slate-500">تسکی مطابق فیلتر یا جست‌وجو وجود ندارد.</p>;
-  return <div className="space-y-1.5">{shown.map((task) => <article key={task.id} draggable={canManage && !busy} onDragStart={() => onDrag(task.id)} onDragEnd={() => onDrag(null)} onDragOver={(event) => { if (canManage) { event.preventDefault(); event.stopPropagation(); } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged) onDropTask(dragged, task); }} onClick={() => onOpen(task)} className={`flex cursor-pointer flex-wrap items-center gap-2 rounded-lg border bg-white px-2.5 py-2 transition hover:border-emerald-300 hover:shadow-sm ${dragged === task.id ? "opacity-50" : ""}`}><GripVertical size={14} className="text-slate-400" /><div className="min-w-40 flex-1"><p className="text-sm font-semibold">{task.title}</p><p className="mt-0.5 text-[11px] text-slate-500">{typeLabel[task.type]} · {priorityLabel[task.priority]} · {task.storyPoints ?? "—"} SP · {task.assignee?.name ?? "بدون مسئول"}</p></div>{canManage && <><input aria-label={`رتبه ${task.title}`} type="number" min="0" max="100000" defaultValue={task.rank} onClick={(event) => event.stopPropagation()} onBlur={(event) => { const rank = Number(event.target.value); if (Number.isFinite(rank) && rank !== task.rank) onRank(task.id, rank); }} className="w-20 rounded-md border px-1.5 py-1 text-[11px]" /><select value={task.sprintId ?? ""} disabled={busy} onClick={(event) => event.stopPropagation()} onChange={(event) => onMove(task.id, event.target.value || null)} className="max-w-32 rounded-md border px-1.5 py-1 text-[11px]"><option value="">Backlog</option>{sprints.map((sprint) => <option key={sprint.id} value={sprint.id}>{sprint.name}</option>)}</select></>}</article>)}{visible.length > shown.length && <button type="button" onClick={() => setLimit((value) => value + 20)} className="w-full rounded-lg border border-emerald-200 bg-emerald-50 py-1.5 text-xs font-semibold text-emerald-700">نمایش ۲۰ تسک دیگر ({(visible.length - shown.length).toLocaleString("fa-IR")})</button>}</div>;
+  return <div className="space-y-1.5">{shown.map((task) => <article key={task.id} draggable={canManage && !busy} onDragStart={() => onDrag(task.id)} onDragEnd={() => onDrag(null)} onDragOver={(event) => { if (canManage) { event.preventDefault(); event.stopPropagation(); } }} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); if (dragged) onDropTask(dragged, task); }} onClick={() => onOpen(task)} className={`flex cursor-pointer flex-wrap items-center gap-2 rounded-lg border bg-white px-2.5 py-2 transition hover:border-emerald-300 hover:shadow-sm ${dragged === task.id ? "opacity-50" : ""}`}><GripVertical size={14} className="text-slate-400" /><div className="min-w-40 flex-1"><p className="text-sm font-semibold">{task.title}</p><p className="mt-0.5 text-[11px] text-slate-500">{typeLabel[task.type]} · {priorityLabel[task.priority]} · {task.storyPoints ?? "—"} SP · {task.assignee?.name ?? "بدون مسئول"}</p>{task.epic && <span className="mt-1 inline-block rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">Epic: {task.epic.name}</span>}{task.parentTask && <span className="mt-1 mr-1 inline-block rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">زیرتسکِ {task.parentTask.title}</span>}{task._count.subtasks > 0 && <span className="mt-1 mr-1 inline-block rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">{task._count.subtasks.toLocaleString("fa-IR")} زیرتسک</span>}</div>{canManage && <><input aria-label={`رتبه ${task.title}`} type="number" min="0" max="100000" defaultValue={task.rank} onClick={(event) => event.stopPropagation()} onBlur={(event) => { const rank = Number(event.target.value); if (Number.isFinite(rank) && rank !== task.rank) onRank(task.id, rank); }} className="w-20 rounded-md border px-1.5 py-1 text-[11px]" /><select value={task.sprintId ?? ""} disabled={busy} onClick={(event) => event.stopPropagation()} onChange={(event) => onMove(task.id, event.target.value || null)} className="max-w-32 rounded-md border px-1.5 py-1 text-[11px]"><option value="">Backlog</option>{sprints.map((sprint) => <option key={sprint.id} value={sprint.id}>{sprint.name}</option>)}</select></>}</article>)}{visible.length > shown.length && <button type="button" onClick={() => setLimit((value) => value + 20)} className="w-full rounded-lg border border-emerald-200 bg-emerald-50 py-1.5 text-xs font-semibold text-emerald-700">نمایش ۲۰ تسک دیگر ({(visible.length - shown.length).toLocaleString("fa-IR")})</button>}</div>;
 }
 
 function TaskDetailsModal({ task, onClose }: { task: Task; onClose: () => void }) {

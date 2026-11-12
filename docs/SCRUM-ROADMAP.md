@@ -64,7 +64,23 @@ summary, a choice between returning unfinished work to the backlog or moving
 it to a future sprint, and a persistent final-report panel on completed
 sprints.
 
-## Tasks 6–7
+## Task 6 — Epics and subtasks
+
+- Backend: complete
+- Frontend: complete
+
+Implemented: an Epic belongs to exactly one project and groups existing work
+items without introducing a new task type. A task can reference one Epic and
+can have one direct parent task; only one subtask level is allowed. APIs
+validate project ownership, reject cross-project links and nested/cyclic task
+relationships, list an Epic with its visible tasks, expose task detail with
+subtasks, and filter the product backlog by Epic.
+The task form supports assigning an Epic and choosing a direct parent task;
+task lists and expanded task details display Epic, parent, and direct-subtask
+context. The backlog adds Epic creation, task-count context, and an Epic
+filter while retaining its existing compact workflow.
+
+## Task 7
 
 - Backend: not started
 - Frontend: not started

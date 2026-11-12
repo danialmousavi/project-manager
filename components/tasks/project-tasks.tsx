@@ -65,6 +65,10 @@ type Task = {
   storyPoints: number | null;
   rank: number;
   acceptanceCriteria: string | null;
+  epicId: string | null;
+  parentTaskId: string | null;
+  epic: { id: string; name: string } | null;
+  parentTask: { id: string; title: string; type: TaskType } | null;
   status: Status;
   priority: Priority;
   assigneeId: string | null;
@@ -78,8 +82,12 @@ type Task = {
   updatedAt: string;
   _count: {
     comments: number;
+    subtasks: number;
   };
 };
+
+type Epic = { id: string; name: string; description: string | null; _count: { tasks: number } };
+type TaskDetail = { epic: { id: string; name: string } | null; parentTask: { id: string; title: string } | null; subtasks: { id: string; title: string; type: TaskType; status: Status; storyPoints: number | null }[] };
 
 type Comment = {
   id: string;
@@ -248,6 +256,7 @@ export default function ProjectTasks({
   actorRole,
 }: Props) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [epics, setEpics] = useState<Epic[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -271,6 +280,7 @@ export default function ProjectTasks({
   const [history, setHistory] =
     useState<HistoryItem[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [taskDetail, setTaskDetail] = useState<TaskDetail | null>(null);
   const [commentText, setCommentText] = useState("");
 
   const [newAssigneeId, setNewAssigneeId] = useState("");
@@ -291,12 +301,11 @@ export default function ProjectTasks({
 
   const loadTasks = useCallback(async () => {
     try {
-      const response = await fetch(
-        `/api/v1/projects/${projectId}/tasks`,
-        { cache: "no-store" }
-      );
-
-      const data = await response.json();
+      const [response, epicsResponse] = await Promise.all([
+        fetch(`/api/v1/projects/${projectId}/tasks`, { cache: "no-store" }),
+        fetch(`/api/v1/projects/${projectId}/epics`, { cache: "no-store" }),
+      ]);
+      const [data, epicsData] = await Promise.all([response.json(), epicsResponse.json()]);
 
       if (!response.ok) {
         throw new Error(
@@ -305,6 +314,7 @@ export default function ProjectTasks({
       }
 
       setTasks(data.tasks ?? []);
+      if (epicsResponse.ok) setEpics(epicsData.epics ?? []);
       const taskId = window.location.hash.match(/^#task-([0-9a-f-]{36})$/i)?.[1];
       if (taskId && data.tasks?.some((task: Task) => task.id === taskId)) {
         window.setTimeout(() => document.getElementById(`task-${taskId}`)?.scrollIntoView({ block: "center" }), 0);
@@ -368,12 +378,14 @@ export default function ProjectTasks({
     setAssignmentNote("");
     setComments([]);
     setHistory([]);
+    setTaskDetail(null);
     setCommentText("");
     setDetailLoading(true);
     setError("");
 
     try {
       const urls = [
+        `/api/v1/tasks/${task.id}`,
         `/api/v1/tasks/${task.id}/comments`,
         ...(canManage
           ? [`/api/v1/tasks/${task.id}/history`]
@@ -399,10 +411,11 @@ export default function ProjectTasks({
         }
       }
 
-      setComments(payloads[0].comments ?? []);
+      setTaskDetail(payloads[0].task ?? null);
+      setComments(payloads[1].comments ?? []);
 
       if (canManage) {
-        setHistory(payloads[1].history ?? []);
+        setHistory(payloads[2].history ?? []);
       }
     } catch (error) {
       setError(messageOf(error));
@@ -730,6 +743,10 @@ export default function ProjectTasks({
                           "بدون مسئول"}
                       </span>
 
+                      {task.epic && <span className="rounded-md bg-indigo-50 px-2 py-1 font-semibold text-indigo-700">Epic: {task.epic.name}</span>}
+
+                      {task.parentTask && <span className="rounded-md bg-sky-50 px-2 py-1 font-semibold text-sky-700">زیرتسکِ {task.parentTask.title}</span>}
+
                       {task.dueDate && (
                         <span className="inline-flex items-center gap-1">
                           <CalendarDays size={14} />
@@ -857,6 +874,14 @@ export default function ProjectTasks({
                                 <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-violet-950">
                                   {task.acceptanceCriteria}
                                 </p>
+                              </div>
+                            )}
+
+                            {taskDetail && (
+                              <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+                                <h5 className="text-xs font-bold text-indigo-800">Epic و زیرتسک‌ها</h5>
+                                <p className="mt-2 text-sm text-indigo-950">{taskDetail.epic ? `Epic: ${taskDetail.epic.name}` : "به Epic متصل نیست"}{taskDetail.parentTask ? ` · زیرتسکِ ${taskDetail.parentTask.title}` : ""}</p>
+                                {taskDetail.subtasks.length > 0 && <ul className="mt-2 space-y-1 text-xs text-indigo-900">{taskDetail.subtasks.map((subtask) => <li key={subtask.id} className="rounded-lg bg-white/80 px-2 py-1.5">{subtask.title} · {taskTypeLabels[subtask.type]} · {statusLabels[subtask.status]}</li>)}</ul>}
                               </div>
                             )}
 
@@ -1066,6 +1091,8 @@ export default function ProjectTasks({
           title="ایجاد وظیفه جدید"
           submitLabel="ثبت وظیفه"
           assignees={assignees}
+          epics={epics}
+          parentTasks={tasks.filter((task) => !task.parentTaskId)}
           onClose={() => setCreating(false)}
           onSubmit={async (values) => {
             const data = await sendApi(
@@ -1078,6 +1105,8 @@ export default function ProjectTasks({
                 storyPoints: values.storyPoints,
                 rank: values.rank,
                 acceptanceCriteria: values.acceptanceCriteria,
+                epicId: values.epicId,
+                parentTaskId: values.parentTaskId,
                 status: values.status,
                 priority: values.priority,
                 assigneeId: values.assigneeId,
@@ -1104,6 +1133,8 @@ export default function ProjectTasks({
           submitLabel="ذخیره تغییرات"
           task={editingTask}
           assignees={assignees}
+          epics={epics}
+          parentTasks={tasks.filter((task) => !task.parentTaskId && task.id !== editingTask.id)}
           onClose={() => setEditingTask(null)}
           onSubmit={async (values) => {
             const taskId = editingTask.id;
@@ -1146,6 +1177,8 @@ export type FormValues = {
   storyPoints: number | null;
   rank: number;
   acceptanceCriteria: string;
+  epicId: string | null;
+  parentTaskId: string | null;
   status: Status;
   priority: Priority;
   assigneeId: string | null;
@@ -1159,6 +1192,8 @@ export function TaskFormModal({
   submitLabel,
   task,
   assignees,
+  epics = [],
+  parentTasks = [],
   onClose,
   onSubmit,
 }: {
@@ -1166,6 +1201,8 @@ export function TaskFormModal({
   submitLabel: string;
   task?: Task;
   assignees: Member[];
+  epics?: Epic[];
+  parentTasks?: Task[];
   onClose: () => void;
   onSubmit: (values: FormValues) => Promise<void>;
 }) {
@@ -1185,6 +1222,8 @@ export function TaskFormModal({
   const [acceptanceCriteria, setAcceptanceCriteria] = useState(
     task?.acceptanceCriteria ?? ""
   );
+  const [epicId, setEpicId] = useState(task?.epicId ?? "");
+  const [parentTaskId, setParentTaskId] = useState(task?.parentTaskId ?? "");
   const [status, setStatus] = useState<Status>(
     task?.status ?? "TODO"
   );
@@ -1263,6 +1302,8 @@ export function TaskFormModal({
         storyPoints: parsedStoryPoints,
         rank: parsedRank,
         acceptanceCriteria,
+        epicId: epicId || null,
+        parentTaskId: parentTaskId || null,
         status,
         priority,
         assigneeId: assigneeId || null,
@@ -1412,6 +1453,21 @@ export function TaskFormModal({
                 placeholder="شرایطی که نشان می‌دهد این کار قابل پذیرش است..."
               />
             </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Epic (اختیاری)">
+                <select className={inputClass} value={epicId} onChange={(event) => setEpicId(event.target.value)}>
+                  <option value="">بدون Epic</option>
+                  {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
+                </select>
+              </Field>
+              <Field label="تسک والد / Subtask (اختیاری)">
+                <select className={inputClass} value={parentTaskId} onChange={(event) => setParentTaskId(event.target.value)}>
+                  <option value="">آیتم سطح اول</option>
+                  {parentTasks.map((parent) => <option key={parent.id} value={parent.id}>{parent.title}</option>)}
+                </select>
+              </Field>
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="مسئول وظیفه">

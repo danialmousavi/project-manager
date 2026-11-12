@@ -11,6 +11,8 @@ export type TaskFieldName =
   | "storyPoints"
   | "rank"
   | "acceptanceCriteria"
+  | "epicId"
+  | "parentTaskId"
   | "sprintId"
   | "startDate"
   | "dueDate";
@@ -35,6 +37,8 @@ const allowedFields = new Set<TaskFieldName>([
   "storyPoints",
   "rank",
   "acceptanceCriteria",
+  "epicId",
+  "parentTaskId",
   "sprintId",
   "startDate",
   "dueDate",

@@ -20,6 +20,10 @@ const updateSchema = z.discriminatedUnion("action", [
 const taskSelect = {
   id: true, title: true, description: true, acceptanceCriteria: true, type: true, storyPoints: true, rank: true,
   priority: true, status: true, sprintId: true, assigneeId: true,
+  epicId: true, parentTaskId: true,
+  epic: { select: { id: true, name: true } },
+  parentTask: { select: { id: true, title: true, type: true } },
+  _count: { select: { subtasks: { where: { deletedAt: null } } } },
   assignee: { select: { id: true, name: true } },
 } as const;
 
@@ -44,7 +48,9 @@ export async function GET(request: NextRequest, context: Context) {
   const assigneeId = request.nextUrl.searchParams.get("assigneeId");
   const type = request.nextUrl.searchParams.get("type");
   const priority = request.nextUrl.searchParams.get("priority");
+  const epicId = request.nextUrl.searchParams.get("epicId");
   if ((assigneeId && !uuid.safeParse(assigneeId).success) ||
+      (epicId && !uuid.safeParse(epicId).success) ||
       (type && !["STORY", "TASK", "BUG"].includes(type)) ||
       (priority && !["LOW", "MEDIUM", "HIGH", "URGENT"].includes(priority))) {
     return fail("فیلتر بک‌لاگ معتبر نیست.", 400);
@@ -61,6 +67,7 @@ export async function GET(request: NextRequest, context: Context) {
     ...(assigneeId ? { assigneeId } : {}),
     ...(type ? { type: type as "STORY" | "TASK" | "BUG" } : {}),
     ...(priority ? { priority: priority as "LOW" | "MEDIUM" | "HIGH" | "URGENT" } : {}),
+    ...(epicId ? { epicId } : {}),
   };
 
   const [sprints, tasks] = await Promise.all([
