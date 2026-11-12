@@ -38,7 +38,7 @@ type Project = {
   progress: number;
   createdAt: string;
   members: {
-    role: "MANAGER" | "MEMBER";
+    role: "MANAGER" | "MEMBER" | "CONTROLLER";
     user: {
       id: string;
       name: string;
@@ -101,6 +101,9 @@ export default function ProjectsManager({
   const [employees, setEmployees] = useState<
     SelectableUser[]
   >([]);
+  const [controllers, setControllers] = useState<
+    SelectableUser[]
+  >([]);
 
   const [startDate, setStartDate] = useState<
     string | null
@@ -121,6 +124,7 @@ export default function ProjectsManager({
     setPriority("MEDIUM");
     setManagers([]);
     setEmployees([]);
+    setControllers([]);
     setStartDate(null);
     setDueDate(null);
   }
@@ -165,6 +169,7 @@ export default function ProjectsManager({
           priority,
           managerIds: managers.map((user) => user.id),
           memberIds: employees.map((user) => user.id),
+          controllerIds: controllers.map((user) => user.id),
           startDate,
           dueDate,
         }),
@@ -196,6 +201,13 @@ export default function ProjectsManager({
           })),
           ...employees.map((user) => ({
             role: "MEMBER" as const,
+            user: {
+              id: user.id,
+              name: user.name,
+            },
+          })),
+          ...controllers.map((user) => ({
+            role: "CONTROLLER" as const,
             user: {
               id: user.id,
               name: user.name,
@@ -370,7 +382,7 @@ export default function ProjectsManager({
               />
             </div>
 
-            <div className="grid items-start gap-3 md:grid-cols-2">
+            <div className="grid items-start gap-3 md:grid-cols-3">
               <UserMultiSelect
                 label="مدیران پروژه"
                 role="MANAGER"
@@ -380,11 +392,19 @@ export default function ProjectsManager({
               />
 
               <UserMultiSelect
-                label="کارمندان پروژه"
+                label="کارشناسان عملیاتی پروژه"
                 role="EMPLOYEE"
                 selected={employees}
                 onChange={setEmployees}
                 placeholder="انتخاب کارمندان پروژه..."
+              />
+
+              <UserMultiSelect
+                label="ناظران کنترل پروژه"
+                role="CONTROLLER"
+                selected={controllers}
+                onChange={setControllers}
+                placeholder="انتخاب ناظران کنترل پروژه..."
               />
             </div>
 

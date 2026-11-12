@@ -42,9 +42,12 @@ export async function getDashboardData(actor: DashboardActor) {
   });
 
   const ids = projects.map((project) => project.id);
-  const managedIds = actor.role === "ADMIN" || actor.role === "CONTROLLER"
+  const managedIds = actor.role === "ADMIN"
     ? ids
-    : projects.filter((project) => actor.role === "MANAGER" && project.members.some((member) => member.role === "MANAGER")).map((project) => project.id);
+    : projects.filter((project) =>
+      (actor.role === "MANAGER" && project.members.some((member) => member.role === "MANAGER")) ||
+      actor.role === "CONTROLLER"
+    ).map((project) => project.id);
 
   // The task-level permission matches the existing task API: admins and
   // project managers see team work; other members see their assignments.

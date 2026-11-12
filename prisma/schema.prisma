@@ -37,6 +37,7 @@ enum Priority {
 enum ProjectMemberRole {
   MANAGER
   MEMBER
+  CONTROLLER
 }
 
 enum SprintStatus {

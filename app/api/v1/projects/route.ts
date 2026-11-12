@@ -12,6 +12,7 @@ const schema = z.object({
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   managerIds: z.array(z.uuid()).min(1).max(100),
   memberIds: z.array(z.uuid()).max(500),
+  controllerIds: z.array(z.uuid()).max(100).optional(),
   startDate: z.iso.date().nullable(),
   dueDate: z.iso.date().nullable(),
 }).strict();
@@ -72,9 +73,11 @@ export async function POST(request: NextRequest) {
 
   const managerIds = [...new Set(data.managerIds)];
   const memberIds = [...new Set(data.memberIds)];
+  const controllerIds = [...new Set(data.controllerIds ?? [])];
 
   if (
-    memberIds.some((id) => managerIds.includes(id))
+    memberIds.some((id) => managerIds.includes(id)) ||
+    controllerIds.some((id) => managerIds.includes(id) || memberIds.includes(id))
   ) {
     return NextResponse.json(
       { message: "یک نفر نمی‌تواند دو نقش عضویت داشته باشد." },
@@ -82,7 +85,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ids = [...managerIds, ...memberIds];
+  const ids = [...managerIds, ...memberIds, ...controllerIds];
 
   try {
     const users = await prisma.user.findMany({
@@ -107,6 +110,9 @@ export async function POST(request: NextRequest) {
       ) &&
       memberIds.every(
         (id) => roles.get(id) === "EMPLOYEE"
+      ) &&
+      controllerIds.every(
+        (id) => roles.get(id) === "CONTROLLER"
       );
 
     if (!valid) {
@@ -135,6 +141,10 @@ export async function POST(request: NextRequest) {
             ...memberIds.map((userId) => ({
               userId,
               role: "MEMBER" as const,
+            })),
+            ...controllerIds.map((userId) => ({
+              userId,
+              role: "CONTROLLER" as const,
             })),
           ],
         },

@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const querySchema = z.object({
-  role: z.enum(["MANAGER", "EMPLOYEE"]),
+  role: z.enum(["MANAGER", "EMPLOYEE", "CONTROLLER"]),
   q: z.string().trim().max(100).default(""),
   projectId: z.uuid().optional(),
 });
