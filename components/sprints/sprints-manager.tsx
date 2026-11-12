@@ -55,9 +55,12 @@ type Task = {
   id: string;
   title: string;
   description: string | null;
+  type: "STORY" | "TASK" | "BUG";
+  storyPoints: number | null;
+  rank: number;
+  acceptanceCriteria: string | null;
   status: TaskStatus;
   priority: Priority;
-  storyPoints: number | null;
   startDate: string | null;
   dueDate: string | null;
   sprintId: string | null;
@@ -66,6 +69,12 @@ type Task = {
     id: string;
     name: string;
   } | null;
+};
+
+type TaskDetail = {
+  epic: { id: string; name: string } | null;
+  parentTask: { id: string; title: string; type: "STORY" | "TASK" | "BUG" } | null;
+  subtasks: { id: string; title: string; type: "STORY" | "TASK" | "BUG"; status: TaskStatus; storyPoints: number | null }[];
 };
 
 type Props = {
@@ -260,6 +269,8 @@ export default function SprintsManager({
 
   const [editingTask, setEditingTask] =
     useState<Task | null>(null);
+  const [taskDetail, setTaskDetail] = useState<TaskDetail | null>(null);
+  const [taskDetailLoading, setTaskDetailLoading] = useState(false);
 
   const [taskStart, setTaskStart] =
     useState<string | null>(null);
@@ -577,6 +588,20 @@ export default function SprintsManager({
     setTaskStart(task.startDate);
     setTaskEnd(task.dueDate);
     setFormError("");
+    setTaskDetail(null);
+    setTaskDetailLoading(true);
+    void (async () => {
+      try {
+        const response = await fetch(`/api/v1/tasks/${task.id}`, { cache: "no-store", credentials: "same-origin" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "دریافت جزئیات تسک ناموفق بود.");
+        setTaskDetail(data.task ?? null);
+      } catch (err) {
+        setFormError(getError(err));
+      } finally {
+        setTaskDetailLoading(false);
+      }
+    })();
   }
 
   function openTaskDates(task: Task) {
@@ -1789,6 +1814,23 @@ export default function SprintsManager({
                 />
               </label>
 
+              <section className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-extrabold text-violet-950">اطلاعات کامل تسک</h4>
+                  {taskDetailLoading && <LoaderCircle size={16} className="animate-spin text-violet-600" />}
+                </div>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                  <Info label="نوع کار" value={editingTask.type} />
+                  <Info label="Story Points" value={editingTask.storyPoints === null ? "بدون برآورد" : editingTask.storyPoints.toLocaleString("fa-IR")} />
+                  <Info label="Backlog Rank" value={editingTask.rank.toLocaleString("fa-IR")} />
+                  <Info label="Epic" value={taskDetail?.epic?.name ?? "بدون Epic"} />
+                  <Info label="تسک والد" value={taskDetail?.parentTask?.title ?? "آیتم سطح اول"} />
+                  <Info label="مسئول" value={editingTask.assignee?.name ?? "بدون مسئول"} />
+                </div>
+                {editingTask.acceptanceCriteria && <div className="mt-3 rounded-xl bg-white/80 p-3"><p className="text-xs font-bold text-violet-800">معیارهای پذیرش</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{editingTask.acceptanceCriteria}</p></div>}
+                {taskDetail && taskDetail.subtasks.length > 0 && <div className="mt-3"><p className="text-xs font-bold text-violet-800">زیرتسک‌ها ({taskDetail.subtasks.length.toLocaleString("fa-IR")})</p><ul className="mt-2 space-y-1.5">{taskDetail.subtasks.map((subtask) => <li key={subtask.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-700"><span className="font-semibold">{subtask.title}</span><span>{subtask.type} · {statusLabels[subtask.status]} · {subtask.storyPoints ?? "—"} SP</span></li>)}</ul></div>}
+              </section>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold">
@@ -1960,6 +2002,15 @@ function Stat({
           {value.toLocaleString("fa-IR")}
         </p>
       </div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-white/80 p-2.5">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="mt-1 truncate font-semibold text-slate-800" title={value}>{value}</p>
     </div>
   );
 }

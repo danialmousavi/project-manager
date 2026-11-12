@@ -32,6 +32,8 @@ const ids = {
   platformSprintDone: "aaaaaaa2-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   mobileSprint: "bbbbbba1-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   platformFutureSprint: "aaaaaaa3-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  epicFoundation: "f0000001-0000-4000-8000-000000000001",
+  epicReporting: "f0000002-0000-4000-8000-000000000002",
   taskDashboard: "c0000001-0000-4000-8000-000000000001",
   taskAuth: "c0000002-0000-4000-8000-000000000002",
   taskReports: "c0000003-0000-4000-8000-000000000003",
@@ -41,6 +43,9 @@ const ids = {
   taskBacklogBug: "c0000007-0000-4000-8000-000000000007",
   taskSprintTodo: "c0000008-0000-4000-8000-000000000008",
   taskFuture: "c0000009-0000-4000-8000-000000000009",
+  taskAuthValidation: "c0000010-0000-4000-8000-000000000010",
+  taskAuthCopy: "c0000011-0000-4000-8000-000000000011",
+  taskReportChart: "c0000012-0000-4000-8000-000000000012",
   commentDashboard: "d0000001-0000-4000-8000-000000000001",
   commentAuth: "d0000002-0000-4000-8000-000000000002",
   projectProgress: "e0000001-0000-4000-8000-000000000001",
@@ -254,6 +259,27 @@ async function main() {
     });
   }
 
+  for (const epic of [
+    {
+      id: ids.epicFoundation,
+      name: "زیرساخت و تجربه کاربری",
+      description: "مجموعه کارهای پایه برای احراز هویت، داشبورد و تجربه اصلی سامانه.",
+      projectId: ids.platformProject,
+    },
+    {
+      id: ids.epicReporting,
+      name: "گزارش‌گیری مدیریتی",
+      description: "کارهای مرتبط با گزارش وضعیت پروژه و خروجی‌های مدیریتی.",
+      projectId: ids.platformProject,
+    },
+  ]) {
+    await prisma.epic.upsert({
+      where: { id: epic.id },
+      update: { name: epic.name, description: epic.description, projectId: epic.projectId, createdById: ids.admin },
+      create: { ...epic, createdById: ids.admin },
+    });
+  }
+
   await prisma.sprint.upsert({
     where: { id: ids.platformSprintDone },
     update: {
@@ -362,6 +388,7 @@ async function main() {
       position: 1,
       sprintId: ids.platformSprintDone,
       assigneeId: ids.manager,
+      epicId: ids.epicFoundation,
     },
     {
       id: ids.taskAuth,
@@ -378,6 +405,7 @@ async function main() {
       position: 2,
       sprintId: ids.platformSprint,
       assigneeId: ids.employee,
+      epicId: ids.epicFoundation,
     },
     {
       id: ids.taskReports,
@@ -394,6 +422,7 @@ async function main() {
       position: 3,
       sprintId: ids.platformSprint,
       assigneeId: ids.reviewer,
+      epicId: ids.epicReporting,
     },
     {
       id: ids.taskMobile,
@@ -492,6 +521,61 @@ async function main() {
       position: 1,
       sprintId: ids.platformFutureSprint,
       assigneeId: ids.manager,
+      epicId: ids.epicReporting,
+    },
+    {
+      id: ids.taskAuthValidation,
+      title: "اعتبارسنجی فرم ورود",
+      description: "بررسی پیام‌های خطا و اعتبارسنجی ورودی‌های فرم ورود به‌عنوان زیرتسک احراز هویت.",
+      type: "TASK" as const,
+      storyPoints: 2,
+      rank: 21,
+      acceptanceCriteria: "پیام خطا برای ورودی نامعتبر و رمز اشتباه قابل مشاهده باشد.",
+      status: "DONE" as const,
+      priority: "HIGH" as const,
+      startDate: dates.authStart,
+      dueDate: dates.authDue,
+      position: 2.1,
+      sprintId: ids.platformSprint,
+      assigneeId: ids.employee,
+      epicId: ids.epicFoundation,
+      parentTaskId: ids.taskAuth,
+    },
+    {
+      id: ids.taskAuthCopy,
+      title: "بازبینی متن‌های امنیتی ورود",
+      description: "هماهنگ‌سازی متن هشدارهای ورود و محدودیت تلاش ناموفق.",
+      type: "TASK" as const,
+      storyPoints: 1,
+      rank: 22,
+      acceptanceCriteria: "متن هشدارها واضح و قابل فهم باشد.",
+      status: "IN_REVIEW" as const,
+      priority: "MEDIUM" as const,
+      startDate: dates.authStart,
+      dueDate: dates.authDue,
+      position: 2.2,
+      sprintId: ids.platformSprint,
+      assigneeId: ids.reviewer,
+      epicId: ids.epicFoundation,
+      parentTaskId: ids.taskAuth,
+    },
+    {
+      id: ids.taskReportChart,
+      title: "نمودار روند پیشرفت",
+      description: "پیاده‌سازی نمایش نمودار ساده برای گزارش پیشرفت پروژه.",
+      type: "TASK" as const,
+      storyPoints: 3,
+      rank: 31,
+      acceptanceCriteria: "روند پیشرفت با داده نمونه در گزارش دیده شود.",
+      status: "TODO" as const,
+      priority: "MEDIUM" as const,
+      startDate: dates.futureStart,
+      dueDate: dates.futureDue,
+      position: 1.1,
+      sprintId: ids.platformFutureSprint,
+      assigneeId: ids.manager,
+      epicId: ids.epicReporting,
+      parentTaskId: ids.taskReports,
     },
   ];
 
@@ -505,6 +589,8 @@ async function main() {
         storyPoints: task.storyPoints,
         rank: task.rank,
         acceptanceCriteria: task.acceptanceCriteria,
+        epicId: task.epicId ?? null,
+        parentTaskId: task.parentTaskId ?? null,
         status: task.status,
         priority: task.priority,
         startDate: task.startDate,
@@ -526,6 +612,8 @@ async function main() {
         storyPoints: task.storyPoints,
         rank: task.rank,
         acceptanceCriteria: task.acceptanceCriteria,
+        epicId: task.epicId ?? null,
+        parentTaskId: task.parentTaskId ?? null,
         status: task.status,
         priority: task.priority,
         startDate: task.startDate,
