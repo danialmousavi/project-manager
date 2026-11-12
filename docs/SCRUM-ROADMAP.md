@@ -23,7 +23,19 @@ migrated to `FUTURE`. The Persian/RTL UI supports creating and editing future
 sprints, displaying the goal and date range, starting a sprint, and viewing
 the saved planning snapshot.
 
-## Tasks 3–7
+## Task 3 — Product Backlog
+
+- Backend: complete
+- Frontend: complete
+
+Implemented: project backlog API with active-sprint, future-sprint, and
+unplanned-backlog sections; assignee, type, and priority filters; Story Point
+totals; task transfer or return to backlog; and persisted task movement and
+rank history.
+The Persian/RTL backlog page supports filtering, quick task creation, moving
+tasks between the visible backlog sections with drag and drop, and rank edits.
+
+## Tasks 4–7
 
 - Backend: not started
 - Frontend: not started

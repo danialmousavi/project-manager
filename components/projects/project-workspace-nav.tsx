@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Columns3,
+  ListFilter,
 } from "lucide-react";
 
 import { usePathname } from "next/navigation";
@@ -37,6 +38,11 @@ export default function ProjectWorkspaceNav({
       icon: ListTodo,
     },
     {
+      href: `${base}/backlog`,
+      label: "بک‌لاگ",
+      icon: ListFilter,
+    },
+    {
       href: `${base}/kanban`,
       label: "برد کانبان",
       icon: Columns3,
@@ -63,7 +69,7 @@ export default function ProjectWorkspaceNav({
 
         <nav
           aria-label="بخش‌های پروژه"
-          className="grid grid-cols-2 gap-0.5 p-1 sm:grid-cols-3"
+          className="grid grid-cols-2 gap-0.5 p-1 sm:grid-cols-4"
         >
           {tabs.map((tab) => {
             const active = pathname === tab.href;

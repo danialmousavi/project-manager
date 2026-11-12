@@ -245,6 +245,7 @@ export default function SprintsManager({
 
   const [selectedTaskId, setSelectedTaskId] =
     useState("");
+  const [sprintSearch, setSprintSearch] = useState("");
 
   const [creating, setCreating] = useState(false);
   const [sprintEditor, setSprintEditor] = useState<
@@ -1411,15 +1412,24 @@ export default function SprintsManager({
         حرکت تقویم استفاده کنید.
       </p>
 
-      <section className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm sm:p-5">
-        <h3 className="text-base font-extrabold">
+      <section className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm sm:p-4">
+        <h3 className="text-sm font-extrabold">
           مدیریت وظایف و اسپرینت‌ها
         </h3>
 
-        <div className="mt-5 space-y-3">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-50/60 p-2.5">
+          <p className="text-xs text-emerald-800">برای جلوگیری از شلوغی، تسک‌ها را جست‌وجو کنید و فقط اسپرینت موردنظر را باز کنید.</p>
+          <input value={sprintSearch} onChange={(event) => setSprintSearch(event.target.value)} placeholder="جست‌وجو در تسک‌ها..." className="w-full max-w-xs rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs" />
+        </div>
+
+        <div className="mt-3 space-y-2">
           {sprints.map((sprint) => {
             const sprintTasks = tasks.filter(
               (task) => task.sprintId === sprint.id
+            );
+            const visibleSprintTasks = sprintTasks.filter((task) =>
+              task.title.toLocaleLowerCase("fa-IR").includes(sprintSearch.toLocaleLowerCase("fa-IR")) ||
+              (task.assignee?.name ?? "").toLocaleLowerCase("fa-IR").includes(sprintSearch.toLocaleLowerCase("fa-IR"))
             );
 
             const closed =
@@ -1435,9 +1445,9 @@ export default function SprintsManager({
             return (
               <div
                 key={sprint.id}
-                className="overflow-hidden rounded-xl border border-emerald-100"
+                className="overflow-hidden rounded-lg border border-emerald-100"
               >
-                <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -1473,7 +1483,7 @@ export default function SprintsManager({
                     </span>
                   </button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <span className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
                       {sprintLabels[sprint.status]}
                     </span>
@@ -1515,7 +1525,7 @@ export default function SprintsManager({
                 </div>
 
                 {expanded && (
-                  <div className="space-y-3 border-t border-emerald-100 bg-emerald-50/40 p-4">
+                  <div className="space-y-2 border-t border-emerald-100 bg-emerald-50/40 p-3">
                     <div className="rounded-xl border border-emerald-100 bg-white p-3 text-sm">
                       <p className="text-xs font-semibold text-emerald-800">
                         هدف اسپرینت
@@ -1536,13 +1546,13 @@ export default function SprintsManager({
                       </div>
                     )}
 
-                    {sprintTasks.length === 0 ? (
+                    {visibleSprintTasks.length === 0 ? (
                       <p className="text-sm text-slate-500">
                         هنوز تسکی به این اسپرینت
                         اضافه نشده است.
                       </p>
                     ) : (
-                      sprintTasks.map((task) => (
+                      visibleSprintTasks.slice(0, 20).map((task) => (
                         <div
                           key={task.id}
                           className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"
@@ -1587,6 +1597,10 @@ export default function SprintsManager({
                           )}
                         </div>
                       ))
+                    )}
+
+                    {visibleSprintTasks.length > 20 && (
+                      <p className="rounded-lg bg-white p-3 text-center text-xs text-slate-500">برای حفظ خوانایی، ۲۰ تسک اول نمایش داده شد؛ با جست‌وجو به تسک موردنظر برسید.</p>
                     )}
 
                     {canPlan && !closed && (

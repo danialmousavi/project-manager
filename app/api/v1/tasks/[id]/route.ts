@@ -337,6 +337,7 @@ export async function PATCH(
             status: true,
             startDate: true,
             dueDate: true,
+            sprintId: true,
             assigneeId: true,
             assignee: {
               select: { name: true },
@@ -421,6 +422,7 @@ export async function PATCH(
             status: current.status,
             startDate: dateString(current.startDate),
             dueDate: dateString(current.dueDate),
+            sprintId: current.sprintId,
           };
 
           const after: Record<
@@ -437,6 +439,7 @@ export async function PATCH(
             status: details.status,
             startDate: details.startDate,
             dueDate: details.dueDate,
+            sprintId: current.sprintId,
           };
 
           for (const field of Object.keys(
