@@ -30,6 +30,7 @@ import {
 import PersianDatePicker from "@/components/ui/persian-date-picker";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import SprintFormModal from "@/components/sprints/sprint-form-modal";
+import SprintEndModal from "@/components/sprints/sprint-end-modal";
 import type { Sprint, SprintStatus } from "@/components/sprints/types";
 import {
   TaskFormModal,
@@ -56,6 +57,7 @@ type Task = {
   description: string | null;
   status: TaskStatus;
   priority: Priority;
+  storyPoints: number | null;
   startDate: string | null;
   dueDate: string | null;
   sprintId: string | null;
@@ -253,6 +255,8 @@ export default function SprintsManager({
   >(null);
   const [deletingSprint, setDeletingSprint] =
     useState<string | null>(null);
+  const [endingSprint, setEndingSprint] =
+    useState<Sprint | null>(null);
 
   const [editingTask, setEditingTask] =
     useState<Task | null>(null);
@@ -768,6 +772,41 @@ export default function SprintsManager({
         )
       );
       setNotice("اسپرینت شروع شد و اطلاعات برنامه‌ریزی‌شده ثبت شد.");
+    });
+  }
+
+  function endSprint(
+    sprint: Sprint,
+    unfinishedDestinationSprintId: string | null
+  ) {
+    void runAction(async () => {
+      const data = await api("PATCH", {
+        action: "END",
+        sprintId: sprint.id,
+        unfinishedDestinationSprintId,
+      });
+
+      setSprints((previous) =>
+        previous.map((item) =>
+          item.id === sprint.id
+            ? {
+                ...item,
+                status: "COMPLETED",
+                endSnapshot: data.result,
+              }
+            : item
+        )
+      );
+      setTasks((previous) =>
+        previous.map((task) =>
+          task.sprintId === sprint.id && task.status !== "DONE"
+            ? { ...task, sprintId: unfinishedDestinationSprintId }
+            : task
+        )
+      );
+      setEndingSprint(null);
+      setExpandedSprint(sprint.id);
+      setNotice("اسپرینت پایان یافت و گزارش نهایی آن ثبت شد.");
     });
   }
 
@@ -1509,6 +1548,17 @@ export default function SprintsManager({
                       </>
                     )}
 
+                    {canManage && sprint.status === "ACTIVE" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setEndingSprint(sprint)}
+                        className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                      >
+                        پایان اسپرینت
+                      </button>
+                    )}
+
                     {canDelete && (
                       <button
                         type="button"
@@ -1542,6 +1592,20 @@ export default function SprintsManager({
                         </div>
                         <div className="rounded-xl bg-emerald-100/70 p-3 text-sm text-emerald-900">
                           Story Points برنامه‌ریزی‌شده: {sprint.startSnapshot.plannedStoryPoints.toLocaleString("fa-IR")}
+                        </div>
+                      </div>
+                    )}
+
+                    {sprint.endSnapshot && (
+                      <div className="rounded-xl border border-violet-100 bg-violet-50 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-extrabold text-violet-950">گزارش نهایی اسپرینت</p>
+                          <span className="text-xs text-violet-700">ثبت‌شده در {new Intl.DateTimeFormat("fa-IR-u-ca-persian", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(sprint.endSnapshot.endedAt))}</span>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                          <div className="rounded-lg bg-white/80 p-2 text-violet-900">برنامه: {sprint.endSnapshot.plannedTaskCount.toLocaleString("fa-IR")} تسک · {sprint.endSnapshot.plannedStoryPoints.toLocaleString("fa-IR")} SP</div>
+                          <div className="rounded-lg bg-emerald-100/70 p-2 text-emerald-900">انجام‌شده: {sprint.endSnapshot.completedTaskCount.toLocaleString("fa-IR")} تسک · {sprint.endSnapshot.completedStoryPoints.toLocaleString("fa-IR")} SP</div>
+                          <div className="rounded-lg bg-amber-100/70 p-2 text-amber-900">ناتمام: {sprint.endSnapshot.incompleteTaskCount.toLocaleString("fa-IR")} تسک · {sprint.endSnapshot.incompleteStoryPoints.toLocaleString("fa-IR")} SP</div>
                         </div>
                       </div>
                     )}
@@ -1838,6 +1902,19 @@ export default function SprintsManager({
           busy={busy}
           onClose={() => setSprintEditor(null)}
           onSubmit={saveSprint}
+        />
+      )}
+
+      {endingSprint && (
+        <SprintEndModal
+          sprint={endingSprint}
+          tasks={tasks.filter((task) => task.sprintId === endingSprint.id)}
+          futureSprints={sprints.filter((sprint) => sprint.status === "FUTURE")}
+          busy={busy}
+          onClose={() => setEndingSprint(null)}
+          onConfirm={(unfinishedDestinationSprintId) =>
+            endSprint(endingSprint, unfinishedDestinationSprintId)
+          }
         />
       )}
 

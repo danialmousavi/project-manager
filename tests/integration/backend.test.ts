@@ -67,6 +67,9 @@ beforeEach(async () => {
   await db.taskComment.deleteMany();
   await db.progressHistory.deleteMany();
   await db.task.deleteMany();
+  await db.sprintEndSnapshot.deleteMany();
+  await db.sprintStartSnapshotTask.deleteMany();
+  await db.sprintStartSnapshot.deleteMany();
   await db.sprint.deleteMany();
   await db.projectMember.deleteMany();
   await db.project.deleteMany();
@@ -273,6 +276,52 @@ describe("authorization and input validation through real route handlers", () =>
       }),
       context(project.id)
     )).status).toBe(409);
+  });
+
+  it("ends an active sprint, preserves its outcome, and returns unfinished work", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const project = await projectFactory(db, admin.id, manager.id);
+    const active = await db.sprint.create({
+      data: { name: "Active sprint", projectId: project.id, status: "ACTIVE" },
+    });
+    const done = await taskFactory(db, project.id, admin.id, {
+      sprintId: active.id,
+      status: "DONE",
+      storyPoints: 5,
+    });
+    const unfinished = await taskFactory(db, project.id, admin.id, {
+      sprintId: active.id,
+      status: "IN_PROGRESS",
+      storyPoints: 3,
+    });
+    actor = manager;
+
+    const response = await sprintRoute.PATCH(
+      request("PATCH", `projects/${project.id}/sprints`, {
+        action: "END",
+        sprintId: active.id,
+        unfinishedDestinationSprintId: null,
+      }),
+      context(project.id)
+    );
+
+    expect(response.status).toBe(200);
+    expect(await db.sprint.findUnique({ where: { id: active.id } })).toMatchObject({ status: "COMPLETED" });
+    expect(await db.task.findUnique({ where: { id: done.id } })).toMatchObject({ sprintId: active.id, status: "DONE" });
+    expect(await db.task.findUnique({ where: { id: unfinished.id } })).toMatchObject({ sprintId: null, status: "IN_PROGRESS" });
+    expect(await db.sprintEndSnapshot.findUnique({ where: { sprintId: active.id } })).toMatchObject({
+      completedTaskCount: 1,
+      incompleteTaskCount: 1,
+      completedStoryPoints: 5,
+      incompleteStoryPoints: 3,
+      movedToSprintId: null,
+    });
+    await db.task.update({ where: { id: done.id }, data: { storyPoints: 13 } });
+    expect(await db.sprintEndSnapshot.findUnique({ where: { sprintId: active.id } })).toMatchObject({
+      completedStoryPoints: 5,
+      incompleteStoryPoints: 3,
+    });
   });
 
   it("allows only an admin to change another user's role and protects admin accounts", async () => {

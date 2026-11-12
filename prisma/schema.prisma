@@ -171,6 +171,7 @@ model Sprint {
   tasks           Task[]
   progressHistory ProgressHistory[]
   startSnapshot   SprintStartSnapshot?
+  endSnapshot     SprintEndSnapshot?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -205,6 +206,23 @@ model SprintStartSnapshotTask {
 
   @@unique([snapshotId, taskId])
   @@index([taskId])
+}
+
+model SprintEndSnapshot {
+  id                    String   @id @default(uuid())
+  sprintId              String   @unique
+  endedAt               DateTime @default(now())
+  plannedTaskCount      Int
+  completedTaskCount    Int
+  incompleteTaskCount   Int
+  plannedStoryPoints    Int
+  completedStoryPoints  Int
+  incompleteStoryPoints Int
+  movedToSprintId       String?
+
+  sprint Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+
+  @@index([movedToSprintId])
 }
 
 // ==================================

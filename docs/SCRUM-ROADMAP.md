@@ -33,9 +33,38 @@ unplanned-backlog sections; assignee, type, and priority filters; Story Point
 totals; task transfer or return to backlog; and persisted task movement and
 rank history.
 The Persian/RTL backlog page supports filtering, quick task creation, moving
-tasks between the visible backlog sections with drag and drop, and rank edits.
+tasks between the visible backlog sections with drag and drop, rank edits, and
+compact browsing for large lists. Task movement is recorded in history across
+the backlog and sprint-management routes.
 
-## Tasks 4–7
+## Task 4 — Active Sprint Board
+
+- Backend: complete
+- Frontend: complete
+
+Implemented: the Kanban API now scopes its tasks to the active sprint and
+returns the sprint name, goal, dates, remaining days, completed-task count,
+and planned Story Point total. The existing Kanban UI shows this sprint context,
+an empty state when no sprint is active, drag-and-drop status changes, and quick
+task creation inside each column.
+
+## Task 5 — Sprint end
+
+- Backend: complete
+- Frontend: complete
+
+Implemented: an active sprint can be ended atomically. The system saves an
+immutable end-of-sprint report containing planned, completed, and unfinished
+task and Story Point totals; retains completed work in the completed sprint;
+and moves unfinished work either back to the product backlog or to a selected
+future sprint without changing its status. Task movement is recorded in task
+history, and the saved report remains unchanged if a task is edited later.
+The sprint-management UI provides an end-sprint modal with a live work
+summary, a choice between returning unfinished work to the backlog or moving
+it to a future sprint, and a persistent final-report panel on completed
+sprints.
+
+## Tasks 6–7
 
 - Backend: not started
 - Frontend: not started

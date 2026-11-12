@@ -25,16 +25,22 @@ const ids = {
   manager: "22222222-2222-4222-8222-222222222222",
   employee: "33333333-3333-4333-8333-333333333333",
   reviewer: "44444444-4444-4444-8444-444444444444",
+  controller: "55555555-5555-4555-8555-555555555555",
   platformProject: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   mobileProject: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   platformSprint: "aaaaaaa1-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   platformSprintDone: "aaaaaaa2-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   mobileSprint: "bbbbbba1-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  platformFutureSprint: "aaaaaaa3-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   taskDashboard: "c0000001-0000-4000-8000-000000000001",
   taskAuth: "c0000002-0000-4000-8000-000000000002",
   taskReports: "c0000003-0000-4000-8000-000000000003",
   taskMobile: "c0000004-0000-4000-8000-000000000004",
   taskRelease: "c0000005-0000-4000-8000-000000000005",
+  taskBacklogStory: "c0000006-0000-4000-8000-000000000006",
+  taskBacklogBug: "c0000007-0000-4000-8000-000000000007",
+  taskSprintTodo: "c0000008-0000-4000-8000-000000000008",
+  taskFuture: "c0000009-0000-4000-8000-000000000009",
   commentDashboard: "d0000001-0000-4000-8000-000000000001",
   commentAuth: "d0000002-0000-4000-8000-000000000002",
   projectProgress: "e0000001-0000-4000-8000-000000000001",
@@ -48,15 +54,29 @@ const dates = {
   mobileDue: new Date("2027-01-15T00:00:00.000Z"),
   sprintDoneStart: new Date("2026-10-01T00:00:00.000Z"),
   sprintDoneEnd: new Date("2026-10-21T00:00:00.000Z"),
-  sprintStart: new Date("2026-10-22T00:00:00.000Z"),
-  sprintEnd: new Date("2026-11-12T00:00:00.000Z"),
+  sprintStart: new Date("2026-11-05T00:00:00.000Z"),
+  sprintEnd: new Date("2026-11-19T00:00:00.000Z"),
+  platformFutureStart: new Date("2026-11-20T00:00:00.000Z"),
+  platformFutureEnd: new Date("2026-12-03T00:00:00.000Z"),
   mobileSprintStart: new Date("2026-11-03T00:00:00.000Z"),
   mobileSprintEnd: new Date("2026-11-24T00:00:00.000Z"),
   dashboardDue: new Date("2026-11-10T00:00:00.000Z"),
+  dashboardStart: new Date("2026-10-28T00:00:00.000Z"),
   authDue: new Date("2026-11-14T00:00:00.000Z"),
+  authStart: new Date("2026-11-05T00:00:00.000Z"),
   reportsDue: new Date("2026-11-20T00:00:00.000Z"),
+  reportsStart: new Date("2026-11-08T00:00:00.000Z"),
   mobileDueDate: new Date("2026-11-18T00:00:00.000Z"),
+  mobileTaskStart: new Date("2026-11-04T00:00:00.000Z"),
+  futureDue: new Date("2026-11-28T00:00:00.000Z"),
+  futureStart: new Date("2026-11-20T00:00:00.000Z"),
   releaseDue: new Date("2026-12-05T00:00:00.000Z"),
+  releaseStart: new Date("2026-11-25T00:00:00.000Z"),
+  backlogStoryStart: new Date("2026-11-21T00:00:00.000Z"),
+  backlogStoryDue: new Date("2026-12-10T00:00:00.000Z"),
+  backlogBugStart: new Date("2026-11-12T00:00:00.000Z"),
+  backlogBugDue: new Date("2026-11-15T00:00:00.000Z"),
+  sprintTodoStart: new Date("2026-11-10T00:00:00.000Z"),
 } as const;
 
 async function main() {
@@ -138,6 +158,25 @@ async function main() {
     },
   });
 
+  await prisma.user.upsert({
+    where: { id: ids.controller },
+    update: {
+      name: "Nima Rahimi",
+      email: "demo-controller@example.com",
+      passwordHash,
+      role: "CONTROLLER",
+      isActive: true,
+    },
+    create: {
+      id: ids.controller,
+      name: "Nima Rahimi",
+      email: "demo-controller@example.com",
+      passwordHash,
+      role: "CONTROLLER",
+      isActive: true,
+    },
+  });
+
   await prisma.project.upsert({
     where: { id: ids.platformProject },
     update: {
@@ -194,8 +233,10 @@ async function main() {
     [ids.platformProject, ids.manager, "MANAGER"],
     [ids.platformProject, ids.employee, "MEMBER"],
     [ids.platformProject, ids.reviewer, "MEMBER"],
+    [ids.platformProject, ids.controller, "CONTROLLER"],
     [ids.mobileProject, ids.manager, "MANAGER"],
     [ids.mobileProject, ids.employee, "MEMBER"],
+    [ids.mobileProject, ids.controller, "CONTROLLER"],
   ] as const) {
     await prisma.projectMember.upsert({
       where: {
@@ -282,13 +323,41 @@ async function main() {
     },
   });
 
+  await prisma.sprint.upsert({
+    where: { id: ids.platformFutureSprint },
+    update: {
+      name: "اسپرینت سوم - گزارش‌ها",
+      goal: "تکمیل گزارش‌گیری و بهبود تجربه مدیر پروژه.",
+      status: "FUTURE",
+      progress: 0,
+      startDate: dates.platformFutureStart,
+      endDate: dates.platformFutureEnd,
+      projectId: ids.platformProject,
+    },
+    create: {
+      id: ids.platformFutureSprint,
+      name: "اسپرینت سوم - گزارش‌ها",
+      goal: "تکمیل گزارش‌گیری و بهبود تجربه مدیر پروژه.",
+      status: "FUTURE",
+      progress: 0,
+      startDate: dates.platformFutureStart,
+      endDate: dates.platformFutureEnd,
+      projectId: ids.platformProject,
+    },
+  });
+
   const tasks = [
     {
       id: ids.taskDashboard,
       title: "طراحی داشبورد مدیریتی",
       description: "نمایش خلاصه پروژه‌ها، وظایف باز و وضعیت پیشرفت.",
+      type: "STORY" as const,
+      storyPoints: 8,
+      rank: 10,
+      acceptanceCriteria: "مدیر بتواند وضعیت همه پروژه‌های فعال را در یک نگاه ببیند.",
       status: "DONE" as const,
       priority: "HIGH" as const,
+      startDate: dates.dashboardStart,
       dueDate: dates.dashboardDue,
       position: 1,
       sprintId: ids.platformSprintDone,
@@ -298,8 +367,13 @@ async function main() {
       id: ids.taskAuth,
       title: "تکمیل احراز هویت کاربران",
       description: "بررسی ورود، session و محدودسازی تلاش‌های ناموفق.",
+      type: "TASK" as const,
+      storyPoints: 5,
+      rank: 20,
+      acceptanceCriteria: "ورود ناموفق و محدودیت تلاش‌ها در محیط تست قابل بررسی باشد.",
       status: "IN_PROGRESS" as const,
       priority: "URGENT" as const,
+      startDate: dates.authStart,
       dueDate: dates.authDue,
       position: 2,
       sprintId: ids.platformSprint,
@@ -309,8 +383,13 @@ async function main() {
       id: ids.taskReports,
       title: "گزارش پیشرفت پروژه",
       description: "افزودن نمایش روند پیشرفت در صفحه پروژه.",
+      type: "STORY" as const,
+      storyPoints: 3,
+      rank: 30,
+      acceptanceCriteria: "گزارش پیشرفت با داده واقعی پروژه نمایش داده شود.",
       status: "IN_REVIEW" as const,
       priority: "MEDIUM" as const,
+      startDate: dates.reportsStart,
       dueDate: dates.reportsDue,
       position: 3,
       sprintId: ids.platformSprint,
@@ -320,8 +399,13 @@ async function main() {
       id: ids.taskMobile,
       title: "جمع‌آوری نیازمندی‌های اپلیکیشن",
       description: "مصاحبه با کاربران و تهیه فهرست قابلیت‌های نسخه اول.",
+      type: "STORY" as const,
+      storyPoints: 5,
+      rank: 10,
+      acceptanceCriteria: "فهرست اولویت‌دار نیازمندی‌ها ثبت شود.",
       status: "TODO" as const,
       priority: "MEDIUM" as const,
+      startDate: dates.mobileTaskStart,
       dueDate: dates.mobileDueDate,
       position: 1,
       sprintId: ids.mobileSprint,
@@ -332,13 +416,82 @@ async function main() {
       id: ids.taskRelease,
       title: "آماده‌سازی نسخه نمایشی",
       description: "بررسی نهایی داده‌های نمونه و آماده‌سازی ارائه.",
+      type: "TASK" as const,
+      storyPoints: 2,
+      rank: 20,
+      acceptanceCriteria: "نسخه نمایشی قابل ارائه باشد.",
       status: "TODO" as const,
       priority: "LOW" as const,
+      startDate: dates.releaseStart,
       dueDate: dates.releaseDue,
       position: 2,
       sprintId: ids.mobileSprint,
       assigneeId: ids.employee,
       projectId: ids.mobileProject,
+    },
+    {
+      id: ids.taskBacklogStory,
+      title: "افزودن اعلان‌های پروژه",
+      description: "ارسال اعلان برای تغییر وضعیت تسک و نزدیک‌شدن موعد.",
+      type: "STORY" as const,
+      storyPoints: 8,
+      rank: 1,
+      acceptanceCriteria: "اعلان‌ها در سناریوی تغییر وضعیت تسک قابل تست باشند.",
+      status: "TODO" as const,
+      priority: "HIGH" as const,
+      startDate: dates.backlogStoryStart,
+      dueDate: dates.backlogStoryDue,
+      position: 1,
+      sprintId: null,
+      assigneeId: null,
+    },
+    {
+      id: ids.taskBacklogBug,
+      title: "رفع خطای نمایش تاریخ شمسی",
+      description: "بررسی خطای تبدیل تاریخ در صفحه جزئیات پروژه.",
+      type: "BUG" as const,
+      storyPoints: 2,
+      rank: 2,
+      acceptanceCriteria: "تمام تاریخ‌های صفحه با تقویم شمسی درست نمایش داده شوند.",
+      status: "TODO" as const,
+      priority: "URGENT" as const,
+      startDate: dates.backlogBugStart,
+      dueDate: dates.backlogBugDue,
+      position: 2,
+      sprintId: null,
+      assigneeId: ids.reviewer,
+    },
+    {
+      id: ids.taskSprintTodo,
+      title: "بهبود فیلترهای برد کانبان",
+      description: "افزودن فیلتر مسئول، اولویت و جست‌وجوی سریع.",
+      type: "TASK" as const,
+      storyPoints: 3,
+      rank: 15,
+      acceptanceCriteria: "کاربر بتواند تسک‌ها را با فیلترهای اصلی پیدا کند.",
+      status: "TODO" as const,
+      priority: "MEDIUM" as const,
+      startDate: dates.sprintTodoStart,
+      dueDate: dates.reportsDue,
+      position: 4,
+      sprintId: ids.platformSprint,
+      assigneeId: ids.manager,
+    },
+    {
+      id: ids.taskFuture,
+      title: "طراحی خروجی گزارش مدیریتی",
+      description: "تهیه ساختار گزارش برای Sprint آینده.",
+      type: "STORY" as const,
+      storyPoints: 5,
+      rank: 5,
+      acceptanceCriteria: "ساختار گزارش به تأیید مدیر پروژه برسد.",
+      status: "TODO" as const,
+      priority: "HIGH" as const,
+      startDate: dates.futureStart,
+      dueDate: dates.futureDue,
+      position: 1,
+      sprintId: ids.platformFutureSprint,
+      assigneeId: ids.manager,
     },
   ];
 
@@ -348,8 +501,13 @@ async function main() {
       update: {
         title: task.title,
         description: task.description,
+        type: task.type,
+        storyPoints: task.storyPoints,
+        rank: task.rank,
+        acceptanceCriteria: task.acceptanceCriteria,
         status: task.status,
         priority: task.priority,
+        startDate: task.startDate,
         dueDate: task.dueDate,
         position: task.position,
         version: 1,
@@ -364,8 +522,13 @@ async function main() {
         id: task.id,
         title: task.title,
         description: task.description,
+        type: task.type,
+        storyPoints: task.storyPoints,
+        rank: task.rank,
+        acceptanceCriteria: task.acceptanceCriteria,
         status: task.status,
         priority: task.priority,
+        startDate: task.startDate,
         dueDate: task.dueDate,
         position: task.position,
         projectId: task.projectId || ids.platformProject,
@@ -375,6 +538,40 @@ async function main() {
       },
     });
   }
+
+  const activeSprintTasks = tasks.filter(
+    (task) => task.sprintId === ids.platformSprint
+  );
+
+  await prisma.sprintStartSnapshot.upsert({
+    where: { sprintId: ids.platformSprint },
+    update: {
+      plannedTaskCount: activeSprintTasks.length,
+      plannedStoryPoints: activeSprintTasks.reduce(
+        (total, task) => total + (task.storyPoints ?? 0),
+        0,
+      ),
+    },
+    create: {
+      sprintId: ids.platformSprint,
+      plannedTaskCount: activeSprintTasks.length,
+      plannedStoryPoints: activeSprintTasks.reduce(
+        (total, task) => total + (task.storyPoints ?? 0),
+        0,
+      ),
+      tasks: {
+        create: activeSprintTasks.map((task) => ({
+          taskId: task.id,
+          title: task.title,
+          type: task.type,
+          storyPoints: task.storyPoints,
+          rank: task.rank,
+          statusAtStart: task.status,
+          assigneeId: task.assigneeId,
+        })),
+      },
+    },
+  });
 
   await prisma.taskComment.upsert({
     where: { id: ids.commentDashboard },
@@ -452,6 +649,7 @@ async function main() {
   console.log("  demo-manager@example.com");
   console.log("  demo-employee@example.com");
   console.log("  demo-reviewer@example.com");
+  console.log("  demo-controller@example.com");
   console.log("Password: use DEMO_PASSWORD (default: Demo123!)");
 }
 

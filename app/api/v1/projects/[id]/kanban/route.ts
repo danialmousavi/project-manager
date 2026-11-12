@@ -57,15 +57,28 @@ export async function GET(
   }
 
   try {
+    const activeSprint = await prisma.sprint.findFirst({
+      where: { projectId, status: "ACTIVE" },
+      select: {
+        id: true,
+        name: true,
+        goal: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+      },
+    });
+
     const taskWhere = {
       projectId,
       deletedAt: null,
+      sprintId: activeSprint?.id ?? "__no_active_sprint__",
       ...(access.canManage || isProjectController(actor.role)
         ? {}
         : { assigneeId: actor.id }),
     };
 
-    const [tasks, sprints, totalTasks] =
+    const [tasks, totalTasks] =
       await Promise.all([
         prisma.task.findMany({
           where: taskWhere,
@@ -97,17 +110,6 @@ export async function GET(
           },
         }),
 
-        prisma.sprint.findMany({
-          where: { projectId },
-          orderBy: { startDate: "desc" },
-          take: 100,
-          select: {
-            id: true,
-            name: true,
-            status: true,
-          },
-        }),
-
         prisma.task.count({
           where: taskWhere,
         }),
@@ -125,7 +127,17 @@ export async function GET(
           dueDate:
             task.dueDate?.toISOString() ?? null,
         })),
-        sprints,
+        activeSprint: activeSprint && {
+          ...activeSprint,
+          startDate: activeSprint.startDate?.toISOString() ?? null,
+          endDate: activeSprint.endDate?.toISOString() ?? null,
+          remainingDays: activeSprint.endDate
+            ? Math.ceil((activeSprint.endDate.getTime() - Date.now()) / 86_400_000)
+            : null,
+          completedTasks: tasks.filter((task) => task.status === "DONE").length,
+          storyPoints: tasks.reduce((total, task) => total + (task.storyPoints ?? 0), 0),
+        },
+        sprints: activeSprint ? [{ id: activeSprint.id, name: activeSprint.name, status: activeSprint.status }] : [],
         totalTasks,
         truncated: totalTasks > MAX_TASKS,
       },

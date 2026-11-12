@@ -65,6 +65,17 @@ type Sprint = {
   status: string;
 };
 
+type ActiveSprint = {
+  id: string;
+  name: string;
+  goal: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  remainingDays: number | null;
+  completedTasks: number;
+  storyPoints: number;
+};
+
 type KanbanResponse = {
   success: boolean;
   message?: string;
@@ -73,6 +84,7 @@ type KanbanResponse = {
   canManage: boolean;
   totalTasks: number;
   truncated: boolean;
+  activeSprint: ActiveSprint | null;
 };
 
 type Props = {
@@ -184,6 +196,8 @@ export default function KanbanBoard({
 }: Props) {
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
+  const [activeSprint, setActiveSprint] =
+    useState<ActiveSprint | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -205,6 +219,11 @@ export default function KanbanBoard({
 
   const [priorityFilter, setPriorityFilter] =
     useState("ALL");
+
+  const [quickTask, setQuickTask] = useState<{
+    status: TaskStatus;
+    title: string;
+  } | null>(null);
 
   const [draggedTaskId, setDraggedTaskId] =
     useState<string | null>(null);
@@ -244,6 +263,7 @@ export default function KanbanBoard({
 
         setTasks(data.tasks ?? []);
         setSprints(data.sprints ?? []);
+        setActiveSprint(data.activeSprint ?? null);
 
         setCanManage(data.canManage);
         setTruncated(data.truncated);
@@ -462,6 +482,58 @@ export default function KanbanBoard({
     }
   }
 
+  async function createQuickTask() {
+    if (!quickTask || quickTask.title.trim().length < 3) {
+      setError("عنوان تسک باید حداقل ۳ کاراکتر باشد.");
+      return;
+    }
+
+    setSavingTaskId("new-task");
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/v1/projects/${projectId}/tasks`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: quickTask.title.trim(),
+            description: "",
+            type: "TASK",
+            storyPoints: null,
+            rank: 0,
+            acceptanceCriteria: null,
+            priority: "MEDIUM",
+            status: quickTask.status,
+            assigneeId: null,
+            startDate: null,
+            dueDate: null,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "ایجاد تسک ناموفق بود.");
+      await fetch(`/api/v1/projects/${projectId}/backlog`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "MOVE_TASK",
+          taskId: data.task.id,
+          sprintId: activeSprint?.id ?? null,
+        }),
+      });
+      setQuickTask(null);
+      setNotice("تسک جدید به اسپرینت فعال اضافه شد.");
+      await loadBoard(false);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSavingTaskId(null);
+    }
+  }
+
   function onDragStart(
     event: DragEvent<HTMLElement>,
     taskId: string
@@ -669,6 +741,26 @@ export default function KanbanBoard({
           {totalTasks.toLocaleString("fa-IR")}
           {" "}تسک بارگذاری شده است.
         </div>
+      )}
+
+      {activeSprint ? (
+        <section className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold text-emerald-700">اسپرینت فعال</p>
+              <h3 className="mt-1 text-base font-extrabold text-emerald-950">{activeSprint.name}</h3>
+              {activeSprint.goal && <p className="mt-1 max-w-3xl text-xs leading-5 text-emerald-900">{activeSprint.goal}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
+              <SprintMetric label="بازه" value={`${displayDate(activeSprint.startDate) ?? "—"} تا ${displayDate(activeSprint.endDate) ?? "—"}`} />
+              <SprintMetric label="زمان باقی‌مانده" value={activeSprint.remainingDays === null ? "—" : activeSprint.remainingDays < 0 ? "پایان‌یافته" : `${activeSprint.remainingDays.toLocaleString("fa-IR")} روز`} />
+              <SprintMetric label="تکمیل‌شده" value={`${activeSprint.completedTasks.toLocaleString("fa-IR")} از ${totalTasks.toLocaleString("fa-IR")}`} />
+              <SprintMetric label="Story Points" value={activeSprint.storyPoints.toLocaleString("fa-IR")} />
+            </div>
+          </div>
+        </section>
+      ) : !loading && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">در این پروژه اسپرینت فعالی وجود ندارد. برای نمایش برد، ابتدا یک اسپرینت را شروع کنید.</div>
       )}
 
       {/* Statistics */}
@@ -927,7 +1019,7 @@ export default function KanbanBoard({
             در حال دریافت تسک‌ها...
           </span>
         </div>
-      ) : (
+      ) : activeSprint ? (
         <>
           <p
             className="text-xs leading-6"
@@ -1042,6 +1134,17 @@ export default function KanbanBoard({
                           />
                         ))
                       )}
+
+                      {canManage && (
+                        <button
+                          type="button"
+                          disabled={Boolean(savingTaskId)}
+                          onClick={() => setQuickTask({ status: column.id, title: "" })}
+                          className="rounded-lg border border-dashed border-emerald-300 bg-white px-2 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                        >
+                          + افزودن تسک در این ستون
+                        </button>
+                      )}
                     </div>
                   </section>
                 );
@@ -1059,6 +1162,16 @@ export default function KanbanBoard({
             </div>
           )}
         </>
+      ) : null}
+      {quickTask && (
+        <QuickTaskModal
+          status={quickTask.status}
+          title={quickTask.title}
+          busy={Boolean(savingTaskId)}
+          onChange={(title) => setQuickTask((current) => current ? { ...current, title } : current)}
+          onClose={() => setQuickTask(null)}
+          onSubmit={() => void createQuickTask()}
+        />
       )}
     </div>
   );
@@ -1222,6 +1335,56 @@ function KanbanCard({
         <ArrowLeft size={12} />
       </Link>
     </article>
+  );
+}
+
+function SprintMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-24 rounded-lg border border-emerald-100 bg-white/90 px-2 py-2">
+      <p className="text-[10px] text-slate-500">{label}</p>
+      <p className="mt-1 text-xs font-extrabold text-slate-800">{value}</p>
+    </div>
+  );
+}
+
+function QuickTaskModal({
+  status,
+  title,
+  busy,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  status: TaskStatus;
+  title: string;
+  busy: boolean;
+  onChange: (title: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 p-4">
+      <div dir="rtl" role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-extrabold">افزودن تسک سریع</h3>
+            <p className="mt-1 text-xs text-slate-500">تسک در ستون «{statusLabels[status]}» و Sprint فعال ساخته می‌شود.</p>
+          </div>
+          <button type="button" disabled={busy} onClick={onClose} aria-label="بستن"><X size={18} /></button>
+        </div>
+        <input autoFocus value={title} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSubmit(); }} placeholder="عنوان تسک..." maxLength={200} disabled={busy} className="mt-5 h-10 w-full rounded-lg border border-emerald-200 px-3 text-sm outline-none focus:ring-4 focus:ring-emerald-500/10" />
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" disabled={busy} onClick={onClose} className="rounded-lg border px-3 py-2 text-xs">انصراف</button>
+          <button type="button" disabled={busy} onClick={onSubmit} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{busy ? "در حال ثبت..." : "ثبت تسک"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -13,6 +13,7 @@ const uuid = z.uuid();
 
 const updateSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("MOVE_TASK"), taskId: uuid, sprintId: uuid.nullable() }).strict(),
+  z.object({ action: z.literal("MOVE_AND_REORDER"), taskId: uuid, sprintId: uuid.nullable(), rank: z.number().finite().min(0).max(100_000) }).strict(),
   z.object({ action: z.literal("REORDER_TASK"), taskId: uuid, rank: z.number().finite().min(0).max(100_000) }).strict(),
 ]);
 
@@ -50,6 +51,9 @@ export async function GET(request: NextRequest, context: Context) {
   }
 
   const canViewAll = access.canManage || isProjectController(actor.role);
+  if (!canViewAll && assigneeId && assigneeId !== actor.id) {
+    return fail("اجازه مشاهده تسک‌های سایر کاربران را ندارید.", 403);
+  }
   const where = {
     projectId,
     deletedAt: null,
@@ -65,7 +69,7 @@ export async function GET(request: NextRequest, context: Context) {
       orderBy: [{ status: "asc" }, { startDate: "asc" }],
       select: { id: true, name: true, goal: true, status: true, startDate: true, endDate: true },
     }),
-    prisma.task.findMany({ where, orderBy: [{ rank: "asc" }, { createdAt: "asc" }], take: 500, select: taskSelect }),
+    prisma.task.findMany({ where, orderBy: [{ rank: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: taskSelect }),
   ]);
 
   const serialise = (task: (typeof tasks)[number]) => task;
@@ -108,13 +112,20 @@ export async function PATCH(request: NextRequest, context: Context) {
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.task.update({ where: { id: task.id }, data: { sprintId: data.sprintId, version: { increment: 1 } } });
+    await tx.task.update({ where: { id: task.id }, data: {
+      sprintId: data.sprintId,
+      ...(data.action === "MOVE_AND_REORDER" ? { rank: data.rank } : {}),
+      version: { increment: 1 },
+    } });
     await tx.taskComment.create({ data: {
       taskId: task.id,
       authorId: actor.id,
       content: encodeTaskChangeEvent({
         note: "جابجایی از بک‌لاگ",
-        changes: [{ field: "sprintId", from: task.sprintId, to: data.sprintId }],
+        changes: [
+          ...(task.sprintId !== data.sprintId ? [{ field: "sprintId" as const, from: task.sprintId, to: data.sprintId }] : []),
+          ...(data.action === "MOVE_AND_REORDER" && task.rank !== data.rank ? [{ field: "rank" as const, from: String(task.rank), to: String(data.rank) }] : []),
+        ],
       }),
     } });
   });

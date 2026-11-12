@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
 import { isProjectController } from "@/lib/role-access";
+import { encodeTaskChangeEvent } from "@/lib/task-change-history";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -37,6 +38,12 @@ const updateSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("START"),
     sprintId: uuid,
+  }).strict(),
+
+  z.object({
+    action: z.literal("END"),
+    sprintId: uuid,
+    unfinishedDestinationSprintId: uuid.nullable(),
   }).strict(),
 
   z.object({
@@ -158,6 +165,18 @@ export async function GET(
               startedAt: true,
               plannedTaskCount: true,
               plannedStoryPoints: true,
+            },
+          },
+          endSnapshot: {
+            select: {
+              endedAt: true,
+              plannedTaskCount: true,
+              completedTaskCount: true,
+              incompleteTaskCount: true,
+              plannedStoryPoints: true,
+              completedStoryPoints: true,
+              incompleteStoryPoints: true,
+              movedToSprintId: true,
             },
           },
         },
@@ -511,6 +530,139 @@ export async function PATCH(
       });
     }
 
+    if (data.action === "END") {
+      if (sprint.status !== "ACTIVE") {
+        return fail("فقط اسپرینت فعال قابل پایان‌دادن است.", 409);
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const active = await tx.sprint.findFirst({
+          where: {
+            id: sprint.id,
+            projectId,
+            status: "ACTIVE",
+            endSnapshot: null,
+          },
+          select: {
+            id: true,
+            startSnapshot: {
+              select: {
+                plannedTaskCount: true,
+                plannedStoryPoints: true,
+              },
+            },
+          },
+        });
+
+        if (!active) return { kind: "NOT_ACTIVE" as const };
+
+        if (data.unfinishedDestinationSprintId) {
+          const destination = await tx.sprint.findFirst({
+            where: {
+              id: data.unfinishedDestinationSprintId,
+              projectId,
+              status: "FUTURE",
+            },
+            select: { id: true },
+          });
+
+          if (!destination) {
+            return { kind: "INVALID_DESTINATION" as const };
+          }
+        }
+
+        const tasks = await tx.task.findMany({
+          where: {
+            projectId,
+            sprintId: active.id,
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+            status: true,
+            storyPoints: true,
+          },
+        });
+
+        const completed = tasks.filter((task) => task.status === "DONE");
+        const incomplete = tasks.filter((task) => task.status !== "DONE");
+        const sumPoints = (items: typeof tasks) =>
+          items.reduce((total, task) => total + (task.storyPoints ?? 0), 0);
+
+        const snapshot = await tx.sprintEndSnapshot.create({
+          data: {
+            sprintId: active.id,
+            plannedTaskCount: active.startSnapshot?.plannedTaskCount ?? tasks.length,
+            completedTaskCount: completed.length,
+            incompleteTaskCount: incomplete.length,
+            plannedStoryPoints: active.startSnapshot?.plannedStoryPoints ?? sumPoints(tasks),
+            completedStoryPoints: sumPoints(completed),
+            incompleteStoryPoints: sumPoints(incomplete),
+            movedToSprintId: data.unfinishedDestinationSprintId,
+          },
+          select: {
+            endedAt: true,
+            plannedTaskCount: true,
+            completedTaskCount: true,
+            incompleteTaskCount: true,
+            plannedStoryPoints: true,
+            completedStoryPoints: true,
+            incompleteStoryPoints: true,
+            movedToSprintId: true,
+          },
+        });
+
+        if (incomplete.length) {
+          await tx.task.updateMany({
+            where: { id: { in: incomplete.map((task) => task.id) } },
+            data: {
+              sprintId: data.unfinishedDestinationSprintId,
+              version: { increment: 1 },
+            },
+          });
+
+          await tx.taskComment.createMany({
+            data: incomplete.map((task) => ({
+              taskId: task.id,
+              authorId: actor.id,
+              content: encodeTaskChangeEvent({
+                note: "پایان اسپرینت و انتقال تسک ناتمام",
+                changes: [{
+                  field: "sprintId",
+                  from: active.id,
+                  to: data.unfinishedDestinationSprintId,
+                }],
+              }),
+            })),
+          });
+        }
+
+        await tx.sprint.update({
+          where: { id: active.id },
+          data: { status: "COMPLETED" },
+        });
+
+        return { kind: "ENDED" as const, snapshot };
+      });
+
+      if (result.kind === "NOT_ACTIVE") {
+        return fail("اسپرینت هم‌زمان تغییر کرده است؛ صفحه را تازه کنید.", 409);
+      }
+
+      if (result.kind === "INVALID_DESTINATION") {
+        return fail("مقصد تسک‌های ناتمام باید یک اسپرینت آینده از همین پروژه باشد.", 409);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "اسپرینت پایان یافت.",
+        result: {
+          ...result.snapshot,
+          endedAt: result.snapshot.endedAt.toISOString(),
+        },
+      });
+    }
+
     if (data.action === "SET_STATUS") {
       if (data.status === "ACTIVE") {
         return fail("برای شروع اسپرینت از عملیات START استفاده کنید.", 400);
@@ -561,6 +713,17 @@ export async function PATCH(
         );
       }
 
+      await prisma.taskComment.create({
+        data: {
+          taskId: data.taskId,
+          authorId: actor.id,
+          content: encodeTaskChangeEvent({
+            note: "انتقال به اسپرینت",
+            changes: [{ field: "sprintId", from: null, to: data.sprintId }],
+          }),
+        },
+      });
+
       return NextResponse.json({
         success: true,
         message: "تسک به اسپرینت اضافه شد.",
@@ -586,6 +749,17 @@ export async function PATCH(
         404
       );
     }
+
+    await prisma.taskComment.create({
+      data: {
+        taskId: data.taskId,
+        authorId: actor.id,
+        content: encodeTaskChangeEvent({
+          note: "بازگشت به بک‌لاگ",
+          changes: [{ field: "sprintId", from: data.sprintId, to: null }],
+        }),
+      },
+    });
 
     return NextResponse.json({
       success: true,
