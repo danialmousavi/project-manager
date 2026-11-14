@@ -19,6 +19,7 @@ import {
   FolderTree,
   GitBranch,
   History,
+  Link2,
   LoaderCircle,
   MessageCircle,
   Pencil,
@@ -68,9 +69,11 @@ type Task = {
   rank: number;
   acceptanceCriteria: string | null;
   epicId: string | null;
+  milestoneId: string | null;
   parentTaskId: string | null;
   sprintId: string | null;
   epic: { id: string; name: string } | null;
+  milestone: { id: string; title: string } | null;
   parentTask: { id: string; title: string; type: TaskType } | null;
   sprint: { id: string; name: string; status: string } | null;
   status: Status;
@@ -84,6 +87,7 @@ type Task = {
   dueDate: string | null;
   createdAt: string;
   updatedAt: string;
+  blockedByCount: number;
   _count: {
     comments: number;
     subtasks: number;
@@ -91,7 +95,20 @@ type Task = {
 };
 
 type Epic = { id: string; name: string; description: string | null; _count: { tasks: number } };
-type TaskDetail = { epic: { id: string; name: string } | null; parentTask: { id: string; title: string } | null; subtasks: { id: string; title: string; type: TaskType; status: Status; storyPoints: number | null }[] };
+export type MilestoneOption = { id: string; title: string; targetDate: string; displayStatus: "PLANNED" | "DUE_SOON" | "OVERDUE" | "COMPLETED" };
+type TaskDependency = {
+  id: string;
+  isBlocking: boolean;
+  task: { id: string; title: string; status: Status; type: TaskType; assignee: { id: string; name: string } | null };
+};
+
+type TaskDetail = {
+  epic: { id: string; name: string } | null;
+  milestone: { id: string; title: string } | null;
+  parentTask: { id: string; title: string } | null;
+  subtasks: { id: string; title: string; type: TaskType; status: Status; storyPoints: number | null }[];
+  dependencies: TaskDependency[];
+};
 
 type Comment = {
   id: string;
@@ -110,6 +127,7 @@ type FieldName =
   | "storyPoints"
   | "rank"
   | "acceptanceCriteria"
+  | "milestoneId"
   | "priority"
   | "status"
   | "startDate"
@@ -185,6 +203,7 @@ const fieldLabels: Record<FieldName, string> = {
   storyPoints: "Story Points",
   rank: "Backlog Rank",
   acceptanceCriteria: "معیارهای پذیرش",
+  milestoneId: "مایلستون",
   priority: "اولویت",
   status: "وضعیت",
   startDate: "تاریخ شروع",
@@ -349,6 +368,7 @@ export default function ProjectTasks({
 }: Props) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
+  const [milestones, setMilestones] = useState<MilestoneOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -377,6 +397,7 @@ export default function ProjectTasks({
 
   const [newAssigneeId, setNewAssigneeId] = useState("");
   const [assignmentNote, setAssignmentNote] = useState("");
+  const [dependencyTaskId, setDependencyTaskId] = useState("");
 
   const activeTask = tasks.find(
     (task) => task.id === activeTaskId
@@ -393,11 +414,12 @@ export default function ProjectTasks({
 
   const loadTasks = useCallback(async () => {
     try {
-      const [response, epicsResponse] = await Promise.all([
+      const [response, epicsResponse, milestonesResponse] = await Promise.all([
         fetch(`/api/v1/projects/${projectId}/tasks`, { cache: "no-store" }),
         fetch(`/api/v1/projects/${projectId}/epics`, { cache: "no-store" }),
+        fetch(`/api/v1/projects/${projectId}/milestones`, { cache: "no-store" }),
       ]);
-      const [data, epicsData] = await Promise.all([response.json(), epicsResponse.json()]);
+      const [data, epicsData, milestonesData] = await Promise.all([response.json(), epicsResponse.json(), milestonesResponse.json()]);
 
       if (!response.ok) {
         throw new Error(
@@ -407,6 +429,7 @@ export default function ProjectTasks({
 
       setTasks(data.tasks ?? []);
       if (epicsResponse.ok) setEpics(epicsData.epics ?? []);
+      if (milestonesResponse.ok) setMilestones(milestonesData.milestones ?? []);
       const taskId = window.location.hash.match(/^#task-([0-9a-f-]{36})$/i)?.[1];
       if (taskId && data.tasks?.some((task: Task) => task.id === taskId)) {
         window.setTimeout(() => document.getElementById(`task-${taskId}`)?.scrollIntoView({ block: "center" }), 0);
@@ -443,13 +466,13 @@ export default function ProjectTasks({
         { status: nextStatus }
       );
 
-      setTasks((previous) =>
-        previous.map((item) =>
-          item.id === task.id
-            ? { ...item, status: nextStatus }
-            : item
-        )
-      );
+      // A status change can unblock other tasks, so update every row's
+      // dependency state instead of changing only the edited task locally.
+      await loadTasks();
+
+      if (activeTaskId) {
+        await refreshTaskDetail(activeTaskId);
+      }
 
       setNotice("وضعیت تسک ثبت شد.");
     } catch (error) {
@@ -471,6 +494,7 @@ export default function ProjectTasks({
     setComments([]);
     setHistory([]);
     setTaskDetail(null);
+    setDependencyTaskId("");
     setCommentText("");
     setDetailLoading(true);
     setError("");
@@ -527,6 +551,56 @@ export default function ProjectTasks({
     if (response.ok) {
       const data = await response.json();
       setHistory(data.history ?? []);
+    }
+  }
+
+  async function refreshTaskDetail(taskId: string) {
+    const response = await fetch(`/api/v1/tasks/${taskId}`, { cache: "no-store" });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "دریافت وابستگی‌های تسک ناموفق بود.");
+    }
+
+    setTaskDetail(data.task ?? null);
+  }
+
+  async function addDependency() {
+    if (!activeTask || !canManage || busy || !dependencyTaskId) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      await sendApi(`/api/v1/tasks/${activeTask.id}/dependencies`, "POST", {
+        prerequisiteTaskId: dependencyTaskId,
+      });
+      await refreshTaskDetail(activeTask.id);
+      setDependencyTaskId("");
+      setNotice("وابستگی تسک ثبت شد.");
+    } catch (error) {
+      setError(messageOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeDependency(dependencyId: string) {
+    if (!activeTask || !canManage || busy) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      await sendApi(`/api/v1/tasks/${activeTask.id}/dependencies`, "DELETE", {
+        dependencyId,
+      });
+      await refreshTaskDetail(activeTask.id);
+      setNotice("وابستگی تسک حذف شد.");
+    } catch (error) {
+      setError(messageOf(error));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -858,6 +932,10 @@ export default function ProjectTasks({
 
                       {task.epic && <span className="rounded-md bg-indigo-50 px-2 py-1 font-semibold text-indigo-700">Epic: {task.epic.name}</span>}
 
+                      {task.milestone && <span className="rounded-md bg-fuchsia-50 px-2 py-1 font-semibold text-fuchsia-700">مایلستون: {task.milestone.title}</span>}
+
+                      {task.blockedByCount > 0 && <span className="rounded-md bg-rose-50 px-2 py-1 font-semibold text-rose-700">مسدود · {task.blockedByCount.toLocaleString("fa-IR")} پیش‌نیاز</span>}
+
                       {task.parentTask && <span className="rounded-md bg-sky-50 px-2 py-1 font-semibold text-sky-700">زیرتسکِ {task.parentTask.title}</span>}
 
                       {task.dueDate && (
@@ -995,6 +1073,17 @@ export default function ProjectTasks({
                                 <h5 className="text-xs font-bold text-indigo-800">Epic و زیرتسک‌ها</h5>
                                 <p className="mt-2 text-sm text-indigo-950">{taskDetail.epic ? `Epic: ${taskDetail.epic.name}` : "به Epic متصل نیست"}{taskDetail.parentTask ? ` · زیرتسکِ ${taskDetail.parentTask.title}` : ""}</p>
                                 {taskDetail.subtasks.length > 0 && <ul className="mt-2 space-y-1 text-xs text-indigo-900">{taskDetail.subtasks.map((subtask) => <li key={subtask.id} className="rounded-lg bg-white/80 px-2 py-1.5">{subtask.title} · {taskTypeLabels[subtask.type]} · {statusLabels[subtask.status]}</li>)}</ul>}
+                              </div>
+                            )}
+
+                            {taskDetail && (
+                              <div className={`mt-4 rounded-xl border p-3 ${taskDetail.dependencies.some((dependency) => dependency.isBlocking) ? "border-rose-200 bg-rose-50/70" : "border-sky-100 bg-sky-50/60"}`}>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <h5 className="flex items-center gap-1.5 text-xs font-bold text-slate-800"><Link2 size={15} className={taskDetail.dependencies.some((dependency) => dependency.isBlocking) ? "text-rose-600" : "text-sky-600"} />وابستگی‌های تسک</h5>
+                                  {taskDetail.dependencies.some((dependency) => dependency.isBlocking) && <span className="rounded-md bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-700">مسدودشده</span>}
+                                </div>
+                                {taskDetail.dependencies.length === 0 ? <p className="mt-2 text-xs text-slate-500">این تسک پیش‌نیازی ندارد و منتظر تسک دیگری نیست.</p> : <ul className="mt-2 space-y-1.5">{taskDetail.dependencies.map((dependency) => <li key={dependency.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/85 px-2.5 py-2 text-xs"><div><span className="font-semibold text-slate-800">{dependency.task.title}</span><span className={`mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold ${dependency.isBlocking ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{dependency.isBlocking ? "انجام نشده" : "انجام شده"}</span>{dependency.task.assignee && <span className="mr-1.5 text-[10px] text-slate-500">{dependency.task.assignee.name}</span>}</div>{canManage && <button type="button" disabled={busy} onClick={() => void removeDependency(dependency.id)} className="rounded-md px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">حذف</button>}</li>)}</ul>}
+                                {canManage && <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200/70 pt-3"><select value={dependencyTaskId} onChange={(event) => setDependencyTaskId(event.target.value)} className={`${inputClass} min-w-52 flex-1 !py-2 text-xs`}><option value="">انتخاب تسک پیش‌نیاز...</option>{tasks.filter((candidate) => candidate.id !== task.id && !taskDetail.dependencies.some((dependency) => dependency.task.id === candidate.id)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title} — {statusLabels[candidate.status]}</option>)}</select><button type="button" disabled={busy || !dependencyTaskId} onClick={() => void addDependency()} className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-50"><Link2 size={14} />افزودن پیش‌نیاز</button></div>}
                               </div>
                             )}
 
@@ -1208,7 +1297,9 @@ export default function ProjectTasks({
           submitLabel="ثبت وظیفه"
           assignees={assignees}
           epics={epics}
+          milestones={milestones}
           parentTasks={tasks.filter((task) => !task.parentTaskId)}
+          dependencyTasks={tasks.map((task) => ({ id: task.id, title: task.title, status: task.status }))}
           onClose={() => setCreating(false)}
           onSubmit={async (values) => {
             const data = await sendApi(
@@ -1222,6 +1313,7 @@ export default function ProjectTasks({
                 rank: values.rank,
                 acceptanceCriteria: values.acceptanceCriteria,
                 epicId: values.epicId,
+                milestoneId: values.milestoneId,
                 parentTaskId: values.parentTaskId,
                 status: values.status,
                 priority: values.priority,
@@ -1231,10 +1323,11 @@ export default function ProjectTasks({
               }
             );
 
-            setTasks((previous) => [
-              data.task,
-              ...previous,
-            ]);
+            await Promise.all(values.dependencyTaskIds.map((prerequisiteTaskId) =>
+              sendApi(`/api/v1/tasks/${data.task.id}/dependencies`, "POST", { prerequisiteTaskId })
+            ));
+
+            await loadTasks();
 
             setCreating(false);
             setNotice("وظیفه جدید ایجاد شد.");
@@ -1250,15 +1343,20 @@ export default function ProjectTasks({
           task={editingTask}
           assignees={assignees}
           epics={epics}
+          milestones={milestones}
           parentTasks={tasks.filter((task) => !task.parentTaskId && task.id !== editingTask.id)}
+          dependencyTasks={tasks.map((task) => ({ id: task.id, title: task.title, status: task.status }))}
+          onDependenciesChanged={loadTasks}
           onClose={() => setEditingTask(null)}
           onSubmit={async (values) => {
             const taskId = editingTask.id;
+            const { dependencyTaskIds, ...taskValues } = values;
+            void dependencyTaskIds;
 
             await sendApi(
               `/api/v1/tasks/${taskId}`,
               "PATCH",
-              values
+              taskValues
             );
 
             setEditingTask(null);
@@ -1294,6 +1392,7 @@ export type FormValues = {
   rank: number;
   acceptanceCriteria: string;
   epicId: string | null;
+  milestoneId: string | null;
   parentTaskId: string | null;
   status: Status;
   priority: Priority;
@@ -1301,6 +1400,7 @@ export type FormValues = {
   startDate: string | null;
   dueDate: string | null;
   note: string;
+  dependencyTaskIds: string[];
 };
 
 export function TaskFormModal({
@@ -1309,7 +1409,10 @@ export function TaskFormModal({
   task,
   assignees = [],
   epics = [],
+  milestones = [],
   parentTasks = [],
+  dependencyTasks = [],
+  onDependenciesChanged,
   onClose,
   onSubmit,
 }: {
@@ -1318,7 +1421,10 @@ export function TaskFormModal({
   task?: Task;
   assignees?: Member[];
   epics?: Epic[];
+  milestones?: MilestoneOption[];
   parentTasks?: { id: string; title: string }[];
+  dependencyTasks?: { id: string; title: string; status: Status }[];
+  onDependenciesChanged?: () => Promise<void>;
   onClose: () => void;
   onSubmit: (values: FormValues) => Promise<void>;
 }) {
@@ -1339,6 +1445,7 @@ export function TaskFormModal({
     task?.acceptanceCriteria ?? ""
   );
   const [epicId, setEpicId] = useState(task?.epicId ?? "");
+  const [milestoneId, setMilestoneId] = useState(task?.milestoneId ?? "");
   const [parentTaskId, setParentTaskId] = useState(task?.parentTaskId ?? "");
   const [status, setStatus] = useState<Status>(
     task?.status ?? "TODO"
@@ -1361,6 +1468,12 @@ export function TaskFormModal({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [dependencies, setDependencies] = useState<TaskDependency[]>([]);
+  const [dependencyTaskId, setDependencyTaskId] = useState("");
+  const [dependencyBusy, setDependencyBusy] = useState(false);
+  const [dependencyError, setDependencyError] = useState("");
+  const [pendingDependencyIds, setPendingDependencyIds] = useState<string[]>([]);
+  const editableTaskId = task?.id;
 
   useEffect(() => {
     const oldOverflow = document.body.style.overflow;
@@ -1370,6 +1483,52 @@ export function TaskFormModal({
       document.body.style.overflow = oldOverflow;
     };
   }, []);
+
+  useEffect(() => {
+    if (!editableTaskId) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/v1/tasks/${editableTaskId}/dependencies`, { cache: "no-store", credentials: "same-origin" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "دریافت وابستگی‌های تسک ناموفق بود.");
+        if (!cancelled) setDependencies(data.dependencies ?? []);
+      } catch (cause) {
+        if (!cancelled) setDependencyError(messageOf(cause));
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [editableTaskId]);
+
+  async function updateDependencies(method: "POST" | "DELETE", body: Record<string, string>) {
+    if (!task || dependencyBusy) return;
+    setDependencyBusy(true);
+    setDependencyError("");
+
+    try {
+      const response = await fetch(`/api/v1/tasks/${task.id}/dependencies`, {
+        method,
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "ذخیره وابستگی ناموفق بود.");
+
+      const refreshed = await fetch(`/api/v1/tasks/${task.id}/dependencies`, { cache: "no-store", credentials: "same-origin" });
+      const refreshedData = await refreshed.json();
+      if (!refreshed.ok) throw new Error(refreshedData.message || "به‌روزرسانی وابستگی ناموفق بود.");
+      setDependencies(refreshedData.dependencies ?? []);
+      setDependencyTaskId("");
+      await onDependenciesChanged?.();
+    } catch (cause) {
+      setDependencyError(messageOf(cause));
+    } finally {
+      setDependencyBusy(false);
+    }
+  }
 
   async function submit(
     event: FormEvent<HTMLFormElement>
@@ -1417,6 +1576,7 @@ export function TaskFormModal({
         rank: parsedRank,
         acceptanceCriteria,
         epicId: epicId || null,
+        milestoneId: milestoneId || null,
         parentTaskId: parentTaskId || null,
         status,
         priority,
@@ -1424,6 +1584,7 @@ export function TaskFormModal({
         startDate,
         dueDate,
         note,
+        dependencyTaskIds: pendingDependencyIds,
       });
     } catch (err) {
       setError(messageOf(err));
@@ -1566,11 +1727,17 @@ export function TaskFormModal({
               />
             </Field>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Epic (اختیاری)">
                 <select className={inputClass} value={epicId} onChange={(event) => setEpicId(event.target.value)}>
                   <option value="">بدون Epic</option>
                   {epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}
+                </select>
+              </Field>
+              <Field label="مایلستون (اختیاری)">
+                <select className={inputClass} value={milestoneId} onChange={(event) => setMilestoneId(event.target.value)}>
+                  <option value="">بدون مایلستون</option>
+                  {milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{milestone.title}</option>)}
                 </select>
               </Field>
               <Field label="تسک والد / Subtask (اختیاری)">
@@ -1672,6 +1839,29 @@ export function TaskFormModal({
                 onChange={setDueDate}
               />
             </div>
+
+            {!task && dependencyTasks.length > 0 && (
+              <section className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+                <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><Link2 size={17} className="text-sky-600" />پیش‌نیازهای تسک</h3>
+                <p className="mt-1 text-xs text-slate-500">تسک‌های لازم را انتخاب کنید؛ پس از ایجاد تسک، وابستگی‌ها خودکار ثبت می‌شوند.</p>
+                {pendingDependencyIds.length > 0 && <ul className="mt-3 space-y-1.5">{pendingDependencyIds.map((id) => { const candidate = dependencyTasks.find((item) => item.id === id); return candidate ? <li key={id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-xs"><span className="font-bold text-slate-800">{candidate.title}</span><button type="button" onClick={() => setPendingDependencyIds((previous) => previous.filter((item) => item !== id))} className="text-rose-600">حذف</button></li> : null; })}</ul>}
+                <div className="mt-3 flex flex-wrap gap-2"><select value={dependencyTaskId} onChange={(event) => setDependencyTaskId(event.target.value)} className={`${inputClass} min-w-52 flex-1 !py-2 text-xs`}><option value="">انتخاب تسک پیش‌نیاز...</option>{dependencyTasks.filter((candidate) => !pendingDependencyIds.includes(candidate.id)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title} — {statusLabels[candidate.status]}</option>)}</select><button type="button" disabled={!dependencyTaskId} onClick={() => { setPendingDependencyIds((previous) => [...previous, dependencyTaskId]); setDependencyTaskId(""); }} className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Link2 size={14} />افزودن</button></div>
+              </section>
+            )}
+
+            {task && (
+              <section className={`rounded-2xl border p-4 ${dependencies.some((dependency) => dependency.isBlocking) ? "border-rose-200 bg-rose-50/70" : "border-sky-100 bg-sky-50/70"}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div><h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><Link2 size={17} className="text-sky-600" />وابستگی‌ها و پیش‌نیازها</h3><p className="mt-1 text-xs text-slate-500">تسک‌هایی را انتخاب کنید که باید پیش از این تسک انجام شوند.</p></div>
+                  {dependencies.some((dependency) => dependency.isBlocking) && <span className="rounded-lg bg-rose-100 px-2.5 py-1 text-[11px] font-bold text-rose-700">این تسک مسدود است</span>}
+                </div>
+
+                {dependencyError && <p role="alert" className="mt-3 rounded-lg bg-rose-100 px-3 py-2 text-xs text-rose-700">{dependencyError}</p>}
+                {dependencies.length === 0 ? <p className="mt-3 text-xs text-slate-500">هنوز پیش‌نیازی برای این تسک ثبت نشده است.</p> : <ul className="mt-3 space-y-2">{dependencies.map((dependency) => <li key={dependency.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-xs shadow-sm"><div className="min-w-0"><span className="font-bold text-slate-800">{dependency.task.title}</span><span className={`mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold ${dependency.isBlocking ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{dependency.isBlocking ? "انجام نشده" : "انجام شده"}</span></div><button type="button" disabled={dependencyBusy || saving} onClick={() => void updateDependencies("DELETE", { dependencyId: dependency.id })} className="rounded-lg px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">حذف</button></li>)}</ul>}
+
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200/70 pt-3"><select value={dependencyTaskId} disabled={dependencyBusy || saving} onChange={(event) => setDependencyTaskId(event.target.value)} className={`${inputClass} min-w-52 flex-1 !py-2 text-xs`}><option value="">انتخاب تسک پیش‌نیاز...</option>{dependencyTasks.filter((candidate) => candidate.id !== task.id && !dependencies.some((dependency) => dependency.task.id === candidate.id)).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title} — {statusLabels[candidate.status]}</option>)}</select><button type="button" disabled={dependencyBusy || saving || !dependencyTaskId} onClick={() => void updateDependencies("POST", { prerequisiteTaskId: dependencyTaskId })} className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-50">{dependencyBusy && <LoaderCircle size={14} className="animate-spin" />}<Link2 size={14} />افزودن پیش‌نیاز</button></div>
+              </section>
+            )}
 
             {task && (
               <Field label="توضیح تغییرات (اختیاری)">

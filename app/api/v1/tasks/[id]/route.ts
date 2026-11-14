@@ -54,6 +54,7 @@ const detailsSchema = z.object({
   rank: z.number().finite().min(0).max(100_000).optional(),
   acceptanceCriteria: z.string().trim().max(5000).nullable().optional(),
   epicId: z.uuid().nullable().optional(),
+  milestoneId: z.uuid().nullable().optional(),
   parentTaskId: z.uuid().nullable().optional(),
   status: statusEnum,
   startDate: z.iso.date().nullable(),
@@ -105,6 +106,7 @@ function taskError(error: unknown) {
       status: 409,
     },
     INVALID_EPIC: { message: "Epic باید متعلق به همین پروژه باشد.", status: 400 },
+    INVALID_MILESTONE: { message: "مایلستون باید متعلق به همین پروژه باشد.", status: 400 },
     INVALID_PARENT_TASK: { message: "تسک والد معتبر نیست.", status: 400 },
   };
 
@@ -153,6 +155,20 @@ export async function GET(
       id: true, title: true, description: true, type: true, storyPoints: true,
       rank: true, acceptanceCriteria: true, priority: true, status: true,
       epic: { select: { id: true, name: true } },
+      milestone: { select: { id: true, title: true } },
+      dependencies: {
+        where: { prerequisiteTask: { deletedAt: null } },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          prerequisiteTask: {
+            select: {
+              id: true, title: true, status: true, type: true,
+              assignee: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
       parentTask: { select: { id: true, title: true, type: true } },
       subtasks: {
         where: { deletedAt: null, ...(canViewAll ? {} : { assigneeId: actor.id }) },
@@ -168,6 +184,11 @@ export async function GET(
     success: true,
     task: {
       ...detail,
+      dependencies: detail.dependencies.map((dependency) => ({
+        id: dependency.id,
+        task: dependency.prerequisiteTask,
+        isBlocking: dependency.prerequisiteTask.status !== "DONE",
+      })),
       startDate: detail.startDate?.toISOString() ?? null,
       dueDate: detail.dueDate?.toISOString() ?? null,
       createdAt: detail.createdAt.toISOString(),
@@ -391,6 +412,7 @@ export async function PATCH(
             rank: true,
             acceptanceCriteria: true,
             epicId: true,
+            milestoneId: true,
             parentTaskId: true,
             priority: true,
             status: true,
@@ -469,6 +491,9 @@ export async function PATCH(
         const nextEpicId = details?.epicId === undefined
           ? current.epicId
           : details.epicId;
+        const nextMilestoneId = details?.milestoneId === undefined
+          ? current.milestoneId
+          : details.milestoneId;
         const nextParentTaskId = details?.parentTaskId === undefined
           ? current.parentTaskId
           : details.parentTaskId;
@@ -476,6 +501,14 @@ export async function PATCH(
         if (nextEpicId) {
           const epic = await tx.epic.findFirst({ where: { id: nextEpicId, projectId: current.projectId }, select: { id: true } });
           if (!epic) throw new Error("INVALID_EPIC");
+        }
+
+        if (nextMilestoneId) {
+          const milestone = await tx.milestone.findFirst({
+            where: { id: nextMilestoneId, projectId: current.projectId },
+            select: { id: true },
+          });
+          if (!milestone) throw new Error("INVALID_MILESTONE");
         }
 
         if (nextParentTaskId) {
@@ -506,6 +539,7 @@ export async function PATCH(
             rank: String(current.rank),
             acceptanceCriteria: current.acceptanceCriteria,
             epicId: current.epicId,
+            milestoneId: current.milestoneId,
             parentTaskId: current.parentTaskId,
             priority: current.priority,
             status: current.status,
@@ -525,6 +559,7 @@ export async function PATCH(
             rank: String(nextRank),
             acceptanceCriteria: nextAcceptanceCriteria,
             epicId: nextEpicId,
+            milestoneId: nextMilestoneId,
             parentTaskId: nextParentTaskId,
             priority: details.priority,
             status: details.status,
@@ -570,6 +605,7 @@ export async function PATCH(
                   rank: nextRank,
                   acceptanceCriteria: nextAcceptanceCriteria,
                   epicId: nextEpicId,
+                  milestoneId: nextMilestoneId,
                   parentTaskId: nextParentTaskId,
                   status: details.status,
                   priority: details.priority,

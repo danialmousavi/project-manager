@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderTree, GripVertical, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
 
-import { TaskFormModal, type FormValues } from "@/components/tasks/project-tasks";
+import { TaskFormModal, type FormValues, type MilestoneOption } from "@/components/tasks/project-tasks";
 
 type TaskType = "STORY" | "TASK" | "BUG";
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
@@ -26,6 +26,7 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
   const [priority, setPriority] = useState("");
   const [epicId, setEpicId] = useState("");
   const [epics, setEpics] = useState<Epic[]>([]);
+  const [milestones, setMilestones] = useState<MilestoneOption[]>([]);
   const [newEpicName, setNewEpicName] = useState("");
   const [dragged, setDragged] = useState<string | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -41,11 +42,12 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
       if (type) params.set("type", type);
       if (priority) params.set("priority", priority);
       if (epicId) params.set("epicId", epicId);
-      const [response, epicsResponse] = await Promise.all([fetch(`/api/v1/projects/${projectId}/backlog?${params}`, { cache: "no-store", credentials: "same-origin" }), fetch(`/api/v1/projects/${projectId}/epics`, { cache: "no-store", credentials: "same-origin" })]);
-      const [body, epicsBody] = await Promise.all([response.json(), epicsResponse.json()]);
+      const [response, epicsResponse, milestonesResponse] = await Promise.all([fetch(`/api/v1/projects/${projectId}/backlog?${params}`, { cache: "no-store", credentials: "same-origin" }), fetch(`/api/v1/projects/${projectId}/epics`, { cache: "no-store", credentials: "same-origin" }), fetch(`/api/v1/projects/${projectId}/milestones`, { cache: "no-store", credentials: "same-origin" })]);
+      const [body, epicsBody, milestonesBody] = await Promise.all([response.json(), epicsResponse.json(), milestonesResponse.json()]);
       if (!response.ok) throw new Error(body.message || "دریافت بک‌لاگ ناموفق بود.");
       setData(body);
       if (epicsResponse.ok) setEpics(epicsBody.epics ?? []);
+      if (milestonesResponse.ok) setMilestones(milestonesBody.milestones ?? []);
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "خطایی رخ داد."); }
     finally { setLoading(false); }
@@ -112,7 +114,7 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
     <section onDragOver={(event) => data?.canManage && event.preventDefault()} onDrop={() => dragged && void patch({ action: "MOVE_TASK", taskId: dragged, sprintId: null })} className="rounded-xl border border-dashed border-violet-200 bg-violet-50/60 p-3"><div className="mb-2 flex justify-between"><h3 className="text-sm font-extrabold text-violet-950">Backlog برنامه‌ریزی‌نشده</h3><span className="text-[11px] text-violet-700">{data?.backlog.length.toLocaleString("fa-IR")} تسک · {data?.backlogStoryPoints.toLocaleString("fa-IR")} SP</span></div><TaskList search={search} tasks={data?.backlog ?? []} canManage={Boolean(data?.canManage)} busy={busy} dragged={dragged} sprints={sprints} onDrag={setDragged} onOpen={setSelectedTask} onDropTask={dropOnTask} onMove={(taskId, sprintId) => void patch({ action: "MOVE_TASK", taskId, sprintId })} onRank={(taskId, rank) => void patch({ action: "REORDER_TASK", taskId, rank })} /></section>
     {selectedTask && <TaskDetailsModal task={selectedTask} onClose={() => setSelectedTask(null)} />}
     {treeOpen && <TaskTreeModal epics={epics} ungroupedTasks={allTasks.filter((task) => !task.epicId)} onClose={() => setTreeOpen(false)} />}
-    {taskModalOpen && <TaskFormModal title="ایجاد تسک در بک‌لاگ" submitLabel="ایجاد تسک" assignees={[]} epics={epics} parentTasks={allTasks.filter((task) => !task.parentTaskId).map((task) => ({ id: task.id, title: task.title }))} onClose={() => setTaskModalOpen(false)} onSubmit={async (values: FormValues) => { const { note, ...payload } = values; void note; const response = await fetch(`/api/v1/projects/${projectId}/tasks`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const result = await response.json(); if (!response.ok) throw new Error(result.message || "ایجاد تسک ناموفق بود."); setTaskModalOpen(false); await load(); }} />}
+    {taskModalOpen && <TaskFormModal title="ایجاد تسک در بک‌لاگ" submitLabel="ایجاد تسک" assignees={[]} epics={epics} milestones={milestones} parentTasks={allTasks.filter((task) => !task.parentTaskId).map((task) => ({ id: task.id, title: task.title }))} dependencyTasks={allTasks.map((task) => ({ id: task.id, title: task.title, status: task.status as "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" }))} onClose={() => setTaskModalOpen(false)} onSubmit={async (values: FormValues) => { const { note, dependencyTaskIds, ...payload } = values; void note; const response = await fetch(`/api/v1/projects/${projectId}/tasks`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const result = await response.json(); if (!response.ok) throw new Error(result.message || "ایجاد تسک ناموفق بود."); await Promise.all(dependencyTaskIds.map((prerequisiteTaskId) => fetch(`/api/v1/tasks/${result.task.id}/dependencies`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prerequisiteTaskId }) }))); setTaskModalOpen(false); await load(); }} />}
   </div>;
 }
 

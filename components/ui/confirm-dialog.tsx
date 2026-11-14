@@ -10,6 +10,7 @@ import {
 type Props = {
   title: string;
   description: string;
+  confirmLabel?: string;
   busy?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -18,6 +19,7 @@ type Props = {
 export default function ConfirmDialog({
   title,
   description,
+  confirmLabel = "حذف تسک",
   busy = false,
   onCancel,
   onConfirm,
@@ -83,7 +85,7 @@ export default function ConfirmDialog({
                 className="animate-spin"
               />
             )}
-            حذف تسک
+            {confirmLabel}
           </button>
         </div>
       </div>

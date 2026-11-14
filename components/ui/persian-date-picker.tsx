@@ -18,6 +18,9 @@ type Props = {
   value: string | null;
   onChange: (value: string | null) => void;
   disabled?: boolean;
+  calendarPosition?: string;
+  portal?: boolean;
+  zIndex?: number;
 };
 
 export default function PersianDatePicker({
@@ -25,6 +28,9 @@ export default function PersianDatePicker({
   value,
   onChange,
   disabled = false,
+  calendarPosition = "bottom-right",
+  portal = false,
+  zIndex,
 }: Props) {
   // Input: Gregorian YYYY-MM-DD (English digits)
   // Display: Persian calendar and Persian digits
@@ -82,7 +88,9 @@ export default function PersianDatePicker({
           calendar={persian}
           locale={persianFa}
           format="YYYY/MM/DD"
-          calendarPosition="bottom-right"
+          calendarPosition={calendarPosition}
+          portal={portal}
+          zIndex={zIndex}
           value={selectedDate}
           onChange={(date) => {
             if (Array.isArray(date)) {

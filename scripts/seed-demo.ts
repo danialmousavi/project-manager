@@ -34,6 +34,8 @@ const ids = {
   platformFutureSprint: "aaaaaaa3-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   epicFoundation: "f0000001-0000-4000-8000-000000000001",
   epicReporting: "f0000002-0000-4000-8000-000000000002",
+  milestoneExperience: "f1000001-0000-4000-8000-000000000001",
+  milestoneReports: "f1000002-0000-4000-8000-000000000002",
   taskDashboard: "c0000001-0000-4000-8000-000000000001",
   taskAuth: "c0000002-0000-4000-8000-000000000002",
   taskReports: "c0000003-0000-4000-8000-000000000003",
@@ -82,6 +84,8 @@ const dates = {
   backlogBugStart: new Date("2026-11-12T00:00:00.000Z"),
   backlogBugDue: new Date("2026-11-15T00:00:00.000Z"),
   sprintTodoStart: new Date("2026-11-10T00:00:00.000Z"),
+  experienceMilestone: new Date("2026-11-18T00:00:00.000Z"),
+  reportsMilestone: new Date("2026-12-05T00:00:00.000Z"),
 } as const;
 
 async function main() {
@@ -280,6 +284,29 @@ async function main() {
     });
   }
 
+  for (const milestone of [
+    {
+      id: ids.milestoneExperience,
+      title: "تکمیل تجربه کاربری نسخه آزمایشی",
+      description: "خروجی‌های اصلی احراز هویت و داشبورد پیش از تحویل نسخه آزمایشی.",
+      targetDate: dates.experienceMilestone,
+      status: "PLANNED" as const,
+    },
+    {
+      id: ids.milestoneReports,
+      title: "آماده‌سازی گزارش‌های مدیریتی",
+      description: "نسخه قابل ارائه گزارش‌های پیشرفت و خروجی‌های مدیریتی.",
+      targetDate: dates.reportsMilestone,
+      status: "PLANNED" as const,
+    },
+  ]) {
+    await prisma.milestone.upsert({
+      where: { id: milestone.id },
+      update: { ...milestone, projectId: ids.platformProject, completedAt: null },
+      create: { ...milestone, projectId: ids.platformProject },
+    });
+  }
+
   await prisma.sprint.upsert({
     where: { id: ids.platformSprintDone },
     update: {
@@ -389,6 +416,7 @@ async function main() {
       sprintId: ids.platformSprintDone,
       assigneeId: ids.manager,
       epicId: ids.epicFoundation,
+      milestoneId: ids.milestoneExperience,
     },
     {
       id: ids.taskAuth,
@@ -406,6 +434,7 @@ async function main() {
       sprintId: ids.platformSprint,
       assigneeId: ids.employee,
       epicId: ids.epicFoundation,
+      milestoneId: ids.milestoneExperience,
     },
     {
       id: ids.taskReports,
@@ -423,6 +452,7 @@ async function main() {
       sprintId: ids.platformSprint,
       assigneeId: ids.reviewer,
       epicId: ids.epicReporting,
+      milestoneId: ids.milestoneReports,
     },
     {
       id: ids.taskMobile,
@@ -522,6 +552,7 @@ async function main() {
       sprintId: ids.platformFutureSprint,
       assigneeId: ids.manager,
       epicId: ids.epicReporting,
+      milestoneId: ids.milestoneReports,
     },
     {
       id: ids.taskAuthValidation,
@@ -590,6 +621,7 @@ async function main() {
         rank: task.rank,
         acceptanceCriteria: task.acceptanceCriteria,
         epicId: task.epicId ?? null,
+        milestoneId: task.milestoneId ?? null,
         parentTaskId: task.parentTaskId ?? null,
         status: task.status,
         priority: task.priority,
@@ -613,6 +645,7 @@ async function main() {
         rank: task.rank,
         acceptanceCriteria: task.acceptanceCriteria,
         epicId: task.epicId ?? null,
+        milestoneId: task.milestoneId ?? null,
         parentTaskId: task.parentTaskId ?? null,
         status: task.status,
         priority: task.priority,
@@ -624,6 +657,21 @@ async function main() {
         assigneeId: task.assigneeId,
         createdById: ids.admin,
       },
+    });
+  }
+
+  for (const dependency of [
+    { dependentTaskId: ids.taskAuth, prerequisiteTaskId: ids.taskDashboard },
+    { dependentTaskId: ids.taskReports, prerequisiteTaskId: ids.taskDashboard },
+    { dependentTaskId: ids.taskReports, prerequisiteTaskId: ids.taskAuth },
+    { dependentTaskId: ids.taskSprintTodo, prerequisiteTaskId: ids.taskReports },
+    { dependentTaskId: ids.taskFuture, prerequisiteTaskId: ids.taskReports },
+    { dependentTaskId: ids.taskBacklogStory, prerequisiteTaskId: ids.taskSprintTodo },
+  ]) {
+    await prisma.taskDependency.upsert({
+      where: { dependentTaskId_prerequisiteTaskId: dependency },
+      update: {},
+      create: dependency,
     });
   }
 

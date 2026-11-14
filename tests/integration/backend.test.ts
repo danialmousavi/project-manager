@@ -26,6 +26,7 @@ let projectsRoute: typeof import("../../app/api/v1/projects/route");
 let projectRoute: typeof import("../../app/api/v1/projects/[id]/route");
 let taskListRoute: typeof import("../../app/api/v1/projects/[id]/tasks/route");
 let epicsRoute: typeof import("../../app/api/v1/projects/[id]/epics/route");
+let milestonesRoute: typeof import("../../app/api/v1/projects/[id]/milestones/route");
 let taskRoute: typeof import("../../app/api/v1/tasks/[id]/route");
 let sprintRoute: typeof import("../../app/api/v1/projects/[id]/sprints/route");
 let membersRoute: typeof import("../../app/api/v1/projects/[id]/members/route");
@@ -48,11 +49,12 @@ beforeAll(async () => {
   process.env.DATABASE_URL = testUrl;
   db = new PrismaClient({ adapter: new PrismaPg({ connectionString: testUrl }) });
   await db.$connect();
-  [projectsRoute, projectRoute, taskListRoute, epicsRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute] = await Promise.all([
+  [projectsRoute, projectRoute, taskListRoute, epicsRoute, milestonesRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute] = await Promise.all([
     import("../../app/api/v1/projects/route"),
     import("../../app/api/v1/projects/[id]/route"),
     import("../../app/api/v1/projects/[id]/tasks/route"),
     import("../../app/api/v1/projects/[id]/epics/route"),
+    import("../../app/api/v1/projects/[id]/milestones/route"),
     import("../../app/api/v1/tasks/[id]/route"),
     import("../../app/api/v1/projects/[id]/sprints/route"),
     import("../../app/api/v1/projects/[id]/members/route"),
@@ -69,6 +71,7 @@ beforeEach(async () => {
   await db.taskComment.deleteMany();
   await db.progressHistory.deleteMany();
   await db.task.deleteMany();
+  await db.milestone.deleteMany();
   await db.epic.deleteMany();
   await db.sprintEndSnapshot.deleteMany();
   await db.sprintStartSnapshotTask.deleteMany();
@@ -216,6 +219,12 @@ describe("authorization and input validation through real route handlers", () =>
     const project = await projectFactory(db, admin.id, manager.id);
     const other = await projectFactory(db, admin.id, manager.id);
     const foreignTask = await taskFactory(db, other.id, admin.id);
+    const milestone = await db.milestone.create({
+      data: { title: "Release checkpoint", targetDate: new Date("2099-06-15T00:00:00.000Z"), projectId: project.id },
+    });
+    const foreignMilestone = await db.milestone.create({
+      data: { title: "Foreign checkpoint", targetDate: new Date("2099-06-15T00:00:00.000Z"), projectId: other.id },
+    });
     actor = manager;
 
     const epicResponse = await epicsRoute.POST(
@@ -228,14 +237,15 @@ describe("authorization and input validation through real route handlers", () =>
     const parentResponse = await taskListRoute.POST(
       request("POST", `projects/${project.id}/tasks`, {
         title: "Design the foundation", description: "", type: "STORY", storyPoints: 5, rank: 1,
-        acceptanceCriteria: null, epicId: epic.id, parentTaskId: null, priority: "HIGH", status: "TODO",
+        acceptanceCriteria: null, epicId: epic.id, milestoneId: milestone.id, parentTaskId: null, priority: "HIGH", status: "TODO",
         assigneeId: null, startDate: null, dueDate: null,
       }),
       context(project.id)
     );
     expect(parentResponse.status).toBe(201);
-    const { task: parent } = await parentResponse.json() as { task: { id: string; epicId: string | null } };
+    const { task: parent } = await parentResponse.json() as { task: { id: string; epicId: string | null; milestoneId: string | null } };
     expect(parent.epicId).toBe(epic.id);
+    expect(parent.milestoneId).toBe(milestone.id);
 
     const subtaskResponse = await taskListRoute.POST(
       request("POST", `projects/${project.id}/tasks`, {
@@ -258,6 +268,14 @@ describe("authorization and input validation through real route handlers", () =>
 
     expect((await taskListRoute.POST(
       request("POST", `projects/${project.id}/tasks`, {
+        title: "Foreign milestone task", description: "", type: "TASK", storyPoints: null, rank: 4,
+        acceptanceCriteria: null, epicId: null, milestoneId: foreignMilestone.id, parentTaskId: null, priority: "LOW", status: "TODO",
+        assigneeId: null, startDate: null, dueDate: null,
+      }), context(project.id)
+    )).status).toBe(400);
+
+    expect((await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, {
         title: "Foreign parent task", description: "", type: "TASK", storyPoints: null, rank: 4,
         acceptanceCriteria: null, epicId: epic.id, parentTaskId: foreignTask.id, priority: "LOW", status: "TODO",
         assigneeId: null, startDate: null, dueDate: null,
@@ -271,8 +289,63 @@ describe("authorization and input validation through real route handlers", () =>
     const details = await taskRoute.GET(request("GET", `tasks/${parent.id}`), context(parent.id));
     expect(details.status).toBe(200);
     await expect(details.json()).resolves.toMatchObject({
-      task: { id: parent.id, epic: { id: epic.id }, subtasks: [{ id: subtask.id }] },
+      task: { id: parent.id, epic: { id: epic.id }, milestone: { id: milestone.id }, subtasks: [{ id: subtask.id }] },
     });
+  });
+
+  it("manages project milestones and reports progress from their tasks", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const project = await projectFactory(db, admin.id, manager.id);
+    actor = manager;
+
+    const created = await milestonesRoute.POST(
+      request("POST", `projects/${project.id}/milestones`, {
+        title: "Public beta release",
+        description: "Scope for the first public beta",
+        targetDate: "2099-06-15",
+      }),
+      context(project.id)
+    );
+    expect(created.status).toBe(201);
+    const { milestone } = await created.json() as { milestone: { id: string; status: string } };
+    expect(milestone.status).toBe("PLANNED");
+
+    await taskFactory(db, project.id, admin.id, { milestoneId: milestone.id, status: "DONE" });
+    const remaining = await taskFactory(db, project.id, admin.id, { milestoneId: milestone.id, status: "TODO" });
+
+    const listed = await milestonesRoute.GET(
+      request("GET", `projects/${project.id}/milestones`),
+      context(project.id)
+    );
+    expect(listed.status).toBe(200);
+    await expect(listed.json()).resolves.toMatchObject({
+      milestones: [{
+        id: milestone.id,
+        displayStatus: "PLANNED",
+        totalTasks: 2,
+        completedTasks: 1,
+        progress: 50,
+      }],
+    });
+
+    const completed = await milestonesRoute.PATCH(
+      request("PATCH", `projects/${project.id}/milestones`, {
+        action: "SET_STATUS",
+        milestoneId: milestone.id,
+        status: "COMPLETED",
+      }),
+      context(project.id)
+    );
+    expect(completed.status).toBe(200);
+    await expect(completed.json()).resolves.toMatchObject({ milestone: { id: milestone.id, status: "COMPLETED" } });
+
+    const deleted = await milestonesRoute.DELETE(
+      request("DELETE", `projects/${project.id}/milestones`, { milestoneId: milestone.id }),
+      context(project.id)
+    );
+    expect(deleted.status).toBe(200);
+    expect(await db.task.findUnique({ where: { id: remaining.id } })).toMatchObject({ milestoneId: null });
   });
 
   it("starts one future sprint and preserves its planned-task snapshot", async () => {

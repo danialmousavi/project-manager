@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 
 import { isoToJalali } from "@/lib/jalali";
-import { TaskFormModal, type FormValues } from "@/components/tasks/project-tasks";
+import { TaskFormModal, type FormValues, type MilestoneOption } from "@/components/tasks/project-tasks";
 
 type TaskStatus =
   | "TODO"
@@ -199,6 +199,7 @@ export default function KanbanBoard({
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [activeSprint, setActiveSprint] =
     useState<ActiveSprint | null>(null);
+  const [milestones, setMilestones] = useState<MilestoneOption[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -243,16 +244,21 @@ export default function KanbanBoard({
       }
 
       try {
-        const response = await fetch(
-          `/api/v1/projects/${projectId}/kanban`,
-          {
+        const [response, milestonesResponse] = await Promise.all([
+          fetch(`/api/v1/projects/${projectId}/kanban`, {
             cache: "no-store",
             credentials: "same-origin",
-          }
-        );
+          }),
+          fetch(`/api/v1/projects/${projectId}/milestones`, {
+            cache: "no-store",
+            credentials: "same-origin",
+          }),
+        ]);
 
-        const data: KanbanResponse =
-          await response.json();
+        const [data, milestonesData]: [KanbanResponse, { milestones?: MilestoneOption[] }] = await Promise.all([
+          response.json(),
+          milestonesResponse.json(),
+        ]);
 
         if (!response.ok || !data.success) {
           throw new Error(
@@ -264,6 +270,7 @@ export default function KanbanBoard({
         setTasks(data.tasks ?? []);
         setSprints(data.sprints ?? []);
         setActiveSprint(data.activeSprint ?? null);
+        if (milestonesResponse.ok) setMilestones(milestonesData.milestones ?? []);
 
         setCanManage(data.canManage);
         setTruncated(data.truncated);
@@ -488,7 +495,7 @@ export default function KanbanBoard({
     setSavingTaskId("new-task");
     setError("");
     try {
-      const { note, ...payload } = values;
+      const { note, dependencyTaskIds, ...payload } = values;
       void note;
       const response = await fetch(
         `/api/v1/projects/${projectId}/tasks`,
@@ -501,6 +508,7 @@ export default function KanbanBoard({
       );
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "ایجاد تسک ناموفق بود.");
+      await Promise.all(dependencyTaskIds.map((prerequisiteTaskId) => fetch(`/api/v1/tasks/${data.task.id}/dependencies`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prerequisiteTaskId }) })));
       await fetch(`/api/v1/projects/${projectId}/backlog`, {
         method: "PATCH",
         credentials: "same-origin",
@@ -1156,7 +1164,9 @@ export default function KanbanBoard({
           submitLabel="ایجاد و افزودن به برد"
           assignees={[]}
           epics={[]}
+          milestones={milestones}
           parentTasks={[]}
+          dependencyTasks={tasks.map((task) => ({ id: task.id, title: task.title, status: task.status }))}
           onClose={() => setQuickTask(null)}
           onSubmit={createQuickTask}
         />

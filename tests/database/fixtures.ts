@@ -47,6 +47,7 @@ export async function taskFactory(
   creatorId: string,
   options: {
     sprintId?: string;
+    milestoneId?: string;
     assigneeId?: string;
     status?: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
     type?: "STORY" | "TASK" | "BUG";

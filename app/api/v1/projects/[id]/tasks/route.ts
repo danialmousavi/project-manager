@@ -24,6 +24,7 @@ const taskSchema = z.object({
   rank: z.number().finite().min(0).max(100_000).optional().default(0),
   acceptanceCriteria: z.string().trim().max(5000).nullable().optional().default(null),
   epicId: z.uuid().nullable().optional().default(null),
+  milestoneId: z.uuid().nullable().optional().default(null),
   parentTaskId: z.uuid().nullable().optional().default(null),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   status: z.enum([
@@ -52,9 +53,15 @@ const taskSelect = {
   rank: true,
   acceptanceCriteria: true,
   epicId: true,
+  milestoneId: true,
   parentTaskId: true,
   sprintId: true,
   epic: { select: { id: true, name: true } },
+  milestone: { select: { id: true, title: true } },
+  dependencies: {
+    where: { prerequisiteTask: { deletedAt: null, status: { not: "DONE" } } },
+    select: { id: true },
+  },
   parentTask: { select: { id: true, title: true, type: true } },
   sprint: { select: { id: true, name: true, status: true } },
   _count: { select: { subtasks: { where: { deletedAt: null } }, comments: true } },
@@ -82,9 +89,12 @@ function serializeTask(task: {
   rank: number;
   acceptanceCriteria: string | null;
   epicId: string | null;
+  milestoneId: string | null;
   parentTaskId: string | null;
   sprintId: string | null;
   epic: { id: string; name: string } | null;
+  milestone: { id: string; title: string } | null;
+  dependencies: { id: string }[];
   parentTask: { id: string; title: string; type: string } | null;
   sprint: { id: string; name: string; status: string } | null;
   status: string;
@@ -103,6 +113,7 @@ function serializeTask(task: {
     dueDate: task.dueDate?.toISOString() ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
+    blockedByCount: task.dependencies.length,
   };
 }
 
@@ -236,6 +247,14 @@ export async function POST(
         if (!epic) throw new Error("INVALID_EPIC");
       }
 
+      if (data.milestoneId) {
+        const milestone = await tx.milestone.findFirst({
+          where: { id: data.milestoneId, projectId: id },
+          select: { id: true },
+        });
+        if (!milestone) throw new Error("INVALID_MILESTONE");
+      }
+
       if (data.parentTaskId) {
         const parent = await tx.task.findFirst({
           where: { id: data.parentTaskId, projectId: id, deletedAt: null, parentTaskId: null },
@@ -293,6 +312,7 @@ export async function POST(
           rank: data.rank,
           acceptanceCriteria: data.acceptanceCriteria || null,
           epicId: data.epicId,
+          milestoneId: data.milestoneId,
           parentTaskId: data.parentTaskId,
           priority: data.priority,
           status: data.status,
@@ -353,6 +373,10 @@ export async function POST(
 
     if (error instanceof Error && error.message === "INVALID_EPIC") {
       return NextResponse.json({ message: "Epic باید متعلق به همین پروژه باشد." }, { status: 400 });
+    }
+
+    if (error instanceof Error && error.message === "INVALID_MILESTONE") {
+      return NextResponse.json({ message: "مایلستون باید متعلق به همین پروژه باشد." }, { status: 400 });
     }
 
     if (error instanceof Error && error.message === "INVALID_PARENT_TASK") {

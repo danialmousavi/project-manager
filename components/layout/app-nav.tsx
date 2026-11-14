@@ -7,6 +7,7 @@ import {
   CalendarRange,
   ChevronDown,
   Columns3,
+  Flag,
   FolderKanban,
   FolderTree,
   LayoutDashboard,
@@ -22,6 +23,7 @@ const projectTabs = [
   { suffix: "/backlog", label: "بک‌لاگ", icon: ListFilter },
   { suffix: "/kanban", label: "برد کانبان", icon: Columns3 },
   { suffix: "/epics", label: "اپیک‌ها", icon: FolderTree },
+  { suffix: "/milestones", label: "مایلستون‌ها", icon: Flag },
 ];
 
 export default function AppNav({

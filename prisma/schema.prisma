@@ -60,6 +60,11 @@ enum TaskType {
   BUG
 }
 
+enum MilestoneStatus {
+  PLANNED
+  COMPLETED
+}
+
 enum ProgressTarget {
   PROJECT
   SPRINT
@@ -121,6 +126,7 @@ model Project {
   members         ProjectMember[]
   sprints         Sprint[]
   epics           Epic[]
+  milestones      Milestone[]
   tasks           Task[]
   progressHistory ProgressHistory[]
 
@@ -245,6 +251,29 @@ model Epic {
 }
 
 // ==================================
+// MILESTONES
+// ==================================
+
+model Milestone {
+  id          String          @id @default(uuid())
+  title       String
+  description String?
+  targetDate  DateTime
+  completedAt DateTime?
+  status      MilestoneStatus @default(PLANNED)
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, targetDate])
+  @@index([projectId, status])
+}
+
+// ==================================
 // TASKS
 // ==================================
 
@@ -259,6 +288,7 @@ model Task {
   acceptanceCriteria String?
   epicId             String?
   parentTaskId       String?
+  milestoneId        String?
 
   status   TaskStatus @default(TODO)
   priority Priority   @default(MEDIUM)
@@ -280,6 +310,7 @@ model Task {
   sprint   Sprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
 
   epic       Epic?  @relation(fields: [epicId], references: [id], onDelete: SetNull)
+  milestone  Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
   parentTask Task?  @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
   subtasks   Task[] @relation("TaskSubtasks")
 
@@ -291,6 +322,9 @@ model Task {
 
   comments TaskComment[]
 
+  dependencies     TaskDependency[] @relation("DependentTask")
+  requiredBy       TaskDependency[] @relation("PrerequisiteTask")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -299,10 +333,31 @@ model Task {
   @@index([assigneeId, status])
   @@index([sprintId])
   @@index([projectId, epicId])
+  @@index([projectId, milestoneId])
   @@index([parentTaskId])
   @@index([dueDate])
   @@index([projectId, deletedAt, status, position])
   @@index([deletedAt])
+}
+
+// ==================================
+// TASK DEPENDENCIES
+// ==================================
+
+model TaskDependency {
+  id String @id @default(uuid())
+
+  // The dependent task cannot start until the prerequisite task is complete.
+  dependentTaskId    String
+  prerequisiteTaskId String
+
+  dependentTask    Task @relation("DependentTask", fields: [dependentTaskId], references: [id], onDelete: Cascade)
+  prerequisiteTask Task @relation("PrerequisiteTask", fields: [prerequisiteTaskId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([dependentTaskId, prerequisiteTaskId])
+  @@index([prerequisiteTaskId])
 }
 
 // ==================================
