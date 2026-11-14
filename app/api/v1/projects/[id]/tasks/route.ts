@@ -53,8 +53,10 @@ const taskSelect = {
   acceptanceCriteria: true,
   epicId: true,
   parentTaskId: true,
+  sprintId: true,
   epic: { select: { id: true, name: true } },
   parentTask: { select: { id: true, title: true, type: true } },
+  sprint: { select: { id: true, name: true, status: true } },
   _count: { select: { subtasks: { where: { deletedAt: null } }, comments: true } },
   status: true,
   priority: true,
@@ -81,8 +83,10 @@ function serializeTask(task: {
   acceptanceCriteria: string | null;
   epicId: string | null;
   parentTaskId: string | null;
+  sprintId: string | null;
   epic: { id: string; name: string } | null;
   parentTask: { id: string; title: string; type: string } | null;
+  sprint: { id: string; name: string; status: string } | null;
   status: string;
   priority: string;
   assigneeId: string | null;

@@ -51,7 +51,7 @@ export default function DashboardPage() {
   return (
     <main
       id="main-content"
-      className="min-h-dvh bg-[radial-gradient(circle_at_top_right,_#d1fae5,_transparent_32%),linear-gradient(#f8fafc,_#f8fafc)] px-4 py-5 sm:px-6 lg:px-8"
+      className="min-h-dvh bg-[var(--background)] px-4 py-5 sm:px-6 lg:px-8"
     >
       <div className="mx-auto max-w-[1440px]">
         <Suspense fallback={<Loading />}>
@@ -102,26 +102,26 @@ async function Content() {
 
   return (
     <>
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-emerald-700 via-emerald-600 to-teal-600 px-5 py-5 text-white shadow-lg shadow-emerald-900/10 sm:px-7 sm:py-6">
+      <header className="rounded-2xl border border-[var(--border)] bg-white px-4 py-4 shadow-sm sm:px-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="relative z-10 min-w-0">
-            <p className="flex items-center gap-2 text-xs font-semibold text-emerald-100">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
               <Sparkles aria-hidden="true" size={16} /> فضای کاری شما
             </p>
-            <h1 className="mt-1.5 text-2xl font-extrabold sm:text-3xl">
+            <h1 className="mt-1 text-xl font-extrabold text-[var(--foreground)] sm:text-2xl">
               سلام، {user.name}
             </h1>
-            <p className="mt-1.5 text-sm text-emerald-50">
+            <p className="mt-1 text-xs text-[var(--muted)] sm:text-sm">
               نمای امروز · {roles[user.role]} · {dateLabel(data.today)}
             </p>
           </div>
-          <div className="relative z-10 flex items-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-sm">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-white/15">
-              <Target aria-hidden="true" size={20} />
+          <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-white text-emerald-700 shadow-sm">
+              <Target aria-hidden="true" size={18} />
             </div>
             <div>
-              <p className="text-xs text-emerald-100">تمرکز امروز</p>
-              <p className="mt-0.5 text-sm font-bold">
+              <p className="text-[11px] text-emerald-800">تمرکز امروز</p>
+              <p className="mt-0.5 text-sm font-bold text-emerald-950">
                 {number(data.metrics.openTasks)} وظیفه باز
               </p>
             </div>
@@ -129,35 +129,35 @@ async function Content() {
         </div>
       </header>
 
-      <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-bold text-emerald-700">نمای فعالیت</p>
-          <h2 className="mt-1 text-xl font-extrabold">کارهای در جریان</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
+          <h2 className="mt-0.5 text-lg font-extrabold">مرور وضعیت</h2>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
             آنچه امروز برای پیگیری اهمیت دارد
           </p>
         </div>
-        <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[var(--muted)] shadow-sm">
-          به‌روزرسانی زنده
+        <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--muted)]">
+          وضعیت فعلی
         </span>
       </div>
       <section
         aria-label="شاخص‌های کاری"
-        className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5"
+        className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5"
       >
         {metrics.map(({ label, value, icon: Icon }) => (
           <div
             key={label}
-            className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/70 bg-white/90 px-4 py-3.5 shadow-sm shadow-slate-200/60 transition-transform hover:-translate-y-0.5 hover:shadow-md"
+            className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-white px-3 py-3 shadow-sm transition-colors hover:border-emerald-200 hover:bg-emerald-50/30"
           >
             <div
-              className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${label === "عقب‌افتاده" && value ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}
+              className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${label === "عقب‌افتاده" && value ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}
             >
               <Icon aria-hidden="true" size={19} />
             </div>
             <div className="min-w-0">
               <p className="text-xs leading-5 text-[var(--muted)]">{label}</p>
-              <p className="mt-0.5 text-2xl font-extrabold tabular-nums">
+              <p className="mt-0.5 text-xl font-extrabold tabular-nums">
                 {number(value)}
               </p>
             </div>
@@ -168,7 +168,7 @@ async function Content() {
       <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)]">
         <section
           aria-labelledby="my-tasks-title"
-          className="min-w-0 rounded-3xl border border-white/80 bg-white/95 p-4 shadow-sm shadow-slate-200/70 sm:p-5"
+          className="min-w-0 rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm sm:p-5"
         >
           <Heading
             id="my-tasks-title"
@@ -219,7 +219,7 @@ async function Content() {
 
         <section
           aria-labelledby="projects-title"
-          className="min-w-0 rounded-3xl border border-white/80 bg-white/95 p-4 shadow-sm shadow-slate-200/70 sm:p-5"
+          className="min-w-0 rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm sm:p-5"
         >
           <Heading
             id="projects-title"
@@ -281,7 +281,7 @@ async function Content() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <section
           aria-labelledby="upcoming-tasks-title"
-          className="min-w-0 rounded-3xl border border-white/80 bg-white/95 p-4 shadow-sm shadow-slate-200/70 sm:p-5"
+          className="min-w-0 rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm sm:p-5"
         >
           <Heading
             id="upcoming-tasks-title"
@@ -361,7 +361,7 @@ async function Content() {
         {isManager && (
           <section
             aria-labelledby="workload-title"
-            className="min-w-0 rounded-3xl border border-white/80 bg-white/95 p-4 shadow-sm shadow-slate-200/70 sm:p-5"
+            className="min-w-0 rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm sm:p-5"
           >
             <Heading
               id="workload-title"
@@ -399,7 +399,7 @@ async function Content() {
         )}
         <section
           aria-labelledby="activity-title"
-          className="min-w-0 rounded-3xl border border-white/80 bg-white/95 p-4 shadow-sm shadow-slate-200/70 sm:p-5"
+          className="min-w-0 rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm sm:p-5"
         >
           <Heading
             id="activity-title"

@@ -74,6 +74,15 @@ const priorityColors: Record<Priority, string> = {
   URGENT: "bg-rose-50 text-rose-700",
 };
 
+const statusColors: Record<ProjectStatus, string> = {
+  DRAFT: "bg-slate-100 text-slate-700",
+  PLANNED: "bg-sky-50 text-sky-700",
+  ACTIVE: "bg-emerald-50 text-emerald-700",
+  ON_HOLD: "bg-amber-50 text-amber-800",
+  COMPLETED: "bg-violet-50 text-violet-700",
+  CANCELLED: "bg-rose-50 text-rose-700",
+};
+
 const inputClass =
   "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base transition focus-visible:border-emerald-700 focus-visible:outline-2 focus-visible:outline-emerald-700 sm:text-sm";
 
@@ -236,8 +245,8 @@ export default function ProjectsManager({
   }
 
   return (
-    <div className="space-y-4">
-      <div role="group" aria-label="آمار پروژه‌ها" className="grid grid-cols-3 gap-2 sm:gap-3">
+    <div className="space-y-3">
+      <div role="group" aria-label="آمار پروژه‌ها" className="grid grid-cols-3 gap-2">
         <Stat
           label="همه پروژه‌ها"
           value={projects.length}
@@ -265,8 +274,8 @@ export default function ProjectsManager({
         />
       </div>
 
-      <section aria-labelledby="projects-list-title" className="rounded-2xl border border-[var(--border)] bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3 sm:px-5">
+      <section aria-labelledby="projects-list-title" className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3.5 sm:px-5">
           <div>
             <h2 id="projects-list-title" className="text-base font-bold text-slate-900">
               پروژه‌ها
@@ -449,7 +458,7 @@ export default function ProjectsManager({
         )}
 
         <div className="p-4 sm:p-5">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="mb-4 grid gap-2.5 rounded-xl bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
             <div className="min-w-0 flex-1">
               <label htmlFor="project-search" className="mb-1 block text-xs font-semibold text-slate-700">جست‌وجوی پروژه</label>
               <div className="relative">
@@ -457,7 +466,7 @@ export default function ProjectsManager({
                 <input id="project-search" type="search" className={`${inputClass} pr-10`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="نام پروژه..." />
               </div>
             </div>
-            <div className="sm:w-48">
+            <div>
               <label htmlFor="project-status-filter" className="mb-1 block text-xs font-semibold text-slate-700">وضعیت</label>
               <select id="project-status-filter" className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ProjectStatus | "ALL")}>
                 <option value="ALL">همه وضعیت‌ها</option>
@@ -481,7 +490,7 @@ export default function ProjectsManager({
               {(search || statusFilter !== "ALL") && <button type="button" onClick={() => { setSearch(""); setStatusFilter("ALL"); }} className="mt-3 min-h-11 rounded-lg px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">پاک کردن فیلترها</button>}
             </div>
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid gap-2.5 lg:grid-cols-2 2xl:grid-cols-3">
               {filteredProjects.map((project) => {
                 const managersOfProject =
                   project.members.filter(
@@ -492,24 +501,24 @@ export default function ProjectsManager({
                 return (
                   <article
                     key={project.id}
-                    className="relative min-w-0 rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--primary-border)] hover:bg-emerald-50/30 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-emerald-700 sm:p-4"
+                    className="relative min-w-0 rounded-xl border border-[var(--border)] bg-white p-3 transition hover:border-emerald-300 hover:shadow-sm focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-emerald-700"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <h3 className="min-w-0 break-words text-base font-bold text-slate-900">
                         <Link href={`/projects/${project.id}`} className="outline-none after:absolute after:inset-0">{project.name}</Link>
                       </h3>
-                      <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${priorityColors[project.priority]}`}>اولویت {priorityLabels[project.priority]}</span>
+                      <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${priorityColors[project.priority]}`}>اولویت {priorityLabels[project.priority]}</span>
                     </div>
 
                     {project.description && <p className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--muted)]">{project.description}</p>}
 
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
-                      <span className="rounded-md bg-slate-100 px-2 py-1 font-medium text-slate-700">{statusLabels[project.status]}</span>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-[var(--muted)]">
+                      <span className={`rounded-md px-2 py-1 text-[11px] font-bold ${statusColors[project.status]}`}>{statusLabels[project.status]}</span>
                       <span className="inline-flex items-center gap-1"><Users aria-hidden="true" size={14} />{project.members.length.toLocaleString("fa-IR")} عضو</span>
                       <span className="min-w-0 break-words">مدیر: {managersOfProject.map((member) => member.user.name).join("، ") || "تعیین نشده"}</span>
                     </div>
 
-                    <div className="mt-3 flex items-center gap-3">
+                    <div className="mt-3 flex items-center gap-2.5">
                       <span className="shrink-0 text-xs text-[var(--muted)]">پیشرفت</span>
                       <div role="progressbar" aria-label={`پیشرفت پروژه ${project.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={project.progress} className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-emerald-100">
                         <div className="h-full rounded-full bg-emerald-600" style={{ width: `${Math.max(0, Math.min(100, project.progress))}%` }} />
@@ -517,7 +526,7 @@ export default function ProjectsManager({
                       <strong className="shrink-0 text-xs text-emerald-700 tabular-nums">{project.progress.toLocaleString("fa-IR")}٪</strong>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between border-t border-[var(--border)] pt-2 text-xs text-[var(--muted)]">
+                    <div className="mt-3 flex items-center justify-between border-t border-[var(--border)] pt-2.5 text-xs text-[var(--muted)]">
                       <span>ایجاد: {new Date(project.createdAt).toLocaleDateString("fa-IR")}</span>
                       <span aria-hidden="true" className="inline-flex items-center gap-1 font-semibold text-emerald-700">مشاهده پروژه <ChevronLeft size={15} /></span>
                     </div>
@@ -542,7 +551,7 @@ function Stat({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-white px-3 py-2.5 sm:gap-3 sm:px-4">
+    <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-white px-3 py-2.5 shadow-sm sm:gap-3 sm:px-4">
       <div className="hidden size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 sm:flex">
         {icon}
       </div>

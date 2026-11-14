@@ -16,6 +16,8 @@ import {
   ChevronDown,
   ClipboardList,
   Clock3,
+  FolderTree,
+  GitBranch,
   History,
   LoaderCircle,
   MessageCircle,
@@ -67,8 +69,10 @@ type Task = {
   acceptanceCriteria: string | null;
   epicId: string | null;
   parentTaskId: string | null;
+  sprintId: string | null;
   epic: { id: string; name: string } | null;
   parentTask: { id: string; title: string; type: TaskType } | null;
+  sprint: { id: string; name: string; status: string } | null;
   status: Status;
   priority: Priority;
   assigneeId: string | null;
@@ -135,6 +139,19 @@ type Props = {
   actorRole: Role;
 };
 
+type TaskTreeRow =
+  | { kind: "sprint"; id: string; label: string; count: number; backlog?: boolean }
+  | { kind: "epic"; id: string; label: string; count: number; ungrouped?: boolean }
+  | { kind: "task"; task: Task; depth: 0 | 1 };
+
+type TaskTreeSection = {
+  id: string;
+  label: string;
+  count: number;
+  backlog: boolean;
+  rows: Exclude<TaskTreeRow, { kind: "sprint" }>[];
+};
+
 const statusLabels: Record<Status, string> = {
   TODO: "برای انجام",
   IN_PROGRESS: "در حال انجام",
@@ -190,6 +207,81 @@ const priorityColors: Record<Priority, string> = {
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-60";
+
+const storyPointOptions = [1, 3, 5, 8, 13] as const;
+
+function buildTaskTreeRows(tasks: Task[]): TaskTreeRow[] {
+  const groups = new Map<string, { sprint: Task["sprint"]; tasks: Task[] }>();
+
+  for (const task of tasks) {
+    const key = task.sprintId ?? "backlog";
+    const group = groups.get(key) ?? { sprint: task.sprint, tasks: [] };
+    group.tasks.push(task);
+    groups.set(key, group);
+  }
+
+  const orderedGroups = [...groups.entries()].sort(([leftId, left], [rightId, right]) => {
+    if (leftId === "backlog") return 1;
+    if (rightId === "backlog") return -1;
+    if (left.sprint?.status === "ACTIVE") return -1;
+    if (right.sprint?.status === "ACTIVE") return 1;
+    return (left.sprint?.name ?? "").localeCompare(right.sprint?.name ?? "", "fa");
+  });
+
+  const rows: TaskTreeRow[] = [];
+  for (const [sprintId, group] of orderedGroups) {
+    const isBacklog = sprintId === "backlog";
+    rows.push({
+      kind: "sprint",
+      id: sprintId,
+      label: isBacklog ? "بک‌لاگ بدون اسپرینت" : group.sprint?.name ?? "اسپرینت نامشخص",
+      count: group.tasks.length,
+      backlog: isBacklog,
+    });
+
+    const taskById = new Map(group.tasks.map((task) => [task.id, task]));
+    const roots = group.tasks.filter((task) => !task.parentTaskId || !taskById.has(task.parentTaskId));
+    const childrenFor = (parentId: string) => group.tasks.filter((task) => task.parentTaskId === parentId);
+    const epicGroups = new Map<string, { label: string; tasks: Task[]; ungrouped: boolean }>();
+
+    for (const task of roots) {
+      const key = task.epic?.id ?? "no-epic";
+      const epic = epicGroups.get(key) ?? {
+        label: task.epic?.name ?? "تسک‌های بدون اپیک",
+        tasks: [],
+        ungrouped: !task.epic,
+      };
+      epic.tasks.push(task);
+      epicGroups.set(key, epic);
+    }
+
+    for (const [epicId, epic] of epicGroups) {
+      rows.push({ kind: "epic", id: `${sprintId}-${epicId}`, label: epic.label, count: epic.tasks.length, ungrouped: epic.ungrouped });
+      for (const parent of epic.tasks) {
+        rows.push({ kind: "task", task: parent, depth: 0 });
+        for (const child of childrenFor(parent.id)) rows.push({ kind: "task", task: child, depth: 1 });
+      }
+    }
+  }
+
+  return rows;
+}
+
+function buildTaskTreeSections(rows: TaskTreeRow[]): TaskTreeSection[] {
+  const sections: TaskTreeSection[] = [];
+  let current: TaskTreeSection | null = null;
+
+  for (const row of rows) {
+    if (row.kind === "sprint") {
+      current = { id: row.id, label: row.label, count: row.count, backlog: Boolean(row.backlog), rows: [] };
+      sections.push(current);
+    } else if (current) {
+      current.rows.push(row);
+    }
+  }
+
+  return sections;
+}
 
 function messageOf(error: unknown) {
   return error instanceof Error
@@ -552,6 +644,8 @@ export default function ProjectTasks({
     );
   });
 
+  const treeSections = buildTaskTreeSections(buildTaskTreeRows(filteredTasks));
+
   const doneCount = tasks.filter(
     (task) => task.status === "DONE"
   ).length;
@@ -561,18 +655,18 @@ export default function ProjectTasks({
   ).length;
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+    <section className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-extrabold text-slate-900">
+          <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-900">
             <ClipboardList
-              size={23}
+              size={20}
               className="text-emerald-600"
             />
             مدیریت وظایف
           </h2>
 
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">
             ساخت، ویرایش، واگذاری و پیگیری فعالیت‌ها
           </p>
         </div>
@@ -584,7 +678,7 @@ export default function ProjectTasks({
               setError("");
               setCreating(true);
             }}
-            className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-700"
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
           >
             <Plus size={18} />
             وظیفه جدید
@@ -592,7 +686,7 @@ export default function ProjectTasks({
         )}
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
         <MiniStat
           label="کل وظایف"
           value={tasks.length}
@@ -628,7 +722,7 @@ export default function ProjectTasks({
         </p>
       )}
 
-      <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+      <div className="mt-5 flex flex-col gap-2.5 rounded-xl bg-slate-50 p-3 sm:flex-row">
         <div className="relative flex-1">
           <Search
             size={18}
@@ -667,7 +761,7 @@ export default function ProjectTasks({
         </select>
       </div>
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-4 space-y-2.5">
         {loading ? (
           <div className="flex justify-center py-14">
             <LoaderCircle
@@ -686,7 +780,25 @@ export default function ProjectTasks({
             </p>
           </div>
         ) : (
-          filteredTasks.map((task) => {
+          treeSections.map((section) => (
+            <section key={section.id} className={`overflow-hidden rounded-2xl border shadow-sm ${section.backlog ? "border-violet-200 bg-violet-50/30" : "border-emerald-200 bg-emerald-50/20"}`}>
+              <header className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${section.backlog ? "border-violet-200 bg-violet-50/70" : "border-emerald-200 bg-emerald-50/70"}`}>
+                <div className="flex items-center gap-2.5"><span className={`flex size-8 items-center justify-center rounded-lg bg-white shadow-sm ${section.backlog ? "text-violet-700" : "text-emerald-700"}`}><FolderTree size={17} /></span><div><h3 className="text-sm font-extrabold text-slate-900">{section.label}</h3><p className="mt-0.5 text-[11px] text-slate-500">{section.backlog ? "تسک‌هایی که هنوز در اسپرینت قرار نگرفته‌اند" : "ساختار اپیک، تسک اصلی و زیرتسک"}</p></div></div>
+                <span className={`rounded-md bg-white px-2 py-1 text-[11px] font-bold shadow-sm ${section.backlog ? "text-violet-700" : "text-emerald-700"}`}>{section.count.toLocaleString("fa-IR")} تسک</span>
+              </header>
+              <div className="space-y-2.5 p-3 sm:p-4">
+                {section.rows.map((row) => {
+            if (row.kind === "epic") {
+              return (
+                <div key={`epic-${row.id}`} className={`mr-3 flex items-center gap-2 border-r-2 py-2 pr-3 ${row.ungrouped ? "border-slate-200" : "border-indigo-200"}`}>
+                  <FolderTree size={15} className={row.ungrouped ? "text-slate-500" : "text-indigo-600"} />
+                  <p className={`text-xs font-extrabold ${row.ungrouped ? "text-slate-700" : "text-indigo-800"}`}>{row.ungrouped ? row.label : `Epic: ${row.label}`}</p>
+                  <span className="text-[10px] text-slate-500">{row.count.toLocaleString("fa-IR")} تسک اصلی</span>
+                </div>
+              );
+            }
+
+            const { task, depth } = row;
             const expanded =
               activeTaskId === task.id;
 
@@ -694,7 +806,7 @@ export default function ProjectTasks({
               <article
                 key={task.id}
                 id={`task-${task.id}`}
-                className={`overflow-hidden rounded-2xl border transition ${
+                className={`overflow-hidden rounded-2xl border transition ${depth === 1 ? "mr-7 border-sky-200 bg-sky-50/20" : ""} ${
                   expanded
                     ? "border-emerald-300 shadow-md"
                     : "border-slate-200 hover:border-emerald-200"
@@ -719,7 +831,8 @@ export default function ProjectTasks({
                         }`}
                       />
 
-                      <h3 className="font-bold text-slate-900">
+                      <h3 className="flex items-center gap-1.5 font-bold text-slate-900">
+                        {depth === 1 && <GitBranch size={14} className="text-sky-600" />}
                         {task.title}
                       </h3>
                     </div>
@@ -1082,7 +1195,10 @@ export default function ProjectTasks({
                 )}
               </article>
             );
-          })
+                })}
+              </div>
+            </section>
+          ))
         )}
       </div>
 
@@ -1191,7 +1307,7 @@ export function TaskFormModal({
   title: modalTitle,
   submitLabel,
   task,
-  assignees,
+  assignees = [],
   epics = [],
   parentTasks = [],
   onClose,
@@ -1200,9 +1316,9 @@ export function TaskFormModal({
   title: string;
   submitLabel: string;
   task?: Task;
-  assignees: Member[];
+  assignees?: Member[];
   epics?: Epic[];
-  parentTasks?: Task[];
+  parentTasks?: { id: string; title: string }[];
   onClose: () => void;
   onSubmit: (values: FormValues) => Promise<void>;
 }) {
@@ -1280,14 +1396,12 @@ export function TaskFormModal({
 
     if (
       (parsedStoryPoints !== null &&
-        (!Number.isInteger(parsedStoryPoints) ||
-          parsedStoryPoints < 0 ||
-          parsedStoryPoints > 100)) ||
+        !storyPointOptions.includes(parsedStoryPoints as (typeof storyPointOptions)[number])) ||
       !Number.isFinite(parsedRank) ||
       parsedRank < 0 ||
       parsedRank > 100_000
     ) {
-      setError("Story Points باید عدد صحیح بین ۰ تا ۱۰۰ و Backlog Rank بین ۰ تا ۱۰۰٬۰۰۰ باشد.");
+      setError("Story Points را از گزینه‌های ۱، ۳، ۵، ۸ یا ۱۳ انتخاب کنید. Backlog Rank باید بین ۰ تا ۱۰۰٬۰۰۰ باشد.");
       return;
     }
 
@@ -1334,17 +1448,18 @@ export function TaskFormModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="task-form-title"
-        className="flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+        className="flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-2xl shadow-emerald-950/20"
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-6 py-5">
+        <div className="flex shrink-0 items-start justify-between gap-3 bg-gradient-to-l from-emerald-700 via-emerald-600 to-teal-600 px-6 py-5 text-white">
           <div>
+            <span className="inline-flex rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold text-emerald-50">مدیریت وظیفه</span>
             <h2
               id="task-form-title"
-              className="text-xl font-extrabold text-slate-900"
+              className="mt-2 text-xl font-extrabold"
             >
               {modalTitle}
             </h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-1.5 text-sm text-emerald-50">
               اطلاعات وظیفه و زمان‌بندی را تکمیل کنید.
             </p>
           </div>
@@ -1354,7 +1469,7 @@ export function TaskFormModal({
             disabled={saving}
             aria-label="بستن فرم"
             onClick={onClose}
-            className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"
+            className="rounded-xl bg-white/10 p-2 text-white hover:bg-white/20 disabled:opacity-50"
           >
             <X size={20} />
           </button>
@@ -1364,7 +1479,7 @@ export function TaskFormModal({
           onSubmit={submit}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-50/70 p-4 sm:p-6">
             <Field label="عنوان وظیفه">
               <input
                 className={inputClass}
@@ -1411,20 +1526,17 @@ export function TaskFormModal({
                 </select>
               </Field>
 
-              <Field label="Story Points (اختیاری، حداکثر ۱۰۰)">
-                <input
+              <Field label="Story Points (اختیاری)">
+                <select
                   className={inputClass}
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  max="100"
-                  step="1"
                   value={storyPoints}
                   onChange={(event) =>
                     setStoryPoints(event.target.value)
                   }
-                  placeholder="مثلاً ۸"
-                />
+                >
+                  <option value="">بدون برآورد</option>
+                  {storyPointOptions.map((point) => <option key={point} value={point}>{point.toLocaleString("fa-IR")} پوینت</option>)}
+                </select>
               </Field>
 
               <Field label="Backlog Rank (۰ تا ۱۰۰٬۰۰۰)">
@@ -1586,7 +1698,7 @@ export function TaskFormModal({
             )}
           </div>
 
-          <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 bg-white px-6 py-5">
+          <div className="flex shrink-0 justify-end gap-3 border-t border-emerald-100 bg-white px-6 py-4">
             <button
               type="button"
               disabled={saving}
@@ -1599,7 +1711,7 @@ export function TaskFormModal({
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-emerald-700 to-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-sm shadow-emerald-900/20 hover:from-emerald-800 hover:to-emerald-700 disabled:opacity-50"
             >
               {saving ? (
                 <LoaderCircle

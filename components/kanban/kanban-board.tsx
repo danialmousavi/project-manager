@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 
 import { isoToJalali } from "@/lib/jalali";
+import { TaskFormModal, type FormValues } from "@/components/tasks/project-tasks";
 
 type TaskStatus =
   | "TODO"
@@ -222,7 +223,6 @@ export default function KanbanBoard({
 
   const [quickTask, setQuickTask] = useState<{
     status: TaskStatus;
-    title: string;
   } | null>(null);
 
   const [draggedTaskId, setDraggedTaskId] =
@@ -482,34 +482,21 @@ export default function KanbanBoard({
     }
   }
 
-  async function createQuickTask() {
-    if (!quickTask || quickTask.title.trim().length < 3) {
-      setError("عنوان تسک باید حداقل ۳ کاراکتر باشد.");
-      return;
-    }
+  async function createQuickTask(values: FormValues) {
+    if (!quickTask) return;
 
     setSavingTaskId("new-task");
     setError("");
     try {
+      const { note, ...payload } = values;
+      void note;
       const response = await fetch(
         `/api/v1/projects/${projectId}/tasks`,
         {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: quickTask.title.trim(),
-            description: "",
-            type: "TASK",
-            storyPoints: null,
-            rank: 0,
-            acceptanceCriteria: null,
-            priority: "MEDIUM",
-            status: quickTask.status,
-            assigneeId: null,
-            startDate: null,
-            dueDate: null,
-          }),
+          body: JSON.stringify({ ...payload, status: quickTask.status }),
         }
       );
       const data = await response.json();
@@ -1139,7 +1126,7 @@ export default function KanbanBoard({
                         <button
                           type="button"
                           disabled={Boolean(savingTaskId)}
-                          onClick={() => setQuickTask({ status: column.id, title: "" })}
+                          onClick={() => setQuickTask({ status: column.id })}
                           className="rounded-lg border border-dashed border-emerald-300 bg-white px-2 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
                         >
                           + افزودن تسک در این ستون
@@ -1164,13 +1151,14 @@ export default function KanbanBoard({
         </>
       ) : null}
       {quickTask && (
-        <QuickTaskModal
-          status={quickTask.status}
-          title={quickTask.title}
-          busy={Boolean(savingTaskId)}
-          onChange={(title) => setQuickTask((current) => current ? { ...current, title } : current)}
+        <TaskFormModal
+          title={`ایجاد تسک در ستون «${statusLabels[quickTask.status]}»`}
+          submitLabel="ایجاد و افزودن به برد"
+          assignees={[]}
+          epics={[]}
+          parentTasks={[]}
           onClose={() => setQuickTask(null)}
-          onSubmit={() => void createQuickTask()}
+          onSubmit={createQuickTask}
         />
       )}
     </div>
@@ -1349,41 +1337,6 @@ function SprintMetric({
     <div className="min-w-24 rounded-lg border border-emerald-100 bg-white/90 px-2 py-2">
       <p className="text-[10px] text-slate-500">{label}</p>
       <p className="mt-1 text-xs font-extrabold text-slate-800">{value}</p>
-    </div>
-  );
-}
-
-function QuickTaskModal({
-  status,
-  title,
-  busy,
-  onChange,
-  onClose,
-  onSubmit,
-}: {
-  status: TaskStatus;
-  title: string;
-  busy: boolean;
-  onChange: (title: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 p-4">
-      <div dir="rtl" role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="font-extrabold">افزودن تسک سریع</h3>
-            <p className="mt-1 text-xs text-slate-500">تسک در ستون «{statusLabels[status]}» و Sprint فعال ساخته می‌شود.</p>
-          </div>
-          <button type="button" disabled={busy} onClick={onClose} aria-label="بستن"><X size={18} /></button>
-        </div>
-        <input autoFocus value={title} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSubmit(); }} placeholder="عنوان تسک..." maxLength={200} disabled={busy} className="mt-5 h-10 w-full rounded-lg border border-emerald-200 px-3 text-sm outline-none focus:ring-4 focus:ring-emerald-500/10" />
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" disabled={busy} onClick={onClose} className="rounded-lg border px-3 py-2 text-xs">انصراف</button>
-          <button type="button" disabled={busy} onClick={onSubmit} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{busy ? "در حال ثبت..." : "ثبت تسک"}</button>
-        </div>
-      </div>
     </div>
   );
 }

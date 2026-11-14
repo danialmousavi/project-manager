@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderTree, GripVertical, LoaderCircle, Plus, RefreshCw, X } from "lucide-react";
 
+import { TaskFormModal, type FormValues } from "@/components/tasks/project-tasks";
+
 type TaskType = "STORY" | "TASK" | "BUG";
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 type Task = { id: string; title: string; description: string | null; acceptanceCriteria: string | null; type: TaskType; storyPoints: number | null; rank: number; priority: Priority; status: string; sprintId: string | null; epicId: string | null; parentTaskId: string | null; epic: { id: string; name: string } | null; parentTask: { id: string; title: string } | null; _count: { subtasks: number }; assignee: { id: string; name: string } | null };
@@ -26,7 +28,7 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
   const [epics, setEpics] = useState<Epic[]>([]);
   const [newEpicName, setNewEpicName] = useState("");
   const [dragged, setDragged] = useState<string | null>(null);
-  const [quickTitle, setQuickTitle] = useState("");
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
@@ -69,20 +71,6 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
     finally { setBusy(false); setDragged(null); }
   }
 
-  async function quickCreate(event: React.FormEvent) {
-    event.preventDefault();
-    const title = quickTitle.trim();
-    if (title.length < 3) return setError("عنوان تسک باید حداقل ۳ کاراکتر باشد.");
-    setBusy(true); setError("");
-    try {
-      const response = await fetch(`/api/v1/projects/${projectId}/tasks`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, description: "", type: "TASK", storyPoints: null, rank: 0, acceptanceCriteria: null, priority: "MEDIUM", status: "TODO", assigneeId: null, startDate: null, dueDate: null }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "ایجاد تسک ناموفق بود.");
-      setQuickTitle(""); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "خطایی رخ داد."); }
-    finally { setBusy(false); }
-  }
-
   async function createEpic(event: React.FormEvent) {
     event.preventDefault();
     const name = newEpicName.trim();
@@ -118,12 +106,13 @@ export default function BacklogBoard({ projectId }: { projectId: string }) {
     {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
     {data?.canManage && <form onSubmit={createEpic} className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3"><span className="text-xs font-bold text-indigo-900">Epic جدید</span><input value={newEpicName} onChange={(event) => setNewEpicName(event.target.value)} maxLength={150} placeholder="مثلاً: نسخه اول محصول" className="min-w-48 flex-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-xs" /><button disabled={busy} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">ایجاد Epic</button></form>}
     <div className="grid gap-2 rounded-xl border border-emerald-100 bg-white p-3 sm:grid-cols-2 lg:grid-cols-5"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="جست‌وجو در تسک‌ها..." className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs" /><select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه مسئول‌ها</option>{assignees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه نوع‌ها</option>{Object.entries(typeLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><select value={priority} onChange={(event) => setPriority(event.target.value)} className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs"><option value="">همه اولویت‌ها</option>{Object.entries(priorityLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><select value={epicId} onChange={(event) => setEpicId(event.target.value)} className="rounded-lg border border-indigo-200 bg-indigo-50/40 px-2.5 py-1.5 text-xs"><option value="">همه Epicها</option>{epics.map((epic) => <option key={epic.id} value={epic.id}>{epic.name}</option>)}</select></div>
-    {data?.canManage && <form onSubmit={quickCreate} className="flex flex-wrap gap-2 rounded-xl border border-emerald-100 bg-white p-3"><input value={quickTitle} onChange={(event) => setQuickTitle(event.target.value)} maxLength={200} placeholder="ایجاد سریع تسک در بک‌لاگ..." className="min-w-52 flex-1 rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs" /><button disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"><Plus size={14} />افزودن تسک</button></form>}
+    {data?.canManage && <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-gradient-to-l from-emerald-50 to-teal-50 p-3"><div><p className="text-sm font-extrabold text-emerald-950">تسک جدید</p><p className="mt-0.5 text-xs text-emerald-700">فرم کامل تسک را باز کنید و جزئیات را همان‌جا مشخص کنید.</p></div><button type="button" disabled={busy} onClick={() => setTaskModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-900/15 hover:bg-emerald-700 disabled:opacity-50"><Plus size={15} />ایجاد سریع تسک</button></section>}
     {data?.activeSprint && <SprintSection sprint={data.activeSprint} search={search} sprints={sprints} canManage={data.canManage} busy={busy} dragged={dragged} onDrag={setDragged} onOpen={setSelectedTask} onDropTask={dropOnTask} onDrop={(taskId) => void patch({ action: "MOVE_TASK", taskId, sprintId: data.activeSprint!.id })} onMove={(taskId, sprintId) => void patch({ action: "MOVE_TASK", taskId, sprintId })} onRank={(taskId, rank) => void patch({ action: "REORDER_TASK", taskId, rank })} />}
     {data?.futureSprints.map((sprint) => <SprintSection key={sprint.id} sprint={sprint} search={search} sprints={sprints} canManage={data.canManage} busy={busy} dragged={dragged} onDrag={setDragged} onOpen={setSelectedTask} onDropTask={dropOnTask} onDrop={(taskId) => void patch({ action: "MOVE_TASK", taskId, sprintId: sprint.id })} onMove={(taskId, sprintId) => void patch({ action: "MOVE_TASK", taskId, sprintId })} onRank={(taskId, rank) => void patch({ action: "REORDER_TASK", taskId, rank })} />)}
     <section onDragOver={(event) => data?.canManage && event.preventDefault()} onDrop={() => dragged && void patch({ action: "MOVE_TASK", taskId: dragged, sprintId: null })} className="rounded-xl border border-dashed border-violet-200 bg-violet-50/60 p-3"><div className="mb-2 flex justify-between"><h3 className="text-sm font-extrabold text-violet-950">Backlog برنامه‌ریزی‌نشده</h3><span className="text-[11px] text-violet-700">{data?.backlog.length.toLocaleString("fa-IR")} تسک · {data?.backlogStoryPoints.toLocaleString("fa-IR")} SP</span></div><TaskList search={search} tasks={data?.backlog ?? []} canManage={Boolean(data?.canManage)} busy={busy} dragged={dragged} sprints={sprints} onDrag={setDragged} onOpen={setSelectedTask} onDropTask={dropOnTask} onMove={(taskId, sprintId) => void patch({ action: "MOVE_TASK", taskId, sprintId })} onRank={(taskId, rank) => void patch({ action: "REORDER_TASK", taskId, rank })} /></section>
     {selectedTask && <TaskDetailsModal task={selectedTask} onClose={() => setSelectedTask(null)} />}
     {treeOpen && <TaskTreeModal epics={epics} ungroupedTasks={allTasks.filter((task) => !task.epicId)} onClose={() => setTreeOpen(false)} />}
+    {taskModalOpen && <TaskFormModal title="ایجاد تسک در بک‌لاگ" submitLabel="ایجاد تسک" assignees={[]} epics={epics} parentTasks={allTasks.filter((task) => !task.parentTaskId).map((task) => ({ id: task.id, title: task.title }))} onClose={() => setTaskModalOpen(false)} onSubmit={async (values: FormValues) => { const { note, ...payload } = values; void note; const response = await fetch(`/api/v1/projects/${projectId}/tasks`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const result = await response.json(); if (!response.ok) throw new Error(result.message || "ایجاد تسک ناموفق بود."); setTaskModalOpen(false); await load(); }} />}
   </div>;
 }
 
