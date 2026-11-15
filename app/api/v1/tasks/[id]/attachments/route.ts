@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -20,6 +21,9 @@ const metadataSchema = z.object({
   description: z.string().trim().max(2000).optional(),
 });
 
+const MAX_FILES_PER_REQUEST = 10;
+const perFileMetadataSchema = z.array(metadataSchema).min(1).max(MAX_FILES_PER_REQUEST);
+
 async function taskAccess(actor: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>, taskId: string) {
   const task = await prisma.task.findFirst({
     where: { id: taskId, deletedAt: null },
@@ -37,6 +41,7 @@ async function taskAccess(actor: NonNullable<Awaited<ReturnType<typeof getCurren
 
 function attachmentResponse(attachment: {
   id: string;
+  uploadBatchId: string | null;
   originalName: string;
   title: string | null;
   description: string | null;
@@ -68,6 +73,7 @@ export async function GET(_request: NextRequest, context: Context) {
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
+      uploadBatchId: true,
       originalName: true,
       title: true,
       description: true,
@@ -101,50 +107,117 @@ export async function POST(request: NextRequest, context: Context) {
   if (!permitted?.canUpload) return NextResponse.json({ message: "اجازه بارگذاری فایل را ندارید." }, { status: 403 });
 
   const formData = await request.formData().catch(() => null);
-  const file = formData?.get("file");
-  const parsedMetadata = metadataSchema.safeParse({
+  const parsedSharedMetadata = metadataSchema.safeParse({
     title: formData?.get("title") || undefined,
     description: formData?.get("description") || undefined,
   });
+  const metadataValue = formData?.get("metadata");
+  const uploadBatchValue = formData?.get("uploadBatchId");
+  let perFileMetadata: z.infer<typeof metadataSchema>[] | null = null;
 
-  if (!(file instanceof File) || !parsedMetadata.success) {
+  const parsedUploadBatchId = uploadBatchValue === null
+    ? null
+    : typeof uploadBatchValue === "string" ? z.uuid().safeParse(uploadBatchValue) : null;
+  if (uploadBatchValue !== null && (!parsedUploadBatchId || !parsedUploadBatchId.success)) {
+    return NextResponse.json({ message: "شناسه بارگذاری معتبر نیست." }, { status: 400 });
+  }
+
+  if (metadataValue !== null) {
+    if (typeof metadataValue !== "string") {
+      return NextResponse.json({ message: "اطلاعات فایل معتبر نیست." }, { status: 400 });
+    }
+
+    const parsedMetadata = perFileMetadataSchema.safeParse((() => {
+      try {
+        return JSON.parse(metadataValue);
+      } catch {
+        return null;
+      }
+    })());
+    if (!parsedMetadata.success) {
+      return NextResponse.json({ message: "اطلاعات فایل معتبر نیست." }, { status: 400 });
+    }
+    perFileMetadata = parsedMetadata.data;
+  }
+
+  const multiFileEntries = formData?.getAll("files") ?? [];
+  const files = multiFileEntries.length > 0
+    ? multiFileEntries.filter((entry): entry is File => entry instanceof File)
+    : [formData?.get("file")].filter((entry): entry is File => entry instanceof File);
+
+  const sharedMetadata = parsedSharedMetadata.success ? parsedSharedMetadata.data : null;
+  if ((!perFileMetadata && !sharedMetadata) || files.length === 0) {
     return NextResponse.json({ message: "اطلاعات فایل معتبر نیست." }, { status: 400 });
   }
-
-  const validationError = await validateAttachment(file);
-  if (validationError) return NextResponse.json({ message: validationError }, { status: 400 });
-
-  const storageKey = createAttachmentStorageKey(id, file.name);
-  try {
-    await uploadAttachment({ key: storageKey, file });
-  } catch (error) {
-    console.error("Upload task attachment:", error);
-    return NextResponse.json({ message: "بارگذاری فایل انجام نشد." }, { status: 503 });
+  if (files.length > MAX_FILES_PER_REQUEST) {
+    return NextResponse.json({ message: `در هر نوبت حداکثر ${MAX_FILES_PER_REQUEST.toLocaleString("fa-IR")} فایل قابل بارگذاری است.` }, { status: 400 });
+  }
+  if (perFileMetadata && perFileMetadata.length !== files.length) {
+    return NextResponse.json({ message: "تعداد اطلاعات فایل‌ها با تعداد فایل‌های ارسالی برابر نیست." }, { status: 400 });
   }
 
-  try {
-    const attachment = await prisma.taskAttachment.create({
-      data: {
-        taskId: id,
-        uploadedById: actor.id,
-        storageKey,
-        originalName: file.name,
-        title: parsedMetadata.data.title || null,
-        description: parsedMetadata.data.description || null,
-        contentType: file.type,
-        byteSize: file.size,
-      },
-      select: {
-        id: true, originalName: true, title: true, description: true,
-        contentType: true, byteSize: true, createdAt: true,
-        uploadedBy: { select: { id: true, name: true } },
-      },
-    });
+  const attachments: ReturnType<typeof attachmentResponse>[] = [];
+  const failures: { filename: string; message: string }[] = [];
+  const uploadBatchId = parsedUploadBatchId?.data ?? randomUUID();
 
-    return NextResponse.json({ success: true, attachment: attachmentResponse(attachment, true) }, { status: 201 });
-  } catch (error) {
-    await deleteAttachmentObject(storageKey).catch(() => undefined);
-    console.error("Create task attachment record:", error);
-    return NextResponse.json({ message: "ثبت اطلاعات فایل انجام نشد." }, { status: 500 });
+  for (const [index, file] of files.entries()) {
+    const metadata = perFileMetadata?.[index] ?? sharedMetadata!;
+    const validationError = await validateAttachment(file);
+    if (validationError) {
+      failures.push({ filename: file.name, message: validationError });
+      continue;
+    }
+
+    const storageKey = createAttachmentStorageKey(id, file.name);
+    try {
+      await uploadAttachment({ key: storageKey, file });
+    } catch (error) {
+      console.error("Upload task attachment:", error);
+      failures.push({ filename: file.name, message: "بارگذاری فایل انجام نشد." });
+      continue;
+    }
+
+    try {
+      const attachment = await prisma.taskAttachment.create({
+        data: {
+          taskId: id,
+          uploadedById: actor.id,
+          uploadBatchId,
+          storageKey,
+          originalName: file.name,
+          title: metadata.title || null,
+          description: metadata.description || null,
+          contentType: file.type,
+          byteSize: file.size,
+        },
+        select: {
+          id: true, uploadBatchId: true, originalName: true, title: true, description: true,
+          contentType: true, byteSize: true, createdAt: true,
+          uploadedBy: { select: { id: true, name: true } },
+        },
+      });
+
+      attachments.push(attachmentResponse(attachment, true));
+    } catch (error) {
+      await deleteAttachmentObject(storageKey).catch(() => undefined);
+      console.error("Create task attachment record:", error);
+      failures.push({ filename: file.name, message: "ثبت اطلاعات فایل انجام نشد." });
+    }
   }
+
+  if (attachments.length === 0) {
+    return NextResponse.json({
+      message: failures[0]?.message || "هیچ فایلی بارگذاری نشد.",
+      attachments: [],
+      failures,
+    }, { status: 400 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    attachment: attachments[0],
+    attachments,
+    failures,
+    message: failures.length > 0 ? "بعضی از فایل‌ها بارگذاری نشدند." : undefined,
+  }, { status: 201 });
 }
