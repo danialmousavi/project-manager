@@ -33,6 +33,7 @@ import {
 
 import PersianDatePicker from "@/components/ui/persian-date-picker";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import TaskAttachments from "@/components/tasks/task-attachments";
 import { isoToJalali } from "@/lib/jalali";
 
 export type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
@@ -1211,7 +1212,8 @@ export default function ProjectTasks({
                           )}
                         </div>
 
-                        <div className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="min-w-0 space-y-3">
+                          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
                           <h4 className="flex items-center gap-2 font-bold text-slate-900">
                             <MessageCircle
                               size={18}
@@ -1284,6 +1286,9 @@ export default function ProjectTasks({
                               ثبت کامنت
                             </button>
                           </form>
+                        </div>
+
+                          <TaskAttachments taskId={task.id} />
                         </div>
                       </div>
                     )}

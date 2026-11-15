@@ -98,6 +98,7 @@ model User {
   sessions           Session[]
   assignedTasks      Task[]            @relation("TaskAssignee")
   createdTasks       Task[]            @relation("TaskCreator")
+  uploadedAttachments TaskAttachment[] @relation("TaskAttachmentUploader")
   comments           TaskComment[]
   progressUpdates    ProgressHistory[]
   deletedTasks       Task[]            @relation("TaskDeletedBy")
@@ -321,6 +322,7 @@ model Task {
   createdBy   User   @relation("TaskCreator", fields: [createdById], references: [id])
 
   comments TaskComment[]
+  attachments TaskAttachment[]
 
   dependencies     TaskDependency[] @relation("DependentTask")
   requiredBy       TaskDependency[] @relation("PrerequisiteTask")
@@ -338,6 +340,30 @@ model Task {
   @@index([dueDate])
   @@index([projectId, deletedAt, status, position])
   @@index([deletedAt])
+}
+
+// ==================================
+// TASK ATTACHMENTS
+// ==================================
+
+model TaskAttachment {
+  id           String @id @default(uuid())
+  taskId       String
+  uploadedById String
+  storageKey   String @unique
+  originalName String
+  title        String?
+  description  String?
+  contentType  String
+  byteSize     Int
+
+  task       Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation("TaskAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([uploadedById])
 }
 
 // ==================================
