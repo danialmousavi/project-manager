@@ -111,7 +111,7 @@ export async function POST(request: NextRequest, context: Context) {
     return NextResponse.json({ message: "اطلاعات فایل معتبر نیست." }, { status: 400 });
   }
 
-  const validationError = validateAttachment(file);
+  const validationError = await validateAttachment(file);
   if (validationError) return NextResponse.json({ message: validationError }, { status: 400 });
 
   const storageKey = createAttachmentStorageKey(id, file.name);

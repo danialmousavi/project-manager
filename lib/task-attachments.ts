@@ -9,23 +9,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-
-export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-
-const allowedTypes = new Map([
-  ["image/jpeg", ["jpg", "jpeg"]],
-  ["image/png", ["png"]],
-  ["image/webp", ["webp"]],
-  ["image/gif", ["gif"]],
-  ["application/pdf", ["pdf"]],
-  ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", ["docx"]],
-  ["application/msword", ["doc"]],
-  ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ["xlsx"]],
-  ["application/vnd.ms-excel", ["xls"]],
-  ["text/csv", ["csv"]],
-  ["text/plain", ["txt"]],
-  ["application/zip", ["zip"]],
-]);
+import { validateAttachmentMetadata } from "@/lib/attachment-rules";
 
 const globalForAttachmentStorage = globalThis as unknown as {
   attachmentBucketReady?: Promise<void>;
@@ -82,19 +66,28 @@ function extensionOf(filename: string) {
   return filename.split(".").at(-1)?.toLowerCase() ?? "";
 }
 
-export function validateAttachment(file: File) {
-  if (!file.name || file.name.length > 255 || file.size === 0) {
-    return "نام یا محتوای فایل معتبر نیست.";
-  }
+function startsWith(bytes: Uint8Array, signature: number[]) {
+  return signature.every((value, index) => bytes[index] === value);
+}
 
-  if (file.size > MAX_ATTACHMENT_BYTES) {
-    return "حجم هر فایل حداکثر ۲۵ مگابایت است.";
-  }
+function hasExpectedSignature(contentType: string, bytes: Uint8Array) {
+  if (contentType === "image/jpeg") return startsWith(bytes, [0xff, 0xd8, 0xff]);
+  if (contentType === "image/png") return startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (contentType === "image/gif") return startsWith(bytes, [0x47, 0x49, 0x46, 0x38, 0x37]) || startsWith(bytes, [0x47, 0x49, 0x46, 0x38, 0x39]);
+  if (contentType === "image/webp") return startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.slice(8), [0x57, 0x45, 0x42, 0x50]);
+  if (contentType === "application/pdf") return startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+  if (contentType === "application/zip" || contentType.includes("openxmlformats")) return startsWith(bytes, [0x50, 0x4b, 0x03, 0x04]) || startsWith(bytes, [0x50, 0x4b, 0x05, 0x06]) || startsWith(bytes, [0x50, 0x4b, 0x07, 0x08]);
+  if (contentType === "application/msword" || contentType === "application/vnd.ms-excel") return startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+  if (contentType === "text/plain" || contentType === "text/csv") return !bytes.includes(0);
+  return false;
+}
 
-  const acceptedExtensions = allowedTypes.get(file.type);
-  if (!acceptedExtensions?.includes(extensionOf(file.name))) {
-    return "نوع فایل مجاز نیست.";
-  }
+export async function validateAttachment(file: File) {
+  const metadataError = validateAttachmentMetadata(file);
+  if (metadataError) return metadataError;
+
+  const bytes = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
+  if (!hasExpectedSignature(file.type, bytes)) return "محتوای فایل با نوع انتخاب‌شده مطابقت ندارد.";
 
   return null;
 }

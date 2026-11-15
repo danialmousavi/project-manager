@@ -34,6 +34,10 @@ export async function GET(_request: NextRequest, context: Context) {
         "Content-Type": attachment.contentType || file.contentType,
         "Content-Disposition": contentDisposition(attachment.originalName, attachment.contentType),
         "Cache-Control": "private, no-store",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
       },
     });
   } catch (error) {
