@@ -26,6 +26,14 @@ type QueuedFile = { id: string; file: File; title: string; description: string; 
 type UploadFailure = { filename: string; message: string };
 type AttachmentBatch = { id: string; attachments: Attachment[] };
 
+function newUploadId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function byteSize(value: number) {
   return value < 1024 * 1024
     ? `${Math.ceil(value / 1024).toLocaleString("fa-IR")} کیلوبایت`
@@ -123,7 +131,7 @@ export default function TaskAttachments({ taskId }: { taskId: string }) {
       } else if (accepted.length >= remainingCapacity) {
         problems.push("در هر نوبت حداکثر ۱۰ فایل قابل انتخاب است.");
       } else {
-        accepted.push({ id: crypto.randomUUID(), file: nextFile, title: "", description: "", progress: 0, status: "queued", error: "" });
+        accepted.push({ id: newUploadId(), file: nextFile, title: "", description: "", progress: 0, status: "queued", error: "" });
       }
     }
 
@@ -183,7 +191,7 @@ export default function TaskAttachments({ taskId }: { taskId: string }) {
 
     setBusy(true);
     setError("");
-    const uploadBatchId = crypto.randomUUID();
+    const uploadBatchId = newUploadId();
     const completedIds = new Set<string>();
     const problems: string[] = [];
 
@@ -211,7 +219,7 @@ export default function TaskAttachments({ taskId }: { taskId: string }) {
   }
 
   async function retryQueuedFile(queuedFile: QueuedFile) {
-    const uploadBatchId = queuedFile.uploadBatchId ?? crypto.randomUUID();
+    const uploadBatchId = queuedFile.uploadBatchId ?? newUploadId();
     setBusy(true);
     setError("");
     updateQueuedFile(queuedFile.id, { status: "uploading", progress: 0, error: "", uploadBatchId });

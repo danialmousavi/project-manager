@@ -14,15 +14,16 @@ FROM deps AS migrator
 
 COPY prisma ./prisma
 COPY prisma7.config.ts ./
-RUN npx prisma generate
-CMD ["npx", "prisma", "migrate", "deploy"]
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate --config prisma7.config.ts
+CMD ["npx", "prisma", "migrate", "deploy", "--config", "prisma7.config.ts"]
 
 FROM deps AS seed
 
 COPY prisma ./prisma
 COPY prisma7.config.ts ./
 COPY scripts ./scripts
-RUN npx prisma generate
+COPY lib/password.ts ./lib/password.ts
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate --config prisma7.config.ts
 CMD ["npm", "run", "db:seed"]
 
 FROM deps AS builder
@@ -31,7 +32,7 @@ COPY . .
 
 # Prisma 7 reads DATABASE_URL through prisma7.config.ts during generation.
 ENV DATABASE_URL=postgresql://project_user:local_dev_password@postgres:5432/project_manager?schema=public
-RUN npx prisma generate
+RUN npx prisma generate --config prisma7.config.ts
 RUN npm run build
 
 FROM base AS runner
