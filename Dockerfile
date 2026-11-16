@@ -1,4 +1,4 @@
-FROM node:24-alpine AS base
+FROM docker-mirror.liara.ir/node:24-alpine AS base
 
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
@@ -7,7 +7,9 @@ FROM base AS deps
 
 COPY package.json package-lock.json ./
 # Keep the lockfile resolver consistent with the npm version used to create it.
-RUN npm install --global npm@11.1.0 \
+RUN npm config set registry https://package-mirror.liara.ir/repository/npm/ --global \
+  && npm config set replace-registry-host always --global \
+  && npm install --global npm@11.1.0 \
   && npm ci --no-audit --no-fund
 
 FROM deps AS migrator

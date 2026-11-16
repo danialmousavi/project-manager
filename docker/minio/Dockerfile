@@ -1,4 +1,4 @@
-FROM alpine:3.22
+FROM docker-mirror.liara.ir/alpine:3.22
 
 ARG MINIO_VERSION=RELEASE.2025-10-15T17-29-55Z
 
