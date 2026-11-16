@@ -15,6 +15,7 @@ services:
       retries: 10
 
   minio:
+    image: project-manager-minio:latest
     build:
       context: ./docker/minio
       network: host
