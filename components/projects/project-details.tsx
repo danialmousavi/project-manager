@@ -33,7 +33,7 @@ import UserMultiSelect, {
 
 import PersianDatePicker from "@/components/ui/persian-date-picker";
 
-type Role = "ADMIN" | "MANAGER" | "EMPLOYEE";
+type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
 
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
@@ -52,7 +52,7 @@ type TaskStatus =
   | "DONE";
 
 type Member = {
-  role: "MANAGER" | "MEMBER";
+  role: "MANAGER" | "MEMBER" | "CONTROLLER";
   user: {
     id: string;
     name: string;
@@ -180,6 +180,17 @@ export default function ProjectDetails({
   >(
     project.members
       .filter((member) => member.role === "MEMBER")
+      .map((member) => ({
+        id: member.user.id,
+        name: member.user.name,
+        email: "",
+      }))
+  );
+  const [controllers, setControllers] = useState<
+    SelectableUser[]
+  >(
+    project.members
+      .filter((member) => member.role === "CONTROLLER")
       .map((member) => ({
         id: member.user.id,
         name: member.user.name,
@@ -413,6 +424,9 @@ export default function ProjectDetails({
             (user) => user.id
           ),
           memberIds: employees.map(
+            (user) => user.id
+          ),
+          controllerIds: controllers.map(
             (user) => user.id
           ),
         }
@@ -691,12 +705,22 @@ export default function ProjectDetails({
                 )}
 
                 <UserMultiSelect
-                  label="کارمندان پروژه"
+                  label="کارشناسان عملیاتی پروژه"
                   role="EMPLOYEE"
                   projectId={project.id}
                   selected={employees}
                   onChange={setEmployees}
                 />
+
+                {isAdmin && (
+                  <UserMultiSelect
+                    label="ناظران کنترل پروژه"
+                    role="CONTROLLER"
+                    projectId={project.id}
+                    selected={controllers}
+                    onChange={setControllers}
+                  />
+                )}
 
                 <button
                   type="button"

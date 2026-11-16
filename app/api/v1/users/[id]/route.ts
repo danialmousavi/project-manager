@@ -14,11 +14,11 @@ import { isAllowedOrigin } from "@/lib/security/origin";
 
 const updateSchema = z
   .object({
-    role: z.enum(["MANAGER", "EMPLOYEE"]).optional(),
+    role: z.enum(["MANAGER", "EMPLOYEE", "CONTROLLER"]).optional(),
     isActive: z.boolean().optional(),
-    nationalId: z.string()
+    nationalId: z.string().trim()
       .transform(normalizeNationalId)
-      .refine(isValidNationalId, "کد ملی معتبر نیست")
+      .refine((value) => value === "" || isValidNationalId(value), "کد ملی معتبر نیست")
       .optional(),
     phone: z.string()
       .transform(normalizePhone)
@@ -124,7 +124,9 @@ export async function PATCH(
     }
 
     const identityOnly = {
-      nationalId: changes.nationalId,
+      nationalId: changes.nationalId === undefined
+        ? undefined
+        : changes.nationalId || null,
       phone: changes.phone,
     };
 

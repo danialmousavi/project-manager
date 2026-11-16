@@ -2,17 +2,18 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import type { AppRole } from "@/lib/role-access";
 
 type ProjectActor = {
   id: string;
-  role: "ADMIN" | "MANAGER" | "EMPLOYEE";
+  role: AppRole;
 };
 
 export async function canEditProject(
   actor: ProjectActor,
   projectId: string
 ): Promise<boolean> {
-  if (actor.role === "EMPLOYEE") {
+  if (actor.role === "EMPLOYEE" || actor.role === "CONTROLLER") {
     return false;
   }
 

@@ -13,6 +13,7 @@ type Context = {
 const schema = z.object({
   managerIds: z.array(z.uuid()).max(100),
   memberIds: z.array(z.uuid()).max(500),
+  controllerIds: z.array(z.uuid()).max(100).optional(),
 }).strict();
 
 export async function PUT(
@@ -57,9 +58,15 @@ export async function PUT(
 
   const managerIds = [...new Set(parsed.data.managerIds)];
   const memberIds = [...new Set(parsed.data.memberIds)];
+  const requestedControllerIds = parsed.data.controllerIds === undefined
+    ? null
+    : [...new Set(parsed.data.controllerIds)];
 
   if (
-    memberIds.some((id) => managerIds.includes(id))
+    memberIds.some((id) => managerIds.includes(id)) ||
+    requestedControllerIds?.some((id) =>
+      managerIds.includes(id) || memberIds.includes(id)
+    )
   ) {
     return NextResponse.json(
       { message: "نقش عضویت تکراری است." },
@@ -88,6 +95,11 @@ export async function PUT(
           .filter((member) => member.role === "MANAGER")
           .map((member) => member.userId)
           .sort();
+        const currentControllers = project.members
+          .filter((member) => member.role === "CONTROLLER")
+          .map((member) => member.userId)
+          .sort();
+        const controllerIds = requestedControllerIds ?? currentControllers;
 
         if (actor.role !== "ADMIN") {
           const allowed =
@@ -102,13 +114,21 @@ export async function PUT(
           ) {
             throw new Error("MANAGER_CHANGE_FORBIDDEN");
           }
+
+          if (
+            requestedControllerIds !== null &&
+            JSON.stringify([...controllerIds].sort()) !==
+            JSON.stringify(currentControllers)
+          ) {
+            throw new Error("CONTROLLER_CHANGE_FORBIDDEN");
+          }
         }
 
         if (managerIds.length === 0) {
           throw new Error("NO_MANAGER");
         }
 
-        const allIds = [...managerIds, ...memberIds];
+        const allIds = [...managerIds, ...memberIds, ...controllerIds];
 
         const users = await tx.user.findMany({
           where: {
@@ -132,6 +152,9 @@ export async function PUT(
           ) &&
           memberIds.every(
             (userId) => roles.get(userId) === "EMPLOYEE"
+          ) &&
+          controllerIds.every(
+            (userId) => roles.get(userId) === "CONTROLLER"
           );
 
         if (!valid) throw new Error("INVALID_MEMBERS");
@@ -174,6 +197,13 @@ export async function PUT(
               userId,
               role: "MEMBER" as const,
             })),
+            ...(actor.role === "ADMIN"
+              ? controllerIds.map((userId) => ({
+                  projectId: id,
+                  userId,
+                  role: "CONTROLLER" as const,
+                }))
+              : []),
           ],
         });
       },
@@ -193,6 +223,8 @@ export async function PUT(
       FORBIDDEN: "اجازه مدیریت اعضای پروژه را ندارید.",
       MANAGER_CHANGE_FORBIDDEN:
         "فقط مدیر اصلی می‌تواند مدیران پروژه را تغییر دهد.",
+      CONTROLLER_CHANGE_FORBIDDEN:
+        "فقط مدیر اصلی می‌تواند ناظران کنترل پروژه را تغییر دهد.",
       NO_MANAGER: "حداقل یک مدیر پروژه الزامی است.",
       INVALID_MEMBERS:
         "کاربران انتخاب‌شده معتبر نیستند.",
@@ -209,7 +241,8 @@ export async function PUT(
       {
         status:
           code === "FORBIDDEN" ||
-          code === "MANAGER_CHANGE_FORBIDDEN"
+          code === "MANAGER_CHANGE_FORBIDDEN" ||
+          code === "CONTROLLER_CHANGE_FORBIDDEN"
             ? 403
             : code === "NOT_FOUND"
               ? 404

@@ -34,6 +34,8 @@ const priorityEnum = z.enum([
   "URGENT",
 ]);
 
+const taskTypeEnum = z.enum(["STORY", "TASK", "BUG"]);
+
 const statusSchema = z.object({
   status: statusEnum,
 }).strict();
@@ -47,6 +49,13 @@ const detailsSchema = z.object({
   title: z.string().trim().min(3).max(200),
   description: z.string().trim().max(5000),
   priority: priorityEnum,
+  type: taskTypeEnum.optional(),
+  storyPoints: z.number().int().min(0).max(100).nullable().optional(),
+  rank: z.number().finite().min(0).max(100_000).optional(),
+  acceptanceCriteria: z.string().trim().max(5000).nullable().optional(),
+  epicId: z.uuid().nullable().optional(),
+  milestoneId: z.uuid().nullable().optional(),
+  parentTaskId: z.uuid().nullable().optional(),
   status: statusEnum,
   startDate: z.iso.date().nullable(),
   dueDate: z.iso.date().nullable(),
@@ -96,6 +105,9 @@ function taskError(error: unknown) {
         "تسک هم‌زمان تغییر کرده است؛ صفحه را تازه کنید.",
       status: 409,
     },
+    INVALID_EPIC: { message: "Epic باید متعلق به همین پروژه باشد.", status: 400 },
+    INVALID_MILESTONE: { message: "مایلستون باید متعلق به همین پروژه باشد.", status: 400 },
+    INVALID_PARENT_TASK: { message: "تسک والد معتبر نیست.", status: 400 },
   };
 
   if (errors[code]) {
@@ -111,6 +123,78 @@ function taskError(error: unknown) {
     { message: "خطا در انجام عملیات تسک." },
     { status: 500 }
   );
+}
+
+export async function GET(
+  _request: NextRequest,
+  context: Context
+) {
+  const actor = await getCurrentUser();
+  if (!actor) return NextResponse.json({ message: "ابتدا وارد حساب شوید." }, { status: 401 });
+
+  const { id } = await context.params;
+  if (!z.uuid().safeParse(id).success) {
+    return NextResponse.json({ message: "شناسه تسک نامعتبر است." }, { status: 400 });
+  }
+
+  const task = await prisma.task.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, projectId: true, assigneeId: true },
+  });
+  if (!task) return NextResponse.json({ message: "تسک پیدا نشد." }, { status: 404 });
+
+  const access = await getTaskProjectAccess(actor, task.projectId);
+  if (!access || (!access.canManage && actor.role !== "CONTROLLER" && task.assigneeId !== actor.id)) {
+    return NextResponse.json({ message: "اجازه مشاهده تسک را ندارید." }, { status: 403 });
+  }
+
+  const canViewAll = access.canManage || actor.role === "CONTROLLER";
+  const detail = await prisma.task.findFirstOrThrow({
+    where: { id, deletedAt: null },
+    select: {
+      id: true, title: true, description: true, type: true, storyPoints: true,
+      rank: true, acceptanceCriteria: true, priority: true, status: true,
+      epic: { select: { id: true, name: true } },
+      milestone: { select: { id: true, title: true } },
+      dependencies: {
+        where: { prerequisiteTask: { deletedAt: null } },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          prerequisiteTask: {
+            select: {
+              id: true, title: true, status: true, type: true,
+              assignee: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+      parentTask: { select: { id: true, title: true, type: true } },
+      subtasks: {
+        where: { deletedAt: null, ...(canViewAll ? {} : { assigneeId: actor.id }) },
+        orderBy: [{ rank: "asc" }, { createdAt: "asc" }],
+        select: { id: true, title: true, type: true, status: true, storyPoints: true, assigneeId: true },
+      },
+      assignee: { select: { id: true, name: true } },
+      startDate: true, dueDate: true, createdAt: true, updatedAt: true,
+    },
+  });
+
+  return NextResponse.json({
+    success: true,
+    task: {
+      ...detail,
+      dependencies: detail.dependencies.map((dependency) => ({
+        id: dependency.id,
+        task: dependency.prerequisiteTask,
+        isBlocking: dependency.prerequisiteTask.status !== "DONE",
+      })),
+      startDate: detail.startDate?.toISOString() ?? null,
+      dueDate: detail.dueDate?.toISOString() ?? null,
+      createdAt: detail.createdAt.toISOString(),
+      updatedAt: detail.updatedAt.toISOString(),
+    },
+  }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(
@@ -323,14 +407,23 @@ export async function PATCH(
             version: true,
             title: true,
             description: true,
+            type: true,
+            storyPoints: true,
+            rank: true,
+            acceptanceCriteria: true,
+            epicId: true,
+            milestoneId: true,
+            parentTaskId: true,
             priority: true,
             status: true,
             startDate: true,
             dueDate: true,
+            sprintId: true,
             assigneeId: true,
             assignee: {
               select: { name: true },
             },
+            _count: { select: { subtasks: { where: { deletedAt: null } } } },
           },
         });
 
@@ -387,6 +480,52 @@ export async function PATCH(
         }
 
         const changes: TaskFieldChange[] = [];
+        const nextType = details?.type ?? current.type;
+        const nextStoryPoints = details?.storyPoints === undefined
+          ? current.storyPoints
+          : details.storyPoints;
+        const nextRank = details?.rank ?? current.rank;
+        const nextAcceptanceCriteria = details?.acceptanceCriteria === undefined
+          ? current.acceptanceCriteria
+          : details.acceptanceCriteria || null;
+        const nextEpicId = details?.epicId === undefined
+          ? current.epicId
+          : details.epicId;
+        const nextMilestoneId = details?.milestoneId === undefined
+          ? current.milestoneId
+          : details.milestoneId;
+        const nextParentTaskId = details?.parentTaskId === undefined
+          ? current.parentTaskId
+          : details.parentTaskId;
+
+        if (nextEpicId) {
+          const epic = await tx.epic.findFirst({ where: { id: nextEpicId, projectId: current.projectId }, select: { id: true } });
+          if (!epic) throw new Error("INVALID_EPIC");
+        }
+
+        if (nextMilestoneId) {
+          const milestone = await tx.milestone.findFirst({
+            where: { id: nextMilestoneId, projectId: current.projectId },
+            select: { id: true },
+          });
+          if (!milestone) throw new Error("INVALID_MILESTONE");
+        }
+
+        if (nextParentTaskId) {
+          const parent = await tx.task.findFirst({
+            where: {
+              id: nextParentTaskId,
+              projectId: current.projectId,
+              deletedAt: null,
+              parentTaskId: null,
+              NOT: { id: current.id },
+            },
+            select: { id: true },
+          });
+          if (!parent || current._count.subtasks > 0) {
+            throw new Error("INVALID_PARENT_TASK");
+          }
+        }
 
         if (details) {
           const before: Record<
@@ -395,10 +534,18 @@ export async function PATCH(
           > = {
             title: current.title,
             description: current.description,
+            type: current.type,
+            storyPoints: current.storyPoints === null ? null : String(current.storyPoints),
+            rank: String(current.rank),
+            acceptanceCriteria: current.acceptanceCriteria,
+            epicId: current.epicId,
+            milestoneId: current.milestoneId,
+            parentTaskId: current.parentTaskId,
             priority: current.priority,
             status: current.status,
             startDate: dateString(current.startDate),
             dueDate: dateString(current.dueDate),
+            sprintId: current.sprintId,
           };
 
           const after: Record<
@@ -407,10 +554,18 @@ export async function PATCH(
           > = {
             title: details.title,
             description: details.description || null,
+            type: nextType,
+            storyPoints: nextStoryPoints === null ? null : String(nextStoryPoints),
+            rank: String(nextRank),
+            acceptanceCriteria: nextAcceptanceCriteria,
+            epicId: nextEpicId,
+            milestoneId: nextMilestoneId,
+            parentTaskId: nextParentTaskId,
             priority: details.priority,
             status: details.status,
             startDate: details.startDate,
             dueDate: details.dueDate,
+            sprintId: current.sprintId,
           };
 
           for (const field of Object.keys(
@@ -445,6 +600,13 @@ export async function PATCH(
                   title: details.title,
                   description:
                     details.description || null,
+                  type: nextType,
+                  storyPoints: nextStoryPoints,
+                  rank: nextRank,
+                  acceptanceCriteria: nextAcceptanceCriteria,
+                  epicId: nextEpicId,
+                  milestoneId: nextMilestoneId,
+                  parentTaskId: nextParentTaskId,
                   status: details.status,
                   priority: details.priority,
                   startDate: toDate(details.startDate),

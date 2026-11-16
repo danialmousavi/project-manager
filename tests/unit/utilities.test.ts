@@ -46,7 +46,10 @@ describe("history serialization", () => {
   it("round-trips assignment and field changes", () => {
     const assignment = { fromUserId: null, fromUserName: null, toUserId: "a", toUserName: "A", note: "audit" };
     expect(decodeAssignmentEvent(encodeAssignmentEvent(assignment))).toEqual(assignment);
-    const event = { note: "audit", changes: [{ field: "status" as const, from: "TODO", to: "DONE" }] };
+    const event = { note: "audit", changes: [
+      { field: "status" as const, from: "TODO", to: "DONE" },
+      { field: "storyPoints" as const, from: null, to: "8" },
+    ] };
     expect(decodeTaskChangeEvent(encodeTaskChangeEvent(event))).toEqual(event);
   });
 

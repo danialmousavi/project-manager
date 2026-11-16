@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { syncProjectProgressCache } from "@/lib/project-progress";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
+import { isProjectController } from "@/lib/role-access";
 import {
   encodeAssignmentEvent,
 } from "@/lib/task-assignment-history";
@@ -18,6 +19,13 @@ type Context = {
 const taskSchema = z.object({
   title: z.string().trim().min(3).max(200),
   description: z.string().trim().max(5000),
+  type: z.enum(["STORY", "TASK", "BUG"]).optional().default("TASK"),
+  storyPoints: z.number().int().min(0).max(100).nullable().optional().default(null),
+  rank: z.number().finite().min(0).max(100_000).optional().default(0),
+  acceptanceCriteria: z.string().trim().max(5000).nullable().optional().default(null),
+  epicId: z.uuid().nullable().optional().default(null),
+  milestoneId: z.uuid().nullable().optional().default(null),
+  parentTaskId: z.uuid().nullable().optional().default(null),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
   status: z.enum([
     "TODO",
@@ -40,6 +48,23 @@ const taskSelect = {
   id: true,
   title: true,
   description: true,
+  type: true,
+  storyPoints: true,
+  rank: true,
+  acceptanceCriteria: true,
+  epicId: true,
+  milestoneId: true,
+  parentTaskId: true,
+  sprintId: true,
+  epic: { select: { id: true, name: true } },
+  milestone: { select: { id: true, title: true } },
+  dependencies: {
+    where: { prerequisiteTask: { deletedAt: null, status: { not: "DONE" } } },
+    select: { id: true },
+  },
+  parentTask: { select: { id: true, title: true, type: true } },
+  sprint: { select: { id: true, name: true, status: true } },
+  _count: { select: { subtasks: { where: { deletedAt: null } }, comments: true } },
   status: true,
   priority: true,
   assigneeId: true,
@@ -53,15 +78,25 @@ const taskSelect = {
   dueDate: true,
   createdAt: true,
   updatedAt: true,
-  _count: {
-    select: { comments: true },
-  },
 } as const;
 
 function serializeTask(task: {
   id: string;
   title: string;
   description: string | null;
+  type: string;
+  storyPoints: number | null;
+  rank: number;
+  acceptanceCriteria: string | null;
+  epicId: string | null;
+  milestoneId: string | null;
+  parentTaskId: string | null;
+  sprintId: string | null;
+  epic: { id: string; name: string } | null;
+  milestone: { id: string; title: string } | null;
+  dependencies: { id: string }[];
+  parentTask: { id: string; title: string; type: string } | null;
+  sprint: { id: string; name: string; status: string } | null;
   status: string;
   priority: string;
   assigneeId: string | null;
@@ -70,7 +105,7 @@ function serializeTask(task: {
   dueDate: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  _count: { comments: number };
+  _count: { comments: number; subtasks: number };
 }) {
   return {
     ...task,
@@ -78,6 +113,7 @@ function serializeTask(task: {
     dueDate: task.dueDate?.toISOString() ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
+    blockedByCount: task.dependencies.length,
   };
 }
 
@@ -116,7 +152,7 @@ export async function GET(
     where: {
       projectId: id,
       deletedAt: null,
-      ...(access.canManage
+      ...(access.canManage || isProjectController(actor.role)
         ? {}
         : { assigneeId: actor.id }),
     },
@@ -133,9 +169,7 @@ export async function GET(
       success: true,
       tasks: tasks.map((task) => ({
         ...serializeTask(task),
-        _count: {
-          comments: 0,
-        },
+        _count: { comments: task._count.comments, subtasks: task._count.subtasks },
       })),
     },
     {
@@ -208,6 +242,27 @@ export async function POST(
 
   try {
     const task = await prisma.$transaction(async (tx) => {
+      if (data.epicId) {
+        const epic = await tx.epic.findFirst({ where: { id: data.epicId, projectId: id }, select: { id: true } });
+        if (!epic) throw new Error("INVALID_EPIC");
+      }
+
+      if (data.milestoneId) {
+        const milestone = await tx.milestone.findFirst({
+          where: { id: data.milestoneId, projectId: id },
+          select: { id: true },
+        });
+        if (!milestone) throw new Error("INVALID_MILESTONE");
+      }
+
+      if (data.parentTaskId) {
+        const parent = await tx.task.findFirst({
+          where: { id: data.parentTaskId, projectId: id, deletedAt: null, parentTaskId: null },
+          select: { id: true },
+        });
+        if (!parent) throw new Error("INVALID_PARENT_TASK");
+      }
+
       let assigneeName: string | null = null;
 
       if (data.assigneeId) {
@@ -252,6 +307,13 @@ export async function POST(
         data: {
           title: data.title,
           description: data.description || null,
+          type: data.type,
+          storyPoints: data.storyPoints,
+          rank: data.rank,
+          acceptanceCriteria: data.acceptanceCriteria || null,
+          epicId: data.epicId,
+          milestoneId: data.milestoneId,
+          parentTaskId: data.parentTaskId,
           priority: data.priority,
           status: data.status,
           startDate: toDate(data.startDate),
@@ -289,7 +351,7 @@ export async function POST(
         success: true,
         task: {
           ...serializeTask(task),
-          _count: { comments: 0 },
+          _count: { comments: task._count.comments, subtasks: task._count.subtasks },
         },
         message: "تسک ایجاد شد.",
       },
@@ -307,6 +369,18 @@ export async function POST(
         },
         { status: 400 }
       );
+    }
+
+    if (error instanceof Error && error.message === "INVALID_EPIC") {
+      return NextResponse.json({ message: "Epic باید متعلق به همین پروژه باشد." }, { status: 400 });
+    }
+
+    if (error instanceof Error && error.message === "INVALID_MILESTONE") {
+      return NextResponse.json({ message: "مایلستون باید متعلق به همین پروژه باشد." }, { status: 400 });
+    }
+
+    if (error instanceof Error && error.message === "INVALID_PARENT_TASK") {
+      return NextResponse.json({ message: "تسک والد باید یک آیتم سطح‌اولِ فعال از همین پروژه باشد." }, { status: 400 });
     }
 
     console.error("Create task:", error);

@@ -24,7 +24,7 @@ export type SelectableUser = {
 
 type Props = {
   label: string;
-  role: "MANAGER" | "EMPLOYEE";
+  role: "MANAGER" | "EMPLOYEE" | "CONTROLLER";
   selected: SelectableUser[];
   onChange: (users: SelectableUser[]) => void;
   projectId?: string;

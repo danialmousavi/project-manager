@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
+import { isProjectController, type AppRole } from "@/lib/role-access";
 
 import {
   ASSIGNMENT_PREFIX,
@@ -26,7 +27,7 @@ const schema = z.object({
 async function accessibleTask(
   actor: {
     id: string;
-    role: "ADMIN" | "MANAGER" | "EMPLOYEE";
+    role: AppRole;
   },
   id: string
 ) {
@@ -48,7 +49,7 @@ async function accessibleTask(
 
   if (
     !access ||
-    (!access.canManage && task.assigneeId !== actor.id)
+    (!access.canManage && !isProjectController(actor.role) && task.assigneeId !== actor.id)
   ) {
     return null;
   }
@@ -146,6 +147,13 @@ export async function POST(
   if (!isAllowedOrigin(request)) {
     return NextResponse.json(
       { message: "درخواست نامعتبر است." },
+      { status: 403 }
+    );
+  }
+
+  if (isProjectController(actor.role)) {
+    return NextResponse.json(
+      { message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." },
       { status: 403 }
     );
   }

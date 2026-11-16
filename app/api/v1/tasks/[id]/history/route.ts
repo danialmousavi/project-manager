@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
+import { isProjectController } from "@/lib/role-access";
 
 import {
   ASSIGNMENT_PREFIX,
@@ -68,7 +69,7 @@ export async function GET(_request: NextRequest, context: Context) {
 
   const access = await getTaskProjectAccess(actor, task.projectId);
 
-  if (!access?.canManage) {
+  if (!access || (!access.canManage && !isProjectController(actor.role))) {
     return NextResponse.json(
       { message: "اجازه مشاهده تاریخچه را ندارید." },
       { status: 403 },

@@ -12,6 +12,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateProjectProgress } from "@/lib/project-progress";
+import { canViewAllProjects } from "@/lib/role-access";
 import ProjectDetails from "@/components/projects/project-details";
 
 type Props = {
@@ -59,7 +60,7 @@ async function Content({ params }: Props) {
     where: {
       id,
       archivedAt: null,
-      ...(user.role === "ADMIN"
+      ...(canViewAllProjects(user.role)
         ? {}
         : {
             members: {

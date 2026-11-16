@@ -13,6 +13,7 @@ import {
   calculateProjectProgress,
   type TaskStatusCount,
 } from "@/lib/project-progress";
+import { canViewAllProjects } from "@/lib/role-access";
 
 import ProjectsManager from "@/components/projects/projects-manager";
 
@@ -42,7 +43,7 @@ async function ProjectsContent() {
   const projects = await prisma.project.findMany({
     where: {
       archivedAt: null,
-      ...(user.role === "ADMIN"
+      ...(canViewAllProjects(user.role)
         ? {}
         : {
             members: {
@@ -143,17 +144,17 @@ async function ProjectsContent() {
 
   return (
     <>
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-          <FolderKanban size={21} aria-hidden="true" />
+      <div className="mb-4 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-white px-4 py-3.5 shadow-sm sm:px-5">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+          <FolderKanban size={19} aria-hidden="true" />
         </div>
 
         <div>
-          <h1 className="text-xl font-extrabold sm:text-2xl">
+          <h1 className="text-lg font-extrabold sm:text-xl">
             مدیریت پروژه‌ها
           </h1>
 
-          <p className="mt-0.5 text-sm text-[var(--muted)]">
+          <p className="mt-0.5 text-xs text-[var(--muted)] sm:text-sm">
             پروژه‌ها، اعضا و پیشرفت واقعی فعالیت‌ها
           </p>
         </div>

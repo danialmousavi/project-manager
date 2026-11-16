@@ -17,9 +17,10 @@ const createUserSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.email().trim().toLowerCase(),
   password: z.string().min(10).max(128),
-  role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE"]),
-  nationalId: z.string().transform(normalizeNationalId)
-    .refine(isValidNationalId, "کد ملی معتبر نیست"),
+  role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE", "CONTROLLER"]),
+  nationalId: z.string().trim().transform(normalizeNationalId)
+    .refine((value) => value === "" || isValidNationalId(value), "کد ملی معتبر نیست")
+    .optional(),
   phone: z.string().transform(normalizePhone)
     .refine(isValidIranianMobile, "شماره موبایل معتبر نیست"),
 });
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         email,
-        nationalId,
+        nationalId: nationalId || null,
         phone,
         passwordHash,
         role,
