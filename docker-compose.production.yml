@@ -15,7 +15,9 @@ services:
       retries: 10
 
   minio:
-    build: ./docker/minio
+    build:
+      context: ./docker/minio
+      network: host
     restart: unless-stopped
     command: server /data --console-address :9001
     environment:
@@ -33,6 +35,7 @@ services:
     build:
       context: .
       target: migrator
+      network: host
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
     depends_on:
@@ -45,6 +48,7 @@ services:
     build:
       context: .
       target: seed
+      network: host
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       ADMIN_NAME: ${ADMIN_NAME:-System Admin}
@@ -59,6 +63,7 @@ services:
     build:
       context: .
       target: runner
+      network: host
     restart: unless-stopped
     environment:
       NODE_ENV: production
