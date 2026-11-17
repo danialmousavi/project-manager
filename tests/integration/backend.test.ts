@@ -34,6 +34,10 @@ let kanbanRoute: typeof import("../../app/api/v1/projects/[id]/kanban/route");
 let progressRoute: typeof import("../../app/api/v1/projects/[id]/progress/route");
 let usersRoute: typeof import("../../app/api/v1/users/route");
 let userRoute: typeof import("../../app/api/v1/users/[id]/route");
+let notificationsRoute: typeof import("../../app/api/v1/notifications/route");
+let notificationRoute: typeof import("../../app/api/v1/notifications/[id]/route");
+let commentsRoute: typeof import("../../app/api/v1/tasks/[id]/comments/route");
+let notifications: typeof import("../../lib/notifications");
 
 const url = (path: string) => `http://localhost:3000/api/v1/${path}`;
 const context = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -49,7 +53,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = testUrl;
   db = new PrismaClient({ adapter: new PrismaPg({ connectionString: testUrl }) });
   await db.$connect();
-  [projectsRoute, projectRoute, taskListRoute, epicsRoute, milestonesRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute] = await Promise.all([
+  [projectsRoute, projectRoute, taskListRoute, epicsRoute, milestonesRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute, notificationsRoute, notificationRoute, commentsRoute] = await Promise.all([
     import("../../app/api/v1/projects/route"),
     import("../../app/api/v1/projects/[id]/route"),
     import("../../app/api/v1/projects/[id]/tasks/route"),
@@ -62,13 +66,18 @@ beforeAll(async () => {
     import("../../app/api/v1/projects/[id]/progress/route"),
     import("../../app/api/v1/users/route"),
     import("../../app/api/v1/users/[id]/route"),
+    import("../../app/api/v1/notifications/route"),
+    import("../../app/api/v1/notifications/[id]/route"),
+    import("../../app/api/v1/tasks/[id]/comments/route"),
   ]);
+  notifications = await import("../../lib/notifications");
 });
 
 beforeEach(async () => {
   await assertTestDatabase();
   actor = null;
   await db.taskComment.deleteMany();
+  await db.notification.deleteMany();
   await db.progressHistory.deleteMany();
   await db.task.deleteMany();
   await db.milestone.deleteMany();
@@ -89,6 +98,201 @@ afterAll(async () => {
 });
 
 describe("authorization and input validation through real route handlers", () => {
+  it("lists and marks only the current user's notifications as read", async () => {
+    const recipient = await userFactory(db);
+    const otherUser = await userFactory(db);
+    const first = await db.notification.create({
+      data: {
+        userId: recipient.id,
+        type: "TASK_ASSIGNED",
+        title: "Task assigned",
+        href: "/projects/example/tasks",
+        dedupeKey: "notification-api-first",
+      },
+    });
+    const second = await db.notification.create({
+      data: {
+        userId: recipient.id,
+        type: "TASK_COMMENTED",
+        title: "New comment",
+        href: "/projects/example/tasks",
+        dedupeKey: "notification-api-second",
+      },
+    });
+    const foreign = await db.notification.create({
+      data: {
+        userId: otherUser.id,
+        type: "TASK_UPDATED",
+        title: "Foreign notification",
+        href: "/projects/example/tasks",
+        dedupeKey: "notification-api-foreign",
+      },
+    });
+
+    actor = recipient;
+    const listResponse = await notificationsRoute.GET(request("GET", "notifications?limit=1"));
+    expect(listResponse.status).toBe(200);
+    const listPayload = await listResponse.json();
+    expect(listPayload).toMatchObject({
+      success: true,
+      unreadCount: 2,
+      hasMore: true,
+    });
+    expect(listPayload.notifications).toHaveLength(1);
+    expect([first.id, second.id]).toContain(listPayload.notifications[0].id);
+    expect(listPayload.notifications[0].id).not.toBe(foreign.id);
+
+    expect((await notificationRoute.PATCH(request("PATCH", `notifications/${foreign.id}`), context(foreign.id))).status).toBe(404);
+    expect((await notificationRoute.PATCH(request("PATCH", "notifications/not-a-uuid"), context("not-a-uuid"))).status).toBe(400);
+    expect((await notificationRoute.PATCH(request("PATCH", `notifications/${first.id}`, undefined, false), context(first.id))).status).toBe(403);
+    expect((await notificationRoute.PATCH(request("PATCH", `notifications/${first.id}`), context(first.id))).status).toBe(200);
+    expect((await db.notification.findUnique({ where: { id: first.id } }))?.readAt).not.toBeNull();
+
+    const markAllResponse = await notificationsRoute.PATCH(request("PATCH", "notifications"));
+    await expect(markAllResponse.json()).resolves.toMatchObject({ success: true, updatedCount: 1 });
+    expect(await db.notification.count({ where: { userId: recipient.id, readAt: null } })).toBe(0);
+  });
+
+  it("creates deduplicated notifications and skips the operation actor", async () => {
+    const actorUser = await userFactory(db, "MANAGER");
+    const recipient = await userFactory(db);
+    const project = await projectFactory(db, actorUser.id, actorUser.id, [recipient.id]);
+    const dedupeKey = `task-assigned:${project.id}:${recipient.id}`;
+
+    const created = await notifications.createNotification({
+      userId: recipient.id,
+      actorId: actorUser.id,
+      type: "TASK_ASSIGNED",
+      title: "وظیفه‌ای به شما واگذار شد",
+      body: "نسخهٔ نخست پیام",
+      href: `/projects/${project.id}/tasks`,
+      projectId: project.id,
+      dedupeKey,
+    });
+
+    expect(created).toMatchObject({ userId: recipient.id, readAt: null });
+
+    await notifications.createNotification({
+      userId: recipient.id,
+      actorId: actorUser.id,
+      type: "TASK_ASSIGNED",
+      title: "وظیفه‌ای به شما واگذار شد",
+      body: "نسخهٔ به‌روزشدهٔ پیام",
+      href: `/projects/${project.id}/tasks`,
+      projectId: project.id,
+      dedupeKey,
+    });
+
+    expect(await db.notification.count({ where: { userId: recipient.id } })).toBe(1);
+    expect(await db.notification.findFirst({ where: { userId: recipient.id } })).toMatchObject({
+      body: "نسخهٔ به‌روزشدهٔ پیام",
+      readAt: null,
+    });
+
+    await expect(notifications.createNotification({
+      userId: actorUser.id,
+      actorId: actorUser.id,
+      type: "TASK_UPDATED",
+      title: "تغییر تسک",
+      href: `/projects/${project.id}/tasks`,
+    })).resolves.toBeNull();
+    expect(await db.notification.count({ where: { userId: actorUser.id } })).toBe(0);
+  });
+
+  it("notifies a task assignee when a task is created, reassigned, or its status changes", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const firstAssignee = await userFactory(db);
+    const secondAssignee = await userFactory(db);
+    const project = await projectFactory(db, admin.id, manager.id, [firstAssignee.id, secondAssignee.id]);
+    actor = manager;
+
+    const created = await taskListRoute.POST(
+      request("POST", `projects/${project.id}/tasks`, {
+        title: "Prepare release notes",
+        description: "",
+        priority: "HIGH",
+        status: "TODO",
+        assigneeId: firstAssignee.id,
+        startDate: null,
+        dueDate: null,
+      }),
+      context(project.id),
+    );
+    expect(created.status).toBe(201);
+    const { task } = await created.json() as { task: { id: string } };
+    expect(await db.notification.findFirst({ where: { userId: firstAssignee.id } })).toMatchObject({
+      type: "TASK_ASSIGNED",
+      projectId: project.id,
+    });
+
+    expect((await taskRoute.PATCH(
+      request("PATCH", `tasks/${task.id}`, { assigneeId: secondAssignee.id, note: "" }),
+      context(task.id),
+    )).status).toBe(200);
+    expect(await db.notification.findFirst({ where: { userId: secondAssignee.id } })).toMatchObject({
+      type: "TASK_ASSIGNED",
+      projectId: project.id,
+    });
+
+    expect((await taskRoute.PATCH(
+      request("PATCH", `tasks/${task.id}`, { status: "IN_PROGRESS" }),
+      context(task.id),
+    )).status).toBe(200);
+    expect(await db.notification.findFirst({
+      where: { userId: secondAssignee.id, type: "TASK_UPDATED" },
+    })).toMatchObject({ projectId: project.id });
+  });
+
+  it("notifies the assignee about a new task comment but not its author", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const assignee = await userFactory(db);
+    const project = await projectFactory(db, admin.id, manager.id, [assignee.id]);
+    const task = await taskFactory(db, project.id, admin.id, { assigneeId: assignee.id });
+    actor = manager;
+
+    const response = await commentsRoute.POST(
+      request("POST", `tasks/${task.id}/comments`, { content: "Please review the latest draft." }),
+      context(task.id),
+    );
+    expect(response.status).toBe(201);
+    expect(await db.notification.findFirst({
+      where: { userId: assignee.id, type: "TASK_COMMENTED" },
+    })).toMatchObject({ projectId: project.id });
+
+    actor = assignee;
+    expect((await commentsRoute.POST(
+      request("POST", `tasks/${task.id}/comments`, { content: "I will review it today." }),
+      context(task.id),
+    )).status).toBe(201);
+    expect(await db.notification.count({
+      where: { userId: assignee.id, type: "TASK_COMMENTED" },
+    })).toBe(1);
+  });
+
+  it("notifies users who are newly added to a project", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const newMember = await userFactory(db);
+    const project = await projectFactory(db, admin.id, manager.id);
+    actor = admin;
+
+    expect((await membersRoute.PUT(
+      request("PUT", `projects/${project.id}/members`, {
+        managerIds: [manager.id],
+        memberIds: [newMember.id],
+        controllerIds: [],
+      }),
+      context(project.id),
+    )).status).toBe(200);
+
+    expect(await db.notification.findFirst({
+      where: { userId: newMember.id, type: "PROJECT_MEMBER_ADDED" },
+    })).toMatchObject({ projectId: project.id });
+    expect(await db.notification.count({ where: { userId: admin.id } })).toBe(0);
+  });
+
   it("rejects unauthenticated requests and invalid Origin", async () => {
     expect((await projectsRoute.POST(request("POST", "projects", {}))).status).toBe(401);
     const admin = await userFactory(db, "ADMIN");

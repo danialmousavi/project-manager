@@ -15,6 +15,10 @@ import {
   type TaskFieldChange,
   type TaskFieldName,
 } from "@/lib/task-change-history";
+import {
+  notifyTaskAssigned,
+  notifyTaskStatusChanged,
+} from "@/lib/task-notifications";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -273,10 +277,11 @@ export async function PATCH(
     }
 
     try {
-      await prisma.$transaction(async (tx) => {
+      const statusChange = await prisma.$transaction(async (tx) => {
         const current = await tx.task.findFirst({
           where: { id, deletedAt: null },
           select: {
+            title: true,
             status: true,
             version: true,
             assigneeId: true,
@@ -293,7 +298,7 @@ export async function PATCH(
         }
 
         if (current.status === statusParsed.data.status) {
-          return;
+          return null;
         }
 
         const result = await tx.task.updateMany({
@@ -334,7 +339,23 @@ export async function PATCH(
           tx,
           currentTask.projectId
         );
+
+        return {
+          assigneeId: current.assigneeId,
+          taskTitle: current.title,
+        };
       });
+
+      if (statusChange?.assigneeId) {
+        await notifyTaskStatusChanged({
+          taskId: id,
+          taskTitle: statusChange.taskTitle,
+          projectId: currentTask.projectId,
+          recipientId: statusChange.assigneeId,
+          actorId: actor.id,
+          status: statusParsed.data.status,
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -397,7 +418,7 @@ export async function PATCH(
   }
 
   try {
-    const changed = await prisma.$transaction(
+    const result = await prisma.$transaction(
       async (tx) => {
         const current = await tx.task.findFirst({
           where: { id, deletedAt: null },
@@ -585,7 +606,11 @@ export async function PATCH(
           changes.length === 0 &&
           !assigneeChanged
         ) {
-          return false;
+          return {
+            changed: false,
+            assigneeChanged: false,
+            statusChanged: false,
+          };
         }
 
         const updated = await tx.task.updateMany({
@@ -662,14 +687,42 @@ export async function PATCH(
           );
         }
 
-        return true;
+        return {
+          changed: true,
+          assigneeChanged,
+          statusChanged: Boolean(details && current.status !== details.status),
+          projectId: current.projectId,
+          taskTitle: current.title,
+          assigneeId: nextAssigneeId,
+        };
       }
     );
 
+    if (result.changed && result.assigneeChanged && result.assigneeId) {
+      await notifyTaskAssigned({
+        taskId: id,
+        taskTitle: result.taskTitle,
+        projectId: result.projectId,
+        recipientId: result.assigneeId,
+        actorId: actor.id,
+      });
+    }
+
+    if (result.changed && result.statusChanged && !result.assigneeChanged && result.assigneeId) {
+      await notifyTaskStatusChanged({
+        taskId: id,
+        taskTitle: result.taskTitle,
+        projectId: result.projectId,
+        recipientId: result.assigneeId,
+        actorId: actor.id,
+        status: details?.status ?? "TODO",
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      changed,
-      message: changed
+      changed: result.changed,
+      message: result.changed
         ? "تغییرات تسک ذخیره شد."
         : "اطلاعات تسک تغییری نکرد.",
     });

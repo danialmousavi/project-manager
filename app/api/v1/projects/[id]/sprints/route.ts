@@ -8,6 +8,11 @@ import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
 import { isProjectController } from "@/lib/role-access";
 import { encodeTaskChangeEvent } from "@/lib/task-change-history";
+import {
+  notifySprintCompleted,
+  notifySprintStarted,
+  notifyTaskSprintMoved,
+} from "@/lib/sprint-notifications";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -422,6 +427,7 @@ export async function PATCH(
       },
       select: {
         id: true,
+        name: true,
         status: true,
       },
     });
@@ -500,12 +506,24 @@ export async function PATCH(
           data: { status: "ACTIVE" },
         });
 
-        return { kind: "STARTED" as const, snapshot };
+        return {
+          kind: "STARTED" as const,
+          snapshot,
+          assigneeIds: tasks.map((task) => task.assigneeId),
+        };
       });
 
       if (result.kind === "NOT_STARTABLE") {
         return fail("اسپرینت برای شروع معتبر نیست.", 409);
       }
+
+      await notifySprintStarted({
+        projectId,
+        sprintId: sprint.id,
+        sprintName: sprint.name,
+        recipientIds: result.assigneeIds,
+        actorId: actor.id,
+      });
 
       return NextResponse.json({
         success: true,
@@ -567,8 +585,10 @@ export async function PATCH(
           },
           select: {
             id: true,
+            title: true,
             status: true,
             storyPoints: true,
+            assigneeId: true,
           },
         });
 
@@ -630,7 +650,16 @@ export async function PATCH(
           data: { status: "COMPLETED" },
         });
 
-        return { kind: "ENDED" as const, snapshot };
+        return {
+          kind: "ENDED" as const,
+          snapshot,
+          assigneeIds: tasks.map((task) => task.assigneeId),
+          movedTasks: incomplete.map((task) => ({
+            id: task.id,
+            title: task.title,
+            assigneeId: task.assigneeId,
+          })),
+        };
       });
 
       if (result.kind === "NOT_ACTIVE") {
@@ -640,6 +669,23 @@ export async function PATCH(
       if (result.kind === "INVALID_DESTINATION") {
         return fail("مقصد تسک‌های ناتمام باید اسپرینت فعال یا آیندهٔ دیگری از همین پروژه باشد.", 409);
       }
+
+      await notifySprintCompleted({
+        projectId,
+        sprintId: sprint.id,
+        sprintName: sprint.name,
+        recipientIds: result.assigneeIds,
+        actorId: actor.id,
+      });
+      await Promise.all(result.movedTasks.map((task) => notifyTaskSprintMoved({
+        projectId,
+        taskId: task.id,
+        taskTitle: task.title,
+        recipientId: task.assigneeId,
+        actorId: actor.id,
+        sprintId: data.unfinishedDestinationSprintId,
+        sprintName: data.unfinishedDestinationSprintId ? "اسپرینت مقصد" : null,
+      })));
 
       return NextResponse.json({
         success: true,
@@ -701,6 +747,12 @@ export async function PATCH(
         );
       }
 
+      const task = await prisma.task.findFirst({
+        where: { id: data.taskId, projectId, deletedAt: null, sprintId: data.sprintId },
+        select: { id: true, title: true, assigneeId: true },
+      });
+      if (!task) return fail("تسک پیدا نشد.", 409);
+
       await prisma.taskComment.create({
         data: {
           taskId: data.taskId,
@@ -712,11 +764,27 @@ export async function PATCH(
         },
       });
 
+      await notifyTaskSprintMoved({
+        projectId,
+        taskId: task.id,
+        taskTitle: task.title,
+        recipientId: task.assigneeId,
+        actorId: actor.id,
+        sprintId: sprint.id,
+        sprintName: sprint.name,
+      });
+
       return NextResponse.json({
         success: true,
         message: "تسک به اسپرینت اضافه شد.",
       });
     }
+
+    const task = await prisma.task.findFirst({
+      where: { id: data.taskId, projectId, deletedAt: null, sprintId: data.sprintId },
+      select: { id: true, title: true, assigneeId: true },
+    });
+    if (!task) return fail("تسک در این اسپرینت پیدا نشد.", 404);
 
     const removed = await prisma.task.updateMany({
       where: {
@@ -747,6 +815,16 @@ export async function PATCH(
           changes: [{ field: "sprintId", from: data.sprintId, to: null }],
         }),
       },
+    });
+
+    await notifyTaskSprintMoved({
+      projectId,
+      taskId: task.id,
+      taskTitle: task.title,
+      recipientId: task.assigneeId,
+      actorId: actor.id,
+      sprintId: null,
+      sprintName: null,
     });
 
     return NextResponse.json({

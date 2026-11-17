@@ -11,6 +11,7 @@ import { isProjectController } from "@/lib/role-access";
 import {
   encodeAssignmentEvent,
 } from "@/lib/task-assignment-history";
+import { notifyTaskAssigned } from "@/lib/task-notifications";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -345,6 +346,16 @@ export async function POST(
 
       return created;
     });
+
+    if (task.assigneeId) {
+      await notifyTaskAssigned({
+        taskId: task.id,
+        taskTitle: task.title,
+        projectId: id,
+        recipientId: task.assigneeId,
+        actorId: actor.id,
+      });
+    }
 
     return NextResponse.json(
       {

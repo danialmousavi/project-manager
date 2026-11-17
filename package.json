@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "db:seed": "tsx scripts/seed.ts",
+    "notifications:deadlines": "tsx scripts/notify-task-deadlines.ts",
     "lint": "eslint",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --config vitest.unit.config.ts",

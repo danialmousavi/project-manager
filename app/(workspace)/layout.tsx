@@ -18,22 +18,28 @@ async function WorkspaceContent({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const projects = await prisma.project.findMany({
-    where: {
-      archivedAt: null,
-      ...(canViewAllProjects(user.role)
-        ? {}
-        : { members: { some: { userId: user.id } } }),
-    },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, name: true },
-    take: 100,
-  });
+  const [projects, initialUnreadCount] = await Promise.all([
+    prisma.project.findMany({
+      where: {
+        archivedAt: null,
+        ...(canViewAllProjects(user.role)
+          ? {}
+          : { members: { some: { userId: user.id } } }),
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+      take: 100,
+    }),
+    prisma.notification.count({
+      where: { userId: user.id, readAt: null },
+    }),
+  ]);
 
   return (
     <WorkspaceShell
       user={{ name: user.name, role: user.role }}
       projects={projects}
+      initialUnreadCount={initialUnreadCount}
     >
       {children}
     </WorkspaceShell>

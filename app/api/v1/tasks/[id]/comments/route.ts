@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
 import { isProjectController, type AppRole } from "@/lib/role-access";
+import { notifyTaskCommented } from "@/lib/task-notifications";
 
 import {
   ASSIGNMENT_PREFIX,
@@ -35,6 +36,7 @@ async function accessibleTask(
     where: { id, deletedAt: null },
     select: {
       id: true,
+      title: true,
       projectId: true,
       assigneeId: true,
     },
@@ -79,7 +81,8 @@ export async function GET(
     );
   }
 
-  if (!(await accessibleTask(actor, id))) {
+  const task = await accessibleTask(actor, id);
+  if (!task) {
     return NextResponse.json(
       { message: "دسترسی مجاز نیست." },
       { status: 403 }
@@ -167,7 +170,8 @@ export async function POST(
     );
   }
 
-  if (!(await accessibleTask(actor, id))) {
+  const task = await accessibleTask(actor, id);
+  if (!task) {
     return NextResponse.json(
       { message: "اجازه ثبت کامنت ندارید." },
       { status: 403 }
@@ -214,6 +218,19 @@ export async function POST(
         },
       },
     });
+
+    if (task.assigneeId) {
+      await notifyTaskCommented({
+        taskId: task.id,
+        taskTitle: task.title,
+        projectId: task.projectId,
+        recipientId: task.assigneeId,
+        actorId: actor.id,
+        commentId: comment.id,
+        authorName: comment.author.name,
+        content: comment.content,
+      });
+    }
 
     return NextResponse.json(
       {

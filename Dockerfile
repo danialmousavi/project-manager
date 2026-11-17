@@ -28,6 +28,17 @@ COPY lib/password.ts ./lib/password.ts
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate --config prisma7.config.ts
 CMD ["npm", "run", "db:seed"]
 
+FROM deps AS deadline
+
+COPY prisma ./prisma
+COPY prisma7.config.ts ./
+COPY scripts ./scripts
+COPY lib/prisma.ts ./lib/prisma.ts
+COPY lib/notifications.ts ./lib/notifications.ts
+COPY lib/task-deadline-notifications.ts ./lib/task-deadline-notifications.ts
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate --config prisma7.config.ts
+CMD ["npm", "run", "notifications:deadlines"]
+
 FROM deps AS builder
 
 COPY . .

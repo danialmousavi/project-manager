@@ -24,6 +24,14 @@ This configuration runs one app instance, PostgreSQL, MinIO and Caddy on one Lin
 
 4. Check `docker compose --env-file .env.production -f docker-compose.production.yml ps` and inspect service logs if needed. Visit `APP_URL` and test login and file upload/download. When switching modes, update both `APP_URL` and `SESSION_COOKIE_SECURE`, recreate the services using the `up` command above, and access the new URL.
 
+5. Schedule the deadline-notification job once per day (for example, at 08:00 server time). Add this entry with `crontab -e`, replacing `/opt/project-manager` if your installation path differs:
+
+   ```cron
+   0 8 * * * cd /opt/project-manager && docker compose --env-file .env.production -f docker-compose.production.yml --profile maintenance run --rm deadline >> /var/log/project-manager-deadlines.log 2>&1
+   ```
+
+   You can run the same command manually to verify the job. It is idempotent: a task gets one near-deadline notification per due date and one overdue reminder per day.
+
 For upgrades, back up the database and MinIO data first, pull the intended revision, then repeat the `up -d --build` command. Migrations execute before the app starts; plan downtime and verify migration compatibility and recovery before upgrading. Back up PostgreSQL with `pg_dump` and back up MinIO objects using a suitable object-storage backup tool, storing both backups off-server and testing restoration. Docker volumes are persistent but are not backups. Never use `docker compose down -v` on a production installation.
 
 The MinIO console and PostgreSQL are internal only. This configuration assumes one app instance; scaling requires shared cache and coordinated deployment configuration. The Caddy request limit accommodates the application's 25 MB individual upload limit. Configure server monitoring, disk capacity alerts, backup scheduling, firewall and operating-system updates before relying on this installation.

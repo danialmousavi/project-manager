@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAllowedOrigin } from "@/lib/security/origin";
+import { notifyProjectMembersAdded } from "@/lib/project-notifications";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -75,11 +76,12 @@ export async function PUT(
   }
 
   try {
-    await prisma.$transaction(
+    const membershipChange = await prisma.$transaction(
       async (tx) => {
         const project = await tx.project.findFirst({
           where: { id, archivedAt: null },
           select: {
+            name: true,
             members: {
               select: {
                 userId: true,
@@ -129,6 +131,7 @@ export async function PUT(
         }
 
         const allIds = [...managerIds, ...memberIds, ...controllerIds];
+        const previousMemberIds = project.members.map((member) => member.userId);
 
         const users = await tx.user.findMany({
           where: {
@@ -206,9 +209,23 @@ export async function PUT(
               : []),
           ],
         });
+
+        return {
+          projectName: project.name,
+          addedUserIds: allIds.filter((userId) => !previousMemberIds.includes(userId)),
+        };
       },
       { isolationLevel: "Serializable" }
     );
+
+    if (membershipChange.addedUserIds.length > 0) {
+      await notifyProjectMembersAdded({
+        projectId: id,
+        projectName: membershipChange.projectName,
+        recipientIds: membershipChange.addedUserIds,
+        actorId: actor.id,
+      });
+    }
 
     return NextResponse.json({
       success: true,

@@ -60,6 +60,19 @@ services:
         condition: service_completed_successfully
     restart: "no"
 
+  deadline:
+    profiles: ["maintenance"]
+    build:
+      context: .
+      target: deadline
+      network: host
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   app:
     build:
       context: .

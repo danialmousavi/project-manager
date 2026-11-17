@@ -75,6 +75,20 @@ enum LoginAttemptScope {
   IP
 }
 
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  TASK_COMMENTED
+  TASK_MENTIONED
+  PROJECT_MEMBER_ADDED
+  PROJECT_MEMBER_REMOVED
+  SPRINT_STARTED
+  SPRINT_COMPLETED
+  SPRINT_TASK_MOVED
+}
+
 // ==================================
 // USERS
 // ==================================
@@ -102,6 +116,7 @@ model User {
   comments           TaskComment[]
   progressUpdates    ProgressHistory[]
   deletedTasks       Task[]            @relation("TaskDeletedBy")
+  notifications      Notification[]
 
   @@index([role])
 }
@@ -130,6 +145,7 @@ model Project {
   milestones      Milestone[]
   tasks           Task[]
   progressHistory ProgressHistory[]
+  notifications   Notification[]
 
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -453,4 +469,31 @@ model LoginAttempt {
 
   @@index([scope, keyHash, attemptedAt])
   @@index([attemptedAt])
+}
+
+// ==================================
+// NOTIFICATIONS
+// ==================================
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  projectId String?
+  type      NotificationType
+  title     String
+  body      String?
+  href      String
+  payload   Json?
+  dedupeKey String           @default(uuid())
+  readAt    DateTime?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+  @@index([projectId, createdAt])
+  @@index([type, createdAt])
 }

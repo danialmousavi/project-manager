@@ -5,6 +5,7 @@ import { Menu, PanelsTopLeft, X } from "lucide-react";
 
 import AppNav from "@/components/layout/app-nav";
 import LogoutButton from "@/components/layout/logout-button";
+import NotificationMenu from "@/components/layout/notification-menu";
 
 type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
 
@@ -15,7 +16,7 @@ const roleLabels: Record<Role, string> = {
   CONTROLLER: "ناظر کنترل پروژه",
 };
 
-export default function WorkspaceShell({ children, user, projects }: { children: ReactNode; user: { name: string; role: Role }; projects: { id: string; name: string }[] }) {
+export default function WorkspaceShell({ children, user, projects, initialUnreadCount }: { children: ReactNode; user: { name: string; role: Role }; projects: { id: string; name: string }[]; initialUnreadCount: number }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const navigation = <AppNav role={user.role} projects={projects} variant="sidebar" onNavigate={() => setMenuOpen(false)} />;
 
@@ -46,7 +47,7 @@ export default function WorkspaceShell({ children, user, projects }: { children:
       <div className="min-w-0">
         <header className="sticky top-0 z-40 flex min-h-16 items-center justify-between gap-3 border-b border-[var(--border)] bg-white/95 px-4 backdrop-blur-md sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3"><button type="button" aria-label="بازکردن منو" aria-controls="mobile-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)} className="rounded-xl border border-[var(--border)] p-2 text-[var(--muted)] hover:bg-emerald-50 lg:hidden"><Menu size={20} /></button><div className="min-w-0"><p className="truncate text-sm font-extrabold text-[var(--foreground)]">سامانه مدیریت پروژه</p><p className="hidden text-xs text-[var(--muted)] sm:block">فضای کاری تیم</p></div></div>
-          <div className="flex items-center gap-3"><div className="hidden text-left sm:block"><p className="max-w-40 truncate text-xs font-bold text-[var(--foreground)]" title={user.name}>{user.name}</p><p className="text-[11px] text-[var(--muted)]">{roleLabels[user.role]}</p></div><LogoutButton /></div>
+          <div className="flex items-center gap-3"><NotificationMenu initialUnreadCount={initialUnreadCount} /><div className="hidden text-left sm:block"><p className="max-w-40 truncate text-xs font-bold text-[var(--foreground)]" title={user.name}>{user.name}</p><p className="text-[11px] text-[var(--muted)]">{roleLabels[user.role]}</p></div><LogoutButton /></div>
         </header>
         <div>{children}</div>
       </div>
