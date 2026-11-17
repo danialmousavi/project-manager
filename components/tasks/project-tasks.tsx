@@ -437,6 +437,9 @@ export default function ProjectTasks({
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [taskView, setTaskView] = useState<"MINE" | "ALL">(
+    canManage ? "ALL" : "MINE",
+  );
   const [openSectionId, setOpenSectionId] = useState<string | null | undefined>(
     undefined,
   );
@@ -588,7 +591,7 @@ export default function ProjectTasks({
       const urls = [
         `/api/v1/tasks/${task.id}`,
         `/api/v1/tasks/${task.id}/comments`,
-        ...(canManage ? [`/api/v1/tasks/${task.id}/history`] : []),
+        `/api/v1/tasks/${task.id}/history`,
       ];
 
       const responses = await Promise.all(
@@ -608,9 +611,7 @@ export default function ProjectTasks({
       setTaskDetail(payloads[0].task ?? null);
       setComments(payloads[1].comments ?? []);
 
-      if (canManage) {
-        setHistory(payloads[2].history ?? []);
-      }
+      setHistory(payloads[2].history ?? []);
     } catch (error) {
       setError(messageOf(error));
     } finally {
@@ -763,7 +764,11 @@ export default function ProjectTasks({
     }
   }
 
-  const filteredTasks = tasks.filter((task) => {
+  const tasksInView = tasks.filter((task) =>
+    taskView === "ALL" || task.assigneeId === actorId,
+  );
+
+  const filteredTasks = tasksInView.filter((task) => {
     const q = query.trim().toLowerCase();
 
     return (
@@ -775,13 +780,13 @@ export default function ProjectTasks({
 
   const treeSections = buildTaskTreeSections(buildTaskTreeRows(filteredTasks));
   const defaultSectionId =
-    tasks.find((task) => task.sprint?.status === "ACTIVE")?.sprintId ?? null;
+    tasksInView.find((task) => task.sprint?.status === "ACTIVE")?.sprintId ?? null;
   const expandedSectionId =
     openSectionId === undefined ? defaultSectionId : openSectionId;
 
-  const doneCount = tasks.filter((task) => task.status === "DONE").length;
+  const doneCount = tasksInView.filter((task) => task.status === "DONE").length;
 
-  const doingCount = tasks.filter(
+  const doingCount = tasksInView.filter(
     (task) => task.status === "IN_PROGRESS",
   ).length;
 
@@ -816,8 +821,8 @@ export default function ProjectTasks({
 
       <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
         <MiniStat
-          label="کل وظایف"
-          value={tasks.length}
+          label={taskView === "MINE" ? "وظایف من" : "کل وظایف"}
+          value={tasksInView.length}
           icon={<ClipboardList size={18} />}
         />
         <MiniStat
@@ -849,6 +854,38 @@ export default function ProjectTasks({
           {notice}
         </p>
       )}
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-2">
+        <div className="inline-flex rounded-lg bg-white p-1 shadow-sm ring-1 ring-emerald-100">
+          <button
+            type="button"
+            onClick={() => {
+              setTaskView("MINE");
+              setOpenSectionId(undefined);
+            }}
+            aria-pressed={taskView === "MINE"}
+            className={`rounded-md px-3 py-2 text-xs font-bold transition ${taskView === "MINE" ? "bg-emerald-600 text-white shadow-sm" : "text-emerald-800 hover:bg-emerald-50"}`}
+          >
+            وظایف من ({tasks.filter((task) => task.assigneeId === actorId).length.toLocaleString("fa-IR")})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTaskView("ALL");
+              setOpenSectionId(undefined);
+            }}
+            aria-pressed={taskView === "ALL"}
+            className={`rounded-md px-3 py-2 text-xs font-bold transition ${taskView === "ALL" ? "bg-emerald-600 text-white shadow-sm" : "text-emerald-800 hover:bg-emerald-50"}`}
+          >
+            همهٔ وظایف پروژه ({tasks.length.toLocaleString("fa-IR")})
+          </button>
+        </div>
+        {!canManage && taskView === "ALL" && (
+          <p className="px-1 text-[11px] font-semibold text-emerald-800">
+            تسک‌های سایر اعضا فقط برای مشاهده هستند.
+          </p>
+        )}
+      </div>
 
       <div className="mt-5 flex flex-col gap-2.5 rounded-xl bg-slate-50 p-3 sm:flex-row">
         <div className="relative flex-1">
@@ -972,6 +1009,8 @@ export default function ProjectTasks({
                     const { task, depth } = row;
                     const expanded = activeTaskId === task.id;
                     const canChangeTaskStatus =
+                      canManage || task.assigneeId === actorId;
+                    const canCommentOnTask =
                       canManage || task.assigneeId === actorId;
                     const overdue = isPastDue(task.dueDate, task.status);
                     const progress = statusProgress[task.status];
@@ -1488,8 +1527,7 @@ export default function ProjectTasks({
                                     </div>
                                   )}
 
-                                  {canManage && (
-                                    <details className="group rounded-xl border border-slate-200 bg-white p-3">
+                                  <details className="group rounded-xl border border-slate-200 bg-white p-3">
                                       <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-slate-900">
                                         <History size={17} />
                                         تاریخچه فعالیت‌ها
@@ -1518,8 +1556,7 @@ export default function ProjectTasks({
                                           />
                                         ))}
                                       </div>
-                                    </details>
-                                  )}
+                                  </details>
                                 </div>
 
                                 <div className="min-w-0 space-y-3">
@@ -1563,31 +1600,37 @@ export default function ProjectTasks({
                                       ))}
                                     </div>
 
-                                    <form
-                                      onSubmit={addComment}
-                                      className="space-y-3"
-                                    >
-                                      <textarea
-                                        className={inputClass}
-                                        required
-                                        rows={3}
-                                        maxLength={2000}
-                                        value={commentText}
-                                        onChange={(event) =>
-                                          setCommentText(event.target.value)
-                                        }
-                                        placeholder="پیام خود را بنویسید..."
-                                      />
-
-                                      <button
-                                        type="submit"
-                                        disabled={busy || !commentText.trim()}
-                                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                                    {canCommentOnTask ? (
+                                      <form
+                                        onSubmit={addComment}
+                                        className="space-y-3"
                                       >
-                                        <Send size={15} />
-                                        ثبت کامنت
-                                      </button>
-                                    </form>
+                                        <textarea
+                                          className={inputClass}
+                                          required
+                                          rows={3}
+                                          maxLength={2000}
+                                          value={commentText}
+                                          onChange={(event) =>
+                                            setCommentText(event.target.value)
+                                          }
+                                          placeholder="پیام خود را بنویسید..."
+                                        />
+
+                                        <button
+                                          type="submit"
+                                          disabled={busy || !commentText.trim()}
+                                          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                                        >
+                                          <Send size={15} />
+                                          ثبت کامنت
+                                        </button>
+                                      </form>
+                                    ) : (
+                                      <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-6 text-slate-500">
+                                        این گفتگو فقط قابل مشاهده است؛ ثبت کامنت برای مسئول تسک یا مدیر پروژه امکان‌پذیر است.
+                                      </p>
+                                    )}
                                   </div>
 
                                   <TaskAttachments taskId={task.id} />

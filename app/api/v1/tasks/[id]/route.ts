@@ -148,11 +148,10 @@ export async function GET(
   if (!task) return NextResponse.json({ message: "تسک پیدا نشد." }, { status: 404 });
 
   const access = await getTaskProjectAccess(actor, task.projectId);
-  if (!access || (!access.canManage && actor.role !== "CONTROLLER" && task.assigneeId !== actor.id)) {
+  if (!access) {
     return NextResponse.json({ message: "اجازه مشاهده تسک را ندارید." }, { status: 403 });
   }
 
-  const canViewAll = access.canManage || actor.role === "CONTROLLER";
   const detail = await prisma.task.findFirstOrThrow({
     where: { id, deletedAt: null },
     select: {
@@ -175,7 +174,7 @@ export async function GET(
       },
       parentTask: { select: { id: true, title: true, type: true } },
       subtasks: {
-        where: { deletedAt: null, ...(canViewAll ? {} : { assigneeId: actor.id }) },
+        where: { deletedAt: null },
         orderBy: [{ rank: "asc" }, { createdAt: "asc" }],
         select: { id: true, title: true, type: true, status: true, storyPoints: true, assigneeId: true },
       },

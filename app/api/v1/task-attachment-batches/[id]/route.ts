@@ -25,7 +25,7 @@ export async function DELETE(request: NextRequest, context: Context) {
       id: true,
       storageKey: true,
       uploadedById: true,
-      task: { select: { projectId: true, deletedAt: true } },
+      task: { select: { projectId: true, assigneeId: true, deletedAt: true } },
     },
   });
   if (attachments.length === 0 || attachments.some((attachment) => attachment.task.deletedAt)) {
@@ -36,7 +36,12 @@ export async function DELETE(request: NextRequest, context: Context) {
   if (projectIds.length !== 1) return NextResponse.json({ message: "ارسال نامعتبر است." }, { status: 400 });
 
   const access = await getTaskProjectAccess(actor, projectIds[0]);
-  const canDelete = access && (access.canManage || attachments.every((attachment) => attachment.uploadedById === actor.id));
+  const canDelete = access && (
+    access.canManage || attachments.every((attachment) =>
+      attachment.task.assigneeId === actor.id &&
+      attachment.uploadedById === actor.id
+    )
+  );
   if (!canDelete) return NextResponse.json({ message: "اجازه حذف این ارسال را ندارید." }, { status: 403 });
 
   await prisma.taskAttachment.deleteMany({ where: { id: { in: attachments.map((attachment) => attachment.id) } } });

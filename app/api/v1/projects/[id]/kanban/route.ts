@@ -5,7 +5,6 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
-import { isProjectController } from "@/lib/role-access";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -76,9 +75,6 @@ export async function GET(
       sprintId: activeSprints.length > 0
         ? { in: activeSprints.map((sprint) => sprint.id) }
         : "__no_active_sprint__",
-      ...(access.canManage || isProjectController(actor.role)
-        ? {}
-        : { assigneeId: actor.id }),
     };
 
     const [tasks, totalTasks] =
@@ -123,6 +119,7 @@ export async function GET(
         success: true,
         projectId,
         canManage: access.canManage,
+        actorId: actor.id,
         tasks: tasks.map((task) => ({
           ...task,
           startDate:

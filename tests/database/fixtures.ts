@@ -3,7 +3,7 @@ import type { PrismaClient } from "../../generated/prisma/client";
 
 export async function userFactory(
   db: PrismaClient,
-  role: "ADMIN" | "MANAGER" | "EMPLOYEE" = "EMPLOYEE"
+  role: "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER" = "EMPLOYEE"
 ) {
   return db.user.create({
     data: {

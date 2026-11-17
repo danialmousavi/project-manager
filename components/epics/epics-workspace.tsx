@@ -137,6 +137,12 @@ export default function EpicsWorkspace({ projectId }: { projectId: string }) {
         </div>
       </header>
 
+      {data && !data.canManage && (
+        <p className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs font-semibold text-indigo-800">
+          همهٔ Epicها و تسک‌های مرتبط قابل مشاهده‌اند؛ ایجاد یا مدیریت Epic فقط برای مدیر پروژه امکان‌پذیر است.
+        </p>
+      )}
+
       <section aria-label="آمار اپیک‌ها" className="grid grid-cols-2 gap-2 sm:max-w-md">
         <Metric label="تعداد اپیک" value={data?.epics.length ?? 0} />
         <Metric label="تسک‌های متصل" value={taskCount} tone="indigo" />

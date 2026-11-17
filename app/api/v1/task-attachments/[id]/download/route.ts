@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isProjectController } from "@/lib/role-access";
 import { contentDisposition, downloadAttachmentObject } from "@/lib/task-attachments";
 import { getTaskProjectAccess } from "@/lib/task-access";
 
@@ -23,7 +22,7 @@ export async function GET(_request: NextRequest, context: Context) {
   if (!attachment || attachment.task.deletedAt) return NextResponse.json({ message: "پیوست پیدا نشد." }, { status: 404 });
 
   const access = await getTaskProjectAccess(actor, attachment.task.projectId);
-  if (!access || (!access.canManage && !isProjectController(actor.role) && attachment.task.assigneeId !== actor.id)) {
+  if (!access) {
     return NextResponse.json({ message: "اجازه دریافت این پیوست را ندارید." }, { status: 403 });
   }
 

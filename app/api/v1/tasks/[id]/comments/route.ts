@@ -49,14 +49,12 @@ async function accessibleTask(
     task.projectId
   );
 
-  if (
-    !access ||
-    (!access.canManage && !isProjectController(actor.role) && task.assigneeId !== actor.id)
-  ) {
-    return null;
-  }
+  if (!access) return null;
 
-  return task;
+  return {
+    task,
+    canComment: access.canManage || task.assigneeId === actor.id,
+  };
 }
 
 export async function GET(
@@ -81,8 +79,8 @@ export async function GET(
     );
   }
 
-  const task = await accessibleTask(actor, id);
-  if (!task) {
+  const permitted = await accessibleTask(actor, id);
+  if (!permitted) {
     return NextResponse.json(
       { message: "دسترسی مجاز نیست." },
       { status: 403 }
@@ -170,13 +168,15 @@ export async function POST(
     );
   }
 
-  const task = await accessibleTask(actor, id);
-  if (!task) {
+  const permitted = await accessibleTask(actor, id);
+  if (!permitted?.canComment) {
     return NextResponse.json(
       { message: "اجازه ثبت کامنت ندارید." },
       { status: 403 }
     );
   }
+
+  const { task } = permitted;
 
   const parsed = schema.safeParse(
     await request.json().catch(() => null)

@@ -7,7 +7,6 @@ import { prisma } from "@/lib/prisma";
 import { syncProjectProgressCache } from "@/lib/project-progress";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
-import { isProjectController } from "@/lib/role-access";
 import {
   encodeAssignmentEvent,
 } from "@/lib/task-assignment-history";
@@ -153,9 +152,6 @@ export async function GET(
     where: {
       projectId: id,
       deletedAt: null,
-      ...(access.canManage || isProjectController(actor.role)
-        ? {}
-        : { assigneeId: actor.id }),
     },
     orderBy: [
       { position: "asc" },

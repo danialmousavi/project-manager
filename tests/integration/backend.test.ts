@@ -26,6 +26,7 @@ let projectsRoute: typeof import("../../app/api/v1/projects/route");
 let projectRoute: typeof import("../../app/api/v1/projects/[id]/route");
 let taskListRoute: typeof import("../../app/api/v1/projects/[id]/tasks/route");
 let epicsRoute: typeof import("../../app/api/v1/projects/[id]/epics/route");
+let backlogRoute: typeof import("../../app/api/v1/projects/[id]/backlog/route");
 let milestonesRoute: typeof import("../../app/api/v1/projects/[id]/milestones/route");
 let taskRoute: typeof import("../../app/api/v1/tasks/[id]/route");
 let sprintRoute: typeof import("../../app/api/v1/projects/[id]/sprints/route");
@@ -37,6 +38,11 @@ let userRoute: typeof import("../../app/api/v1/users/[id]/route");
 let notificationsRoute: typeof import("../../app/api/v1/notifications/route");
 let notificationRoute: typeof import("../../app/api/v1/notifications/[id]/route");
 let commentsRoute: typeof import("../../app/api/v1/tasks/[id]/comments/route");
+let attachmentsRoute: typeof import("../../app/api/v1/tasks/[id]/attachments/route");
+let attachmentRoute: typeof import("../../app/api/v1/task-attachments/[id]/route");
+let attachmentBatchRoute: typeof import("../../app/api/v1/task-attachment-batches/[id]/route");
+let dependenciesRoute: typeof import("../../app/api/v1/tasks/[id]/dependencies/route");
+let historyRoute: typeof import("../../app/api/v1/tasks/[id]/history/route");
 let notifications: typeof import("../../lib/notifications");
 
 const url = (path: string) => `http://localhost:3000/api/v1/${path}`;
@@ -53,11 +59,12 @@ beforeAll(async () => {
   process.env.DATABASE_URL = testUrl;
   db = new PrismaClient({ adapter: new PrismaPg({ connectionString: testUrl }) });
   await db.$connect();
-  [projectsRoute, projectRoute, taskListRoute, epicsRoute, milestonesRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute, notificationsRoute, notificationRoute, commentsRoute] = await Promise.all([
+  [projectsRoute, projectRoute, taskListRoute, epicsRoute, backlogRoute, milestonesRoute, taskRoute, sprintRoute, membersRoute, kanbanRoute, progressRoute, usersRoute, userRoute, notificationsRoute, notificationRoute, commentsRoute, attachmentsRoute, attachmentRoute, attachmentBatchRoute, dependenciesRoute, historyRoute] = await Promise.all([
     import("../../app/api/v1/projects/route"),
     import("../../app/api/v1/projects/[id]/route"),
     import("../../app/api/v1/projects/[id]/tasks/route"),
     import("../../app/api/v1/projects/[id]/epics/route"),
+    import("../../app/api/v1/projects/[id]/backlog/route"),
     import("../../app/api/v1/projects/[id]/milestones/route"),
     import("../../app/api/v1/tasks/[id]/route"),
     import("../../app/api/v1/projects/[id]/sprints/route"),
@@ -69,6 +76,11 @@ beforeAll(async () => {
     import("../../app/api/v1/notifications/route"),
     import("../../app/api/v1/notifications/[id]/route"),
     import("../../app/api/v1/tasks/[id]/comments/route"),
+    import("../../app/api/v1/tasks/[id]/attachments/route"),
+    import("../../app/api/v1/task-attachments/[id]/route"),
+    import("../../app/api/v1/task-attachment-batches/[id]/route"),
+    import("../../app/api/v1/tasks/[id]/dependencies/route"),
+    import("../../app/api/v1/tasks/[id]/history/route"),
   ]);
   notifications = await import("../../lib/notifications");
 });
@@ -319,6 +331,79 @@ describe("authorization and input validation through real route handlers", () =>
     expect((await taskRoute.DELETE(request("DELETE", `tasks/${foreignTask.id}`), context(foreignTask.id))).status).toBe(403);
     expect((await usersRoute.POST(request("POST", "users", {}))).status).toBe(403);
     expect((await db.task.findUnique({ where: { id: foreignTask.id } }))?.status).toBe("TODO");
+  });
+
+  it("lets a project employee view every active task and its read-only details", async () => {
+    const admin = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const employee = await userFactory(db);
+    const controller = await userFactory(db, "CONTROLLER");
+    const project = await projectFactory(db, admin.id, manager.id, [employee.id, controller.id]);
+    const sprint = await sprintFactory(db, project.id);
+    await db.sprint.update({ where: { id: sprint.id }, data: { status: "ACTIVE" } });
+    const ownTask = await taskFactory(db, project.id, admin.id, { assigneeId: employee.id, sprintId: sprint.id });
+    const otherTask = await taskFactory(db, project.id, admin.id, { assigneeId: manager.id, sprintId: sprint.id });
+    const epic = await db.epic.create({
+      data: { name: "Audit epic", projectId: project.id, createdById: admin.id },
+    });
+    await db.task.updateMany({
+      where: { id: { in: [ownTask.id, otherTask.id] } },
+      data: { epicId: epic.id },
+    });
+    const attachment = await db.taskAttachment.create({
+      data: {
+        taskId: otherTask.id,
+        uploadedById: employee.id,
+        uploadBatchId: "f0000000-0000-4000-8000-000000000001",
+        storageKey: `tests/${otherTask.id}/historical-upload.txt`,
+        originalName: "historical-upload.txt",
+        contentType: "text/plain",
+        byteSize: 12,
+      },
+    });
+    actor = employee;
+
+    const list = await taskListRoute.GET(request("GET", `projects/${project.id}/tasks`), context(project.id));
+    expect(list.status).toBe(200);
+    const listPayload = await list.json() as { tasks: { id: string }[] };
+    expect(listPayload.tasks.map((task) => task.id)).toEqual(expect.arrayContaining([ownTask.id, otherTask.id]));
+    const kanban = await kanbanRoute.GET(request("GET", `projects/${project.id}/kanban`), context(project.id));
+    expect(kanban.status).toBe(200);
+    const kanbanPayload = await kanban.json() as { tasks: { id: string }[] };
+    expect(kanbanPayload.tasks.map((task) => task.id)).toEqual(expect.arrayContaining([ownTask.id, otherTask.id]));
+    const sprints = await sprintRoute.GET(request("GET", `projects/${project.id}/sprints`), context(project.id));
+    expect(sprints.status).toBe(200);
+    const sprintsPayload = await sprints.json() as { tasks: { id: string }[] };
+    expect(sprintsPayload.tasks.map((task) => task.id)).toEqual(expect.arrayContaining([ownTask.id, otherTask.id]));
+    const backlog = await backlogRoute.GET(request("GET", `projects/${project.id}/backlog`), context(project.id));
+    expect(backlog.status).toBe(200);
+    const backlogPayload = await backlog.json() as { activeSprints: { tasks: { id: string }[] }[] };
+    expect(backlogPayload.activeSprints.flatMap((item) => item.tasks).map((task) => task.id)).toEqual(expect.arrayContaining([ownTask.id, otherTask.id]));
+    const epics = await epicsRoute.GET(request("GET", `projects/${project.id}/epics`), context(project.id));
+    expect(epics.status).toBe(200);
+    const epicsPayload = await epics.json() as { epics: { id: string; tasks: { id: string }[] }[] };
+    expect(epicsPayload.epics.find((item) => item.id === epic.id)?.tasks.map((task) => task.id)).toEqual(expect.arrayContaining([ownTask.id, otherTask.id]));
+    expect((await taskRoute.GET(request("GET", `tasks/${otherTask.id}`), context(otherTask.id))).status).toBe(200);
+    expect((await dependenciesRoute.GET(request("GET", `tasks/${otherTask.id}/dependencies`), context(otherTask.id))).status).toBe(200);
+    expect((await historyRoute.GET(request("GET", `tasks/${otherTask.id}/history`), context(otherTask.id))).status).toBe(200);
+    expect((await commentsRoute.GET(request("GET", `tasks/${otherTask.id}/comments`), context(otherTask.id))).status).toBe(200);
+    expect((await attachmentsRoute.GET(request("GET", `tasks/${otherTask.id}/attachments`), context(otherTask.id))).status).toBe(200);
+    expect((await commentsRoute.POST(request("POST", `tasks/${otherTask.id}/comments`, { content: "نباید ثبت شود" }), context(otherTask.id))).status).toBe(403);
+    expect((await attachmentsRoute.POST(request("POST", `tasks/${otherTask.id}/attachments`, {}), context(otherTask.id))).status).toBe(403);
+    expect((await attachmentRoute.PATCH(request("PATCH", `task-attachments/${attachment.id}`, { title: "نباید ویرایش شود" }), context(attachment.id))).status).toBe(403);
+    expect((await attachmentRoute.DELETE(request("DELETE", `task-attachments/${attachment.id}`), context(attachment.id))).status).toBe(403);
+    expect((await attachmentBatchRoute.DELETE(request("DELETE", `task-attachment-batches/${attachment.uploadBatchId}`), context(attachment.uploadBatchId!))).status).toBe(403);
+    expect((await taskRoute.PATCH(request("PATCH", `tasks/${otherTask.id}`, { status: "DONE" }), context(otherTask.id))).status).toBe(403);
+
+    actor = controller;
+    expect((await taskListRoute.GET(request("GET", `projects/${project.id}/tasks`), context(project.id))).status).toBe(200);
+    expect((await kanbanRoute.GET(request("GET", `projects/${project.id}/kanban`), context(project.id))).status).toBe(200);
+    expect((await sprintRoute.GET(request("GET", `projects/${project.id}/sprints`), context(project.id))).status).toBe(200);
+    expect((await backlogRoute.GET(request("GET", `projects/${project.id}/backlog`), context(project.id))).status).toBe(200);
+    expect((await epicsRoute.GET(request("GET", `projects/${project.id}/epics`), context(project.id))).status).toBe(200);
+    expect((await taskRoute.PATCH(request("PATCH", `tasks/${ownTask.id}`, { status: "DONE" }), context(ownTask.id))).status).toBe(403);
+    expect((await backlogRoute.PATCH(request("PATCH", `projects/${project.id}/backlog`, {}), context(project.id))).status).toBe(403);
+    expect((await epicsRoute.POST(request("POST", `projects/${project.id}/epics`, { name: "نباید ساخته شود" }), context(project.id))).status).toBe(403);
   });
 
   it("rejects invalid UUID, extra fields and cross-project sprint assignment", async () => {

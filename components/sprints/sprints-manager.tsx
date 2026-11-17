@@ -267,6 +267,7 @@ export default function SprintsManager({
 }: Props) {
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [actorId, setActorId] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -362,6 +363,7 @@ export default function SprintsManager({
 
       setSprints(data.sprints ?? []);
       setTasks(data.tasks ?? []);
+      setActorId(data.actorId ?? "");
       setError("");
     } catch (err) {
       setError(getError(err));
@@ -1076,6 +1078,11 @@ export default function SprintsManager({
               ? "هر نوار، بازه زمانی یک تسک واقعی را نشان می‌دهد و دایره کنار آن وضعیت فعلی تسک را مشخص می‌کند."
               : "اسپرینت‌ها را ایجاد، برنامه‌ریزی، شروع و پایان دهید و تسک‌ها را به آن‌ها اضافه کنید."}
           </p>
+          {!canManage && (
+            <p className="mt-2 text-xs font-semibold text-emerald-700">
+              همهٔ تسک‌های پروژه قابل مشاهده‌اند؛ تسک‌های دیگر اعضا در این صفحه فقط خواندنی هستند.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -1354,6 +1361,11 @@ export default function SprintsManager({
                         {task.assignee?.name ??
                           "بدون مسئول"}
                       </p>
+                      {!canManage && task.assigneeId === actorId && (
+                        <span className="mt-1 inline-flex rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                          تسک شما
+                        </span>
+                      )}
                     </div>
 
                     {canManage && (

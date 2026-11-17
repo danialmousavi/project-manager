@@ -29,12 +29,17 @@ export async function PATCH(request: NextRequest, context: Context) {
 
   const attachment = await prisma.taskAttachment.findUnique({
     where: { id },
-    select: { id: true, uploadedById: true, task: { select: { projectId: true, deletedAt: true } } },
+    select: { id: true, uploadedById: true, task: { select: { projectId: true, assigneeId: true, deletedAt: true } } },
   });
   if (!attachment || attachment.task.deletedAt) return NextResponse.json({ message: "پیوست پیدا نشد." }, { status: 404 });
 
   const access = await getTaskProjectAccess(actor, attachment.task.projectId);
-  const canEdit = access && (access.canManage || attachment.uploadedById === actor.id);
+  const canEdit = access && (
+    access.canManage || (
+      attachment.task.assigneeId === actor.id &&
+      attachment.uploadedById === actor.id
+    )
+  );
   if (!canEdit) return NextResponse.json({ message: "اجازه ویرایش این پیوست را ندارید." }, { status: 403 });
 
   const updated = await prisma.taskAttachment.update({
@@ -65,7 +70,12 @@ export async function DELETE(request: NextRequest, context: Context) {
   if (!attachment || attachment.task.deletedAt) return NextResponse.json({ message: "پیوست پیدا نشد." }, { status: 404 });
 
   const access = await getTaskProjectAccess(actor, attachment.task.projectId);
-  const canDelete = access && (access.canManage || attachment.uploadedById === actor.id);
+  const canDelete = access && (
+    access.canManage || (
+      attachment.task.assigneeId === actor.id &&
+      attachment.uploadedById === actor.id
+    )
+  );
   if (!canDelete) return NextResponse.json({ message: "اجازه حذف این پیوست را ندارید." }, { status: 403 });
 
   await prisma.taskAttachment.delete({ where: { id } });

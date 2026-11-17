@@ -5,7 +5,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
-import { isProjectController } from "@/lib/role-access";
 import { encodeTaskChangeEvent } from "@/lib/task-change-history";
 
 type Context = { params: Promise<{ id: string }> };
@@ -56,14 +55,9 @@ export async function GET(request: NextRequest, context: Context) {
     return fail("فیلتر بک‌لاگ معتبر نیست.", 400);
   }
 
-  const canViewAll = access.canManage || isProjectController(actor.role);
-  if (!canViewAll && assigneeId && assigneeId !== actor.id) {
-    return fail("اجازه مشاهده تسک‌های سایر کاربران را ندارید.", 403);
-  }
   const where = {
     projectId,
     deletedAt: null,
-    ...(canViewAll ? {} : { assigneeId: actor.id }),
     ...(assigneeId ? { assigneeId } : {}),
     ...(type ? { type: type as "STORY" | "TASK" | "BUG" } : {}),
     ...(priority ? { priority: priority as "LOW" | "MEDIUM" | "HIGH" | "URGENT" } : {}),
@@ -88,6 +82,7 @@ export async function GET(request: NextRequest, context: Context) {
   return NextResponse.json({
     success: true,
     canManage: access.canManage,
+    actorId: actor.id,
     activeSprints: activeSprints.map((sprint) => ({ ...sprint, tasks: tasksFor(sprint.id), storyPoints: tasksFor(sprint.id).reduce((sum, task) => sum + (task.storyPoints ?? 0), 0) })),
     futureSprints: futureSprints.map((sprint) => ({ ...sprint, tasks: tasksFor(sprint.id), storyPoints: tasksFor(sprint.id).reduce((sum, task) => sum + (task.storyPoints ?? 0), 0) })),
     backlog: backlog.map(serialise),

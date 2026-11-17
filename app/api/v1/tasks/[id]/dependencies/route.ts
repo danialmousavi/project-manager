@@ -18,7 +18,7 @@ async function accessibleTask(actor: NonNullable<Awaited<ReturnType<typeof getCu
   if (!task) return { task: null, access: null };
 
   const access = await getTaskProjectAccess(actor, task.projectId);
-  if (!access || (!access.canManage && actor.role !== "CONTROLLER" && task.assigneeId !== actor.id)) {
+  if (!access) {
     return { task: null, access: null };
   }
   return { task, access };

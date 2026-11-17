@@ -85,6 +85,7 @@ type KanbanResponse = {
   tasks: KanbanTask[];
   sprints: Sprint[];
   canManage: boolean;
+  actorId: string;
   totalTasks: number;
   truncated: boolean;
   activeSprints: ActiveSprint[];
@@ -207,6 +208,7 @@ export default function KanbanBoard({
   const [refreshing, setRefreshing] = useState(false);
 
   const [canManage, setCanManage] = useState(false);
+  const [actorId, setActorId] = useState("");
   const [truncated, setTruncated] = useState(false);
   const [totalTasks, setTotalTasks] = useState(0);
 
@@ -276,6 +278,7 @@ export default function KanbanBoard({
         if (milestonesResponse.ok) setMilestones(milestonesData.milestones ?? []);
 
         setCanManage(data.canManage);
+        setActorId(data.actorId ?? "");
         setTruncated(data.truncated);
         setTotalTasks(data.totalTasks);
 
@@ -420,6 +423,11 @@ export default function KanbanBoard({
       return;
     }
 
+    if (!canManage && currentTask.assigneeId !== actorId) {
+      setError("فقط مسئول تسک یا مدیر پروژه می‌تواند وضعیت آن را تغییر دهد.");
+      return;
+    }
+
     if (currentTask.status === nextStatus) {
       return;
     }
@@ -533,7 +541,13 @@ export default function KanbanBoard({
     event: DragEvent<HTMLElement>,
     taskId: string
   ) {
-    if (savingRef.current) {
+    const task = tasks.find((item) => item.id === taskId);
+
+    if (
+      savingRef.current ||
+      !task ||
+      (!canManage && task.assigneeId !== actorId)
+    ) {
       event.preventDefault();
       return;
     }
@@ -645,8 +659,9 @@ export default function KanbanBoard({
               color: "var(--muted)",
             }}
           >
-            کارت‌ها را بین ستون‌ها جابه‌جا کنید.
-            وضعیت جدید به‌صورت خودکار ذخیره می‌شود.
+            {canManage
+              ? "کارت‌ها را بین ستون‌ها جابه‌جا کنید. وضعیت جدید به‌صورت خودکار ذخیره می‌شود."
+              : "همهٔ تسک‌های اسپرینت‌های فعال نمایش داده می‌شوند؛ فقط تسک‌های خودتان قابل جابه‌جایی هستند."}
           </p>
         </div>
 
@@ -1148,6 +1163,12 @@ export default function KanbanBoard({
                             locked={
                               Boolean(savingTaskId)
                             }
+                            editable={
+                              canManage || task.assigneeId === actorId
+                            }
+                            isOwnTask={
+                              !canManage && task.assigneeId === actorId
+                            }
                             dragging={
                               draggedTaskId === task.id
                             }
@@ -1234,6 +1255,8 @@ function KanbanCard({
   projectId,
   saving,
   locked,
+  editable,
+  isOwnTask,
   dragging,
   onDragStart,
   onDragEnd,
@@ -1243,6 +1266,8 @@ function KanbanCard({
   projectId: string;
   saving: boolean;
   locked: boolean;
+  editable: boolean;
+  isOwnTask: boolean;
   dragging: boolean;
   onDragStart: (
     event: DragEvent<HTMLElement>
@@ -1256,7 +1281,7 @@ function KanbanCard({
 
   return (
     <article
-      draggable={!locked}
+      draggable={editable && !locked}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={`group rounded-xl border bg-white p-3 shadow-sm transition-all duration-200 ${
@@ -1264,7 +1289,7 @@ function KanbanCard({
           ? "scale-[0.98] border-emerald-300 opacity-40"
           : "hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
       } ${
-        locked
+        !editable || locked
           ? "cursor-default"
           : "cursor-grab active:cursor-grabbing"
       }`}
@@ -1281,6 +1306,12 @@ function KanbanCard({
           اولویت {priorityLabels[task.priority]}
         </span>
 
+        {isOwnTask && (
+          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+            تسک شما
+          </span>
+        )}
+
         <div
           className="flex items-center gap-1"
           style={{
@@ -1292,12 +1323,12 @@ function KanbanCard({
               size={14}
               className="animate-spin text-emerald-600"
             />
-          ) : (
+          ) : editable ? (
             <GripVertical
               size={15}
               aria-hidden="true"
             />
-          )}
+          ) : null}
         </div>
       </div>
 

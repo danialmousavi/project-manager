@@ -32,9 +32,7 @@ async function taskAccess(actor: NonNullable<Awaited<ReturnType<typeof getCurren
   if (!task) return null;
 
   const access = await getTaskProjectAccess(actor, task.projectId);
-  if (!access || (!access.canManage && !isProjectController(actor.role) && task.assigneeId !== actor.id)) {
-    return null;
-  }
+  if (!access) return null;
 
   return { task, canManage: access.canManage, canUpload: access.canManage || task.assigneeId === actor.id };
 }
@@ -89,7 +87,12 @@ export async function GET(_request: NextRequest, context: Context) {
     canUpload: permitted.canUpload && !isProjectController(actor.role),
     attachments: attachments.map((attachment) => attachmentResponse(
       attachment,
-      !isProjectController(actor.role) && (permitted.canManage || attachment.uploadedBy.id === actor.id),
+      !isProjectController(actor.role) && (
+        permitted.canManage || (
+          permitted.task.assigneeId === actor.id &&
+          attachment.uploadedBy.id === actor.id
+        )
+      ),
     )),
   }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -5,7 +5,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
-import { isProjectController } from "@/lib/role-access";
 
 type Context = { params: Promise<{ id: string }> };
 const uuid = z.uuid();
@@ -32,11 +31,9 @@ export async function GET(_request: NextRequest, context: Context) {
   if (!projectId) return fail("شناسه پروژه معتبر نیست.", 400);
   if (!access) return fail("اجازه مشاهده پروژه ندارید.", 403);
 
-  const canViewAll = access.canManage || isProjectController(actor.role);
   const epics = await prisma.epic.findMany({
     where: {
       projectId,
-      ...(canViewAll ? {} : { tasks: { some: { assigneeId: actor.id, deletedAt: null } } }),
     },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: 200,
@@ -49,7 +46,6 @@ export async function GET(_request: NextRequest, context: Context) {
       tasks: {
         where: {
           deletedAt: null,
-          ...(canViewAll ? {} : { assigneeId: actor.id }),
         },
         orderBy: [{ rank: "asc" }, { createdAt: "asc" }],
         take: 200,
@@ -68,7 +64,6 @@ export async function GET(_request: NextRequest, context: Context) {
           tasks: {
             where: {
               deletedAt: null,
-              ...(canViewAll ? {} : { assigneeId: actor.id }),
             },
           },
         },
@@ -79,6 +74,7 @@ export async function GET(_request: NextRequest, context: Context) {
   return NextResponse.json({
     success: true,
     canManage: access.canManage,
+    actorId: actor.id,
     epics: epics.map((epic) => ({
       ...epic,
       createdAt: epic.createdAt.toISOString(),

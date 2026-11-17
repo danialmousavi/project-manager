@@ -6,7 +6,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
-import { isProjectController } from "@/lib/role-access";
 import { encodeTaskChangeEvent } from "@/lib/task-change-history";
 import {
   notifySprintCompleted,
@@ -191,9 +190,6 @@ export async function GET(
         where: {
           projectId,
           deletedAt: null,
-          ...(access.canManage || isProjectController(actor.role)
-            ? {}
-            : { assigneeId: actor.id }),
         },
         orderBy: [
           { position: "asc" },
@@ -228,6 +224,7 @@ export async function GET(
       {
         success: true,
         canManage: access.canManage,
+        actorId: actor.id,
         canDelete: actor.role === "ADMIN",
         sprints: sprints.map((sprint) => ({
           ...sprint,
