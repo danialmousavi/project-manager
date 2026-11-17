@@ -80,7 +80,7 @@ export async function GET(request: NextRequest, context: Context) {
   ]);
 
   const serialise = (task: (typeof tasks)[number]) => task;
-  const activeSprint = sprints.find((sprint) => sprint.status === "ACTIVE") ?? null;
+  const activeSprints = sprints.filter((sprint) => sprint.status === "ACTIVE");
   const futureSprints = sprints.filter((sprint) => sprint.status === "FUTURE");
   const backlog = tasks.filter((task) => task.sprintId === null && task.status !== "DONE");
   const tasksFor = (sprintId: string) => tasks.filter((task) => task.sprintId === sprintId).map(serialise);
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest, context: Context) {
   return NextResponse.json({
     success: true,
     canManage: access.canManage,
-    activeSprint: activeSprint && { ...activeSprint, tasks: tasksFor(activeSprint.id), storyPoints: tasksFor(activeSprint.id).reduce((sum, task) => sum + (task.storyPoints ?? 0), 0) },
+    activeSprints: activeSprints.map((sprint) => ({ ...sprint, tasks: tasksFor(sprint.id), storyPoints: tasksFor(sprint.id).reduce((sum, task) => sum + (task.storyPoints ?? 0), 0) })),
     futureSprints: futureSprints.map((sprint) => ({ ...sprint, tasks: tasksFor(sprint.id), storyPoints: tasksFor(sprint.id).reduce((sum, task) => sum + (task.storyPoints ?? 0), 0) })),
     backlog: backlog.map(serialise),
     backlogStoryPoints: backlog.reduce((sum, task) => sum + (task.storyPoints ?? 0), 0),

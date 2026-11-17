@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
+import { useMemo, useState, type FormEvent } from "react";
+import { AlertTriangle, X } from "lucide-react";
 
 import PersianDatePicker from "@/components/ui/persian-date-picker";
 import type { Sprint } from "./types";
@@ -18,11 +18,13 @@ type SprintValues = {
 
 export default function SprintFormModal({
   sprint,
+  existingSprints,
   busy,
   onClose,
   onSubmit,
 }: {
   sprint: Sprint | null;
+  existingSprints: Sprint[];
   busy: boolean;
   onClose: () => void;
   onSubmit: (values: SprintValues) => void;
@@ -32,6 +34,18 @@ export default function SprintFormModal({
   const [startDate, setStartDate] = useState(sprint?.startDate ?? null);
   const [endDate, setEndDate] = useState(sprint?.endDate ?? null);
   const [formError, setFormError] = useState("");
+  const overlappingSprints = useMemo(() => {
+    if (!startDate || !endDate) return [];
+
+    return existingSprints.filter((candidate) =>
+      candidate.id !== sprint?.id &&
+      (candidate.status === "ACTIVE" || candidate.status === "FUTURE") &&
+      candidate.startDate &&
+      candidate.endDate &&
+      candidate.startDate <= endDate &&
+      candidate.endDate >= startDate,
+    );
+  }, [endDate, existingSprints, sprint?.id, startDate]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,7 +56,7 @@ export default function SprintFormModal({
     onSubmit({ name: trimmedName, goal: goal.trim() || null, startDate, endDate });
   }
 
-  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4"><div dir="rtl" role="dialog" aria-modal="true" aria-labelledby="sprint-form-title" className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-center justify-between gap-3"><div><h3 id="sprint-form-title" className="text-lg font-extrabold">{sprint ? "ویرایش اسپرینت" : "ایجاد اسپرینت آینده"}</h3><p className="mt-1 text-sm text-slate-500">هدف و بازه زمانی اسپرینت را مشخص کنید.</p></div><button type="button" onClick={onClose} disabled={busy} aria-label="بستن"><X size={20} /></button></div><form onSubmit={submit} className="mt-6 space-y-4"><label className="block"><span className="mb-2 block text-sm font-semibold">نام اسپرینت</span><input className={inputClass} value={name} maxLength={150} disabled={busy} onChange={(event) => setName(event.target.value)} /></label><label className="block"><span className="mb-2 block text-sm font-semibold">هدف اسپرینت (اختیاری)</span><textarea className={inputClass} rows={3} maxLength={2000} value={goal} disabled={busy} onChange={(event) => setGoal(event.target.value)} /></label><div className="grid gap-4 sm:grid-cols-2"><PersianDatePicker label="تاریخ شروع" value={startDate} onChange={setStartDate} disabled={busy} /><PersianDatePicker label="تاریخ پایان" value={endDate} onChange={setEndDate} disabled={busy} /></div>{formError && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{formError}</p>}<div className="flex justify-end gap-3 border-t border-emerald-100 pt-5"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border border-emerald-200 px-5 py-3 text-sm">انصراف</button><button type="submit" disabled={busy} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? "در حال ذخیره..." : "ذخیره"}</button></div></form></div></div>;
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4"><div dir="rtl" role="dialog" aria-modal="true" aria-labelledby="sprint-form-title" className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-center justify-between gap-3"><div><h3 id="sprint-form-title" className="text-lg font-extrabold">{sprint ? "ویرایش اسپرینت" : "ایجاد اسپرینت آینده"}</h3><p className="mt-1 text-sm text-slate-500">هدف و بازه زمانی اسپرینت را مشخص کنید.</p></div><button type="button" onClick={onClose} disabled={busy} aria-label="بستن"><X size={20} /></button></div><form onSubmit={submit} className="mt-6 space-y-4"><label className="block"><span className="mb-2 block text-sm font-semibold">نام اسپرینت</span><input className={inputClass} value={name} maxLength={150} disabled={busy} onChange={(event) => setName(event.target.value)} /></label><label className="block"><span className="mb-2 block text-sm font-semibold">هدف اسپرینت (اختیاری)</span><textarea className={inputClass} rows={3} maxLength={2000} value={goal} disabled={busy} onChange={(event) => setGoal(event.target.value)} /></label><div className="grid gap-4 sm:grid-cols-2"><PersianDatePicker label="تاریخ شروع" value={startDate} onChange={setStartDate} disabled={busy} /><PersianDatePicker label="تاریخ پایان" value={endDate} onChange={setEndDate} disabled={busy} /></div>{overlappingSprints.length > 0 && <aside className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><div className="flex items-center gap-2 font-bold"><AlertTriangle size={17} />هم‌پوشانی زمانی</div><p className="mt-1 text-xs leading-5">این بازه با {overlappingSprints.map((item) => item.name).join("، ")} هم‌پوشانی دارد. این وضعیت مجاز است، اما قبل از ذخیره از برنامه‌ریزی هم‌زمان تیم مطمئن شوید.</p></aside>}{formError && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{formError}</p>}<div className="flex justify-end gap-3 border-t border-emerald-100 pt-5"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border border-emerald-200 px-5 py-3 text-sm">انصراف</button><button type="submit" disabled={busy} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? "در حال ذخیره..." : "ذخیره"}</button></div></form></div></div>;
 }
 
 export type { SprintValues };

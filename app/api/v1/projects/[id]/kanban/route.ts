@@ -57,8 +57,9 @@ export async function GET(
   }
 
   try {
-    const activeSprint = await prisma.sprint.findFirst({
+    const activeSprints = await prisma.sprint.findMany({
       where: { projectId, status: "ACTIVE" },
+      orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
         name: true,
@@ -72,7 +73,9 @@ export async function GET(
     const taskWhere = {
       projectId,
       deletedAt: null,
-      sprintId: activeSprint?.id ?? "__no_active_sprint__",
+      sprintId: activeSprints.length > 0
+        ? { in: activeSprints.map((sprint) => sprint.id) }
+        : "__no_active_sprint__",
       ...(access.canManage || isProjectController(actor.role)
         ? {}
         : { assigneeId: actor.id }),
@@ -127,17 +130,20 @@ export async function GET(
           dueDate:
             task.dueDate?.toISOString() ?? null,
         })),
-        activeSprint: activeSprint && {
-          ...activeSprint,
-          startDate: activeSprint.startDate?.toISOString() ?? null,
-          endDate: activeSprint.endDate?.toISOString() ?? null,
-          remainingDays: activeSprint.endDate
-            ? Math.ceil((activeSprint.endDate.getTime() - Date.now()) / 86_400_000)
-            : null,
-          completedTasks: tasks.filter((task) => task.status === "DONE").length,
-          storyPoints: tasks.reduce((total, task) => total + (task.storyPoints ?? 0), 0),
-        },
-        sprints: activeSprint ? [{ id: activeSprint.id, name: activeSprint.name, status: activeSprint.status }] : [],
+        activeSprints: activeSprints.map((sprint) => {
+          const sprintTasks = tasks.filter((task) => task.sprintId === sprint.id);
+          return {
+            ...sprint,
+            startDate: sprint.startDate?.toISOString() ?? null,
+            endDate: sprint.endDate?.toISOString() ?? null,
+            remainingDays: sprint.endDate
+              ? Math.ceil((sprint.endDate.getTime() - Date.now()) / 86_400_000)
+              : null,
+            completedTasks: sprintTasks.filter((task) => task.status === "DONE").length,
+            storyPoints: sprintTasks.reduce((total, task) => total + (task.storyPoints ?? 0), 0),
+          };
+        }),
+        sprints: activeSprints.map((sprint) => ({ id: sprint.id, name: sprint.name, status: sprint.status })),
         totalTasks,
         truncated: totalTasks > MAX_TASKS,
       },

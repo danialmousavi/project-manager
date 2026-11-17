@@ -14,8 +14,10 @@ import {
   type TaskStatusCount,
 } from "@/lib/project-progress";
 import { canViewAllProjects } from "@/lib/role-access";
+import { pageGuides } from "@/lib/page-guides";
 
 import ProjectsManager from "@/components/projects/projects-manager";
+import PageGuide from "@/components/ui/page-guide";
 
 export default function ProjectsPage() {
   return (
@@ -144,20 +146,23 @@ async function ProjectsContent() {
 
   return (
     <>
-      <div className="mb-4 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-white px-4 py-3.5 shadow-sm sm:px-5">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-          <FolderKanban size={19} aria-hidden="true" />
-        </div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-white px-4 py-3.5 shadow-sm sm:px-5">
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+            <FolderKanban size={19} aria-hidden="true" />
+          </div>
 
-        <div>
-          <h1 className="text-lg font-extrabold sm:text-xl">
-            مدیریت پروژه‌ها
-          </h1>
+          <div>
+            <h1 className="text-lg font-extrabold sm:text-xl">
+              مدیریت پروژه‌ها
+            </h1>
 
-          <p className="mt-0.5 text-xs text-[var(--muted)] sm:text-sm">
-            پروژه‌ها، اعضا و پیشرفت واقعی فعالیت‌ها
-          </p>
+            <p className="mt-0.5 text-xs text-[var(--muted)] sm:text-sm">
+              پروژه‌ها، اعضا و پیشرفت واقعی فعالیت‌ها
+            </p>
+          </div>
         </div>
+        <PageGuide guide={pageGuides.projects} />
       </div>
 
       <ProjectsManager

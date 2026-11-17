@@ -19,6 +19,7 @@ import {
 const projectTabs = [
   { suffix: "", label: "نمای کلی", icon: LayoutDashboard },
   { suffix: "/tasks", label: "وظایف", icon: ListTodo },
+  { suffix: "/gantt", label: "گانت چارت", icon: CalendarRange },
   { suffix: "/sprints", label: "اسپرینت‌ها", icon: CalendarRange },
   { suffix: "/backlog", label: "بک‌لاگ", icon: ListFilter },
   { suffix: "/kanban", label: "برد کانبان", icon: Columns3 },

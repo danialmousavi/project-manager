@@ -30,7 +30,9 @@ import {
 } from "lucide-react";
 
 import { isoToJalali } from "@/lib/jalali";
+import { pageGuides } from "@/lib/page-guides";
 import { TaskFormModal, type FormValues, type MilestoneOption } from "@/components/tasks/project-tasks";
+import PageGuide from "@/components/ui/page-guide";
 
 type TaskStatus =
   | "TODO"
@@ -85,7 +87,7 @@ type KanbanResponse = {
   canManage: boolean;
   totalTasks: number;
   truncated: boolean;
-  activeSprint: ActiveSprint | null;
+  activeSprints: ActiveSprint[];
 };
 
 type Props = {
@@ -197,8 +199,8 @@ export default function KanbanBoard({
 }: Props) {
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
-  const [activeSprint, setActiveSprint] =
-    useState<ActiveSprint | null>(null);
+  const [activeSprints, setActiveSprints] =
+    useState<ActiveSprint[]>([]);
   const [milestones, setMilestones] = useState<MilestoneOption[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -224,6 +226,7 @@ export default function KanbanBoard({
 
   const [quickTask, setQuickTask] = useState<{
     status: TaskStatus;
+    targetSprintId: string | null;
   } | null>(null);
 
   const [draggedTaskId, setDraggedTaskId] =
@@ -269,7 +272,7 @@ export default function KanbanBoard({
 
         setTasks(data.tasks ?? []);
         setSprints(data.sprints ?? []);
-        setActiveSprint(data.activeSprint ?? null);
+        setActiveSprints(data.activeSprints ?? []);
         if (milestonesResponse.ok) setMilestones(milestonesData.milestones ?? []);
 
         setCanManage(data.canManage);
@@ -332,10 +335,7 @@ export default function KanbanBoard({
           .includes(text);
 
       const matchesSprint =
-        sprintFilter === "ALL" ||
-        (sprintFilter === "BACKLOG"
-          ? task.sprintId === null
-          : task.sprintId === sprintFilter);
+        sprintFilter === "ALL" || task.sprintId === sprintFilter;
 
       const matchesAssignee =
         assigneeFilter === "ALL" ||
@@ -490,7 +490,7 @@ export default function KanbanBoard({
   }
 
   async function createQuickTask(values: FormValues) {
-    if (!quickTask) return;
+    if (!quickTask?.targetSprintId) return;
 
     setSavingTaskId("new-task");
     setError("");
@@ -516,11 +516,11 @@ export default function KanbanBoard({
         body: JSON.stringify({
           action: "MOVE_TASK",
           taskId: data.task.id,
-          sprintId: activeSprint?.id ?? null,
+          sprintId: quickTask.targetSprintId,
         }),
       });
       setQuickTask(null);
-      setNotice("تسک جدید به اسپرینت فعال اضافه شد.");
+      setNotice("تسک جدید به اسپرینت انتخاب‌شده اضافه شد.");
       await loadBoard(false);
     } catch (err) {
       setError(errorMessage(err));
@@ -651,8 +651,9 @@ export default function KanbanBoard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <PageGuide guide={pageGuides.kanban} />
           <Link
-            href={`/projects/${projectId}/sprints`}
+            href={`/projects/${projectId}/gantt`}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-xs font-semibold transition hover:bg-emerald-50 hover:text-emerald-700"
             style={{
               borderColor: "var(--border)",
@@ -660,7 +661,7 @@ export default function KanbanBoard({
             }}
           >
             <CalendarDays size={15} />
-            وظایف
+            گانت چارت
           </Link>
 
           <button
@@ -738,24 +739,59 @@ export default function KanbanBoard({
         </div>
       )}
 
-      {activeSprint ? (
+      {activeSprints.length > 0 ? (
         <section className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-bold text-emerald-700">اسپرینت فعال</p>
-              <h3 className="mt-1 text-base font-extrabold text-emerald-950">{activeSprint.name}</h3>
-              {activeSprint.goal && <p className="mt-1 max-w-3xl text-xs leading-5 text-emerald-900">{activeSprint.goal}</p>}
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
-              <SprintMetric label="بازه" value={`${displayDate(activeSprint.startDate) ?? "—"} تا ${displayDate(activeSprint.endDate) ?? "—"}`} />
-              <SprintMetric label="زمان باقی‌مانده" value={activeSprint.remainingDays === null ? "—" : activeSprint.remainingDays < 0 ? "پایان‌یافته" : `${activeSprint.remainingDays.toLocaleString("fa-IR")} روز`} />
-              <SprintMetric label="تکمیل‌شده" value={`${activeSprint.completedTasks.toLocaleString("fa-IR")} از ${totalTasks.toLocaleString("fa-IR")}`} />
-              <SprintMetric label="Story Points" value={activeSprint.storyPoints.toLocaleString("fa-IR")} />
-            </div>
+          <p className="text-[11px] font-bold text-emerald-700">اسپرینت‌های فعال ({activeSprints.length.toLocaleString("fa-IR")})</p>
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
+            {activeSprints.map((activeSprint) => (
+              <div key={activeSprint.id} className="rounded-xl border border-emerald-200 bg-white/75 p-3">
+                <h3 className="text-base font-extrabold text-emerald-950">{activeSprint.name}</h3>
+                {activeSprint.goal && <p className="mt-1 line-clamp-2 text-xs leading-5 text-emerald-900">{activeSprint.goal}</p>}
+                <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
+                  <SprintMetric label="بازه" value={`${displayDate(activeSprint.startDate) ?? "—"} تا ${displayDate(activeSprint.endDate) ?? "—"}`} />
+                  <SprintMetric label="زمان باقی‌مانده" value={activeSprint.remainingDays === null ? "—" : activeSprint.remainingDays < 0 ? "پایان‌یافته" : `${activeSprint.remainingDays.toLocaleString("fa-IR")} روز`} />
+                  <SprintMetric label="تکمیل‌شده" value={`${activeSprint.completedTasks.toLocaleString("fa-IR")}`} />
+                  <SprintMetric label="Story Points" value={activeSprint.storyPoints.toLocaleString("fa-IR")} />
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       ) : !loading && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">در این پروژه اسپرینت فعالی وجود ندارد. برای نمایش برد، ابتدا یک اسپرینت را شروع کنید.</div>
+      )}
+
+      {activeSprints.length > 1 && (
+        <section className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm">
+          <p className="text-xs font-extrabold text-slate-800">نمای برد</p>
+          <div role="tablist" aria-label="انتخاب اسپرینت فعال" className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sprintFilter === "ALL"}
+              onClick={() => setSprintFilter("ALL")}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition ${sprintFilter === "ALL" ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"}`}
+            >
+              همهٔ اسپرینت‌های فعال ({tasks.length.toLocaleString("fa-IR")})
+            </button>
+            {activeSprints.map((sprint) => {
+              const taskCount = tasks.filter((task) => task.sprintId === sprint.id).length;
+              const selected = sprintFilter === sprint.id;
+              return (
+                <button
+                  key={sprint.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setSprintFilter(sprint.id)}
+                  className={`shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition ${selected ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"}`}
+                >
+                  {sprint.name} ({taskCount.toLocaleString("fa-IR")})
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* Statistics */}
@@ -884,11 +920,7 @@ export default function KanbanBoard({
             }}
           >
             <option value="ALL">
-              همه اسپرینت‌ها
-            </option>
-
-            <option value="BACKLOG">
-              خارج از اسپرینت
+              همهٔ اسپرینت‌های فعال
             </option>
 
             {sprints.map((sprint) => (
@@ -1014,7 +1046,7 @@ export default function KanbanBoard({
             در حال دریافت تسک‌ها...
           </span>
         </div>
-      ) : activeSprint ? (
+      ) : activeSprints.length > 0 ? (
         <>
           <p
             className="text-xs leading-6"
@@ -1134,7 +1166,15 @@ export default function KanbanBoard({
                         <button
                           type="button"
                           disabled={Boolean(savingTaskId)}
-                          onClick={() => setQuickTask({ status: column.id })}
+                          onClick={() =>
+                            setQuickTask({
+                              status: column.id,
+                              targetSprintId:
+                                activeSprints.length === 1
+                                  ? activeSprints[0].id
+                                  : null,
+                            })
+                          }
                           className="rounded-lg border border-dashed border-emerald-300 bg-white px-2 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
                         >
                           + افزودن تسک در این ستون
@@ -1158,7 +1198,20 @@ export default function KanbanBoard({
           )}
         </>
       ) : null}
-      {quickTask && (
+      {quickTask && quickTask.targetSprintId === null && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickTask(null); }}>
+          <section dir="rtl" role="dialog" aria-modal="true" aria-labelledby="quick-task-sprint-title" className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div><p className="text-xs font-bold text-emerald-700">ایجاد تسک در برد کانبان</p><h2 id="quick-task-sprint-title" className="mt-1 text-lg font-extrabold text-slate-950">اسپرینت مقصد را انتخاب کنید</h2><p className="mt-2 text-sm leading-6 text-slate-500">چند اسپرینت فعال دارید؛ تسک جدید باید به‌صورت مشخص به یکی از آن‌ها افزوده شود.</p></div>
+              <button type="button" onClick={() => setQuickTask(null)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" aria-label="بستن"><X size={20} /></button>
+            </div>
+            <div className="mt-5 space-y-2">
+              {activeSprints.map((sprint) => <button key={sprint.id} type="button" onClick={() => setQuickTask((current) => current ? { ...current, targetSprintId: sprint.id } : null)} className="w-full rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 text-right transition hover:border-emerald-400 hover:bg-emerald-50"><strong className="block text-sm text-emerald-950">{sprint.name}</strong><span className="mt-1 block text-xs text-emerald-800">{displayDate(sprint.startDate) ?? "بدون شروع"} تا {displayDate(sprint.endDate) ?? "بدون پایان"}</span></button>)}
+            </div>
+          </section>
+        </div>
+      )}
+      {quickTask?.targetSprintId && (
         <TaskFormModal
           title={`ایجاد تسک در ستون «${statusLabels[quickTask.status]}»`}
           submitLabel="ایجاد و افزودن به برد"
@@ -1326,10 +1379,10 @@ function KanbanCard({
       </div>
 
       <Link
-        href={`/projects/${projectId}/sprints`}
+        href={`/projects/${projectId}/gantt`}
         className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 transition hover:text-emerald-600"
       >
-        مشاهده وظایف
+        مشاهده گانت چارت
         <ArrowLeft size={12} />
       </Link>
     </article>

@@ -10,6 +10,8 @@ import {
   Plus,
   RefreshCw,
 } from "lucide-react";
+import PageGuide from "@/components/ui/page-guide";
+import { pageGuides } from "@/lib/page-guides";
 
 type TaskType = "STORY" | "TASK" | "BUG";
 type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
@@ -128,7 +130,8 @@ export default function EpicsWorkspace({ projectId }: { projectId: string }) {
           <h1 className="mt-1 text-lg font-extrabold text-[var(--foreground)]">اپیک‌ها و درخت وظایف</h1>
           <p className="mt-1 text-xs text-[var(--muted)]">هر اپیک، تسک‌های اصلی و زیرتسک‌های وابسته را در یک ساختار روشن نشان می‌دهد.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <PageGuide guide={pageGuides.epics} />
           <button type="button" onClick={() => void load()} disabled={loading || saving} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold text-[var(--muted)] hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} />به‌روزرسانی</button>
           {data?.canManage && <button type="button" onClick={() => { setShowCreate((value) => !value); setError(""); }} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-bold text-white hover:bg-indigo-700"><Plus size={15} />اپیک جدید</button>}
         </div>

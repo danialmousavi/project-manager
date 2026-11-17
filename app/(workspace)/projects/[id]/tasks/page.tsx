@@ -10,7 +10,9 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
+import { pageGuides } from "@/lib/page-guides";
 import ProjectTasks from "@/components/tasks/project-tasks";
+import PageGuide from "@/components/ui/page-guide";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -69,10 +71,13 @@ async function TasksContent({ params }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <ListTodo size={19} className="text-emerald-700" aria-hidden="true" />
-        <h2 className="text-lg font-extrabold">وظایف پروژه</h2>
-        <span className="text-xs text-[var(--muted)]">برنامه‌ریزی و پیگیری کارها</span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <ListTodo size={19} className="text-emerald-700" aria-hidden="true" />
+          <h2 className="text-lg font-extrabold">وظایف پروژه</h2>
+          <span className="text-xs text-[var(--muted)]">برنامه‌ریزی و پیگیری کارها</span>
+        </div>
+        <PageGuide guide={pageGuides.tasks} />
       </div>
 
       <ProjectTasks

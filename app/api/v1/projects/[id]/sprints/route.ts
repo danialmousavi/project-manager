@@ -436,15 +436,6 @@ export async function PATCH(
       }
 
       const result = await prisma.$transaction(async (tx) => {
-        const activeSprint = await tx.sprint.findFirst({
-          where: { projectId, status: "ACTIVE" },
-          select: { id: true },
-        });
-
-        if (activeSprint) {
-          return { kind: "ACTIVE_EXISTS" as const };
-        }
-
         const current = await tx.sprint.findFirst({
           where: {
             id: sprint.id,
@@ -512,10 +503,6 @@ export async function PATCH(
         return { kind: "STARTED" as const, snapshot };
       });
 
-      if (result.kind === "ACTIVE_EXISTS") {
-        return fail("یک اسپرینت فعال دیگر در این پروژه وجود دارد.", 409);
-      }
-
       if (result.kind === "NOT_STARTABLE") {
         return fail("اسپرینت برای شروع معتبر نیست.", 409);
       }
@@ -561,7 +548,8 @@ export async function PATCH(
             where: {
               id: data.unfinishedDestinationSprintId,
               projectId,
-              status: "FUTURE",
+              status: { in: ["FUTURE", "ACTIVE"] },
+              NOT: { id: active.id },
             },
             select: { id: true },
           });
@@ -650,7 +638,7 @@ export async function PATCH(
       }
 
       if (result.kind === "INVALID_DESTINATION") {
-        return fail("مقصد تسک‌های ناتمام باید یک اسپرینت آینده از همین پروژه باشد.", 409);
+        return fail("مقصد تسک‌های ناتمام باید اسپرینت فعال یا آیندهٔ دیگری از همین پروژه باشد.", 409);
       }
 
       return NextResponse.json({

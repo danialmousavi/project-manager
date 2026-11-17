@@ -14,8 +14,10 @@ import {
 } from "lucide-react";
 
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import PageGuide from "@/components/ui/page-guide";
 import PersianDatePicker from "@/components/ui/persian-date-picker";
 import { isoToJalali } from "@/lib/jalali";
+import { pageGuides } from "@/lib/page-guides";
 
 type Status = "PLANNED" | "DUE_SOON" | "OVERDUE" | "COMPLETED";
 type Milestone = {
@@ -136,7 +138,8 @@ export default function MilestonesWorkspace({ projectId }: { projectId: string }
           <h1 className="mt-1 text-lg font-extrabold text-[var(--foreground)]">مایلستون‌ها و زمان‌بندی تحویل</h1>
           <p className="mt-1 text-xs text-[var(--muted)]">تاریخ‌های کلیدی را ثبت کنید و پیشرفت تسک‌های متصل به هر نقطه عطف را ببینید.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <PageGuide guide={pageGuides.milestones} />
           <button type="button" onClick={() => void load()} disabled={loading || saving} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold text-[var(--muted)] hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} />به‌روزرسانی</button>
           {data?.canManage && <button type="button" onClick={() => { setModal("create"); setError(""); }} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-bold text-white hover:bg-indigo-700"><Plus size={15} />مایلستون جدید</button>}
         </div>

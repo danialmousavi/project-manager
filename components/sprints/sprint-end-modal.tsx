@@ -14,7 +14,7 @@ type SprintTask = {
 type Props = {
   sprint: Sprint;
   tasks: SprintTask[];
-  futureSprints: Sprint[];
+  destinationSprints: Sprint[];
   busy: boolean;
   onClose: () => void;
   onConfirm: (destinationSprintId: string | null) => void;
@@ -23,7 +23,7 @@ type Props = {
 export default function SprintEndModal({
   sprint,
   tasks,
-  futureSprints,
+  destinationSprints,
   busy,
   onClose,
   onConfirm,
@@ -78,7 +78,7 @@ export default function SprintEndModal({
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center gap-2 text-sm font-bold text-slate-800"><ArrowLeft size={16} className="text-emerald-600" /> تکلیف تسک‌های ناتمام</div>
-            <p className="mt-1 text-xs leading-5 text-slate-500">وضعیت تسک‌ها تغییر نمی‌کند؛ فقط از اسپرینت فعال خارج یا به اسپرینت آینده منتقل می‌شوند.</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">وضعیت تسک‌ها تغییر نمی‌کند؛ فقط از اسپرینت فعال خارج یا به اسپرینت فعال یا آیندهٔ دیگری منتقل می‌شوند.</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <label className={`cursor-pointer rounded-xl border p-3 ${destination === "BACKLOG" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white"}`}>
                 <input className="sr-only" type="radio" name="unfinished-destination" checked={destination === "BACKLOG"} onChange={() => setDestination("BACKLOG")} disabled={busy} />
@@ -86,10 +86,10 @@ export default function SprintEndModal({
                 <span className="mt-1 block text-xs text-slate-500">{summary.incompleteCount.toLocaleString("fa-IR")} تسک ناتمام خارج از اسپرینت می‌ماند.</span>
               </label>
               <label className={`cursor-pointer rounded-xl border p-3 ${destination !== "BACKLOG" ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white"}`}>
-                <span className="block text-sm font-bold">انتقال به اسپرینت آینده</span>
-                <select value={destination === "BACKLOG" ? "" : destination} onChange={(event) => setDestination(event.target.value || "BACKLOG")} disabled={busy || futureSprints.length === 0} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-emerald-500">
-                  <option value="">{futureSprints.length ? "اسپرینت مقصد را انتخاب کنید" : "اسپرینت آینده‌ای وجود ندارد"}</option>
-                  {futureSprints.map((future) => <option key={future.id} value={future.id}>{future.name}</option>)}
+                <span className="block text-sm font-bold">انتقال به اسپرینت دیگر</span>
+                <select value={destination === "BACKLOG" ? "" : destination} onChange={(event) => setDestination(event.target.value || "BACKLOG")} disabled={busy || destinationSprints.length === 0} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-emerald-500">
+                  <option value="">{destinationSprints.length ? "اسپرینت مقصد را انتخاب کنید" : "اسپرینت فعال یا آینده‌ای وجود ندارد"}</option>
+                  {destinationSprints.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.status === "ACTIVE" ? "فعال" : "آینده"}: {candidate.name}</option>)}
                 </select>
               </label>
             </div>

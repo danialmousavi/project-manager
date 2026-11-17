@@ -32,6 +32,8 @@ import UserMultiSelect, {
 } from "@/components/ui/user-multi-select";
 
 import PersianDatePicker from "@/components/ui/persian-date-picker";
+import PageGuide from "@/components/ui/page-guide";
+import { pageGuides } from "@/lib/page-guides";
 
 type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
 
@@ -451,6 +453,7 @@ export default function ProjectDetails({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <PageGuide guide={pageGuides["project-overview"]} />
             <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
               {statusLabels[project.status]}
             </span>

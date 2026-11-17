@@ -23,6 +23,7 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -32,6 +33,8 @@ import ConfirmDialog from "@/components/ui/confirm-dialog";
 import SprintFormModal from "@/components/sprints/sprint-form-modal";
 import SprintEndModal from "@/components/sprints/sprint-end-modal";
 import type { Sprint, SprintStatus } from "@/components/sprints/types";
+import PageGuide from "@/components/ui/page-guide";
+import { pageGuides } from "@/lib/page-guides";
 import {
   TaskFormModal,
   type FormValues,
@@ -83,6 +86,7 @@ type Props = {
   actorRole: Role;
   canManage: boolean;
   canDelete: boolean;
+  view: "GANTT" | "SPRINTS";
 };
 
 type DragMode = "move" | "start" | "end";
@@ -99,6 +103,9 @@ type DragState = {
 
 const DAY_WIDTH = 46;
 const VISIBLE_DAYS = 56;
+const GANTT_DAY_WIDTH = 60;
+const GANTT_PAST_DAYS = 35;
+const GANTT_VISIBLE_DAYS = 70;
 const DAY_MS = 86_400_000;
 
 const statusLabels: Record<TaskStatus, string> = {
@@ -114,6 +121,25 @@ const statusColors: Record<TaskStatus, string> = {
   IN_REVIEW: "#f59e0b",
   DONE: "#16a34a",
 };
+
+const activeSprintColors = [
+  "#7c3aed",
+  "#db2777",
+  "#0891b2",
+  "#ea580c",
+  "#4f46e5",
+  "#65a30d",
+];
+
+function colorForSprint(sprintId: string) {
+  let hash = 0;
+
+  for (const character of sprintId) {
+    hash = (hash * 31 + character.charCodeAt(0)) | 0;
+  }
+
+  return activeSprintColors[Math.abs(hash) % activeSprintColors.length];
+}
 
 const priorityLabels: Record<Priority, string> = {
   LOW: "کم",
@@ -188,10 +214,11 @@ function getError(error: unknown) {
 
 function calculateDrag(
   drag: DragState,
-  clientX: number
+  clientX: number,
+  dayWidth: number,
 ) {
   const days = Math.round(
-    (clientX - drag.pointerX) / DAY_WIDTH
+    (clientX - drag.pointerX) / dayWidth
   );
 
   if (drag.mode === "move") {
@@ -236,6 +263,7 @@ export default function SprintsManager({
   actorRole,
   canManage,
   canDelete,
+  view,
 }: Props) {
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -251,12 +279,14 @@ export default function SprintsManager({
   const [selectedSprint, setSelectedSprint] =
     useState("ALL");
 
-  const [expandedSprint, setExpandedSprint] =
-    useState<string | null>(null);
+  const [expandedSprints, setExpandedSprints] =
+    useState<string[]>([]);
 
   const [selectedTaskId, setSelectedTaskId] =
     useState("");
   const [sprintSearch, setSprintSearch] = useState("");
+  const [sprintSearchInput, setSprintSearchInput] = useState("");
+  const [searchMatchedSprintIds, setSearchMatchedSprintIds] = useState<string[]>([]);
 
   const [creating, setCreating] = useState(false);
   const [sprintEditor, setSprintEditor] = useState<
@@ -291,20 +321,26 @@ export default function SprintsManager({
 
   const dragRef = useRef<DragState | null>(null);
   const didDragRef = useRef(false);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const hasPositionedTimeline = useRef(false);
 
-  const rangeStart = addDays(anchor, -7);
+  const visibleDays =
+    view === "GANTT" ? GANTT_VISIBLE_DAYS : VISIBLE_DAYS;
+  const pastDays = view === "GANTT" ? GANTT_PAST_DAYS : 7;
+  const rangeStart = addDays(anchor, -pastDays);
+  const dayWidth = view === "GANTT" ? GANTT_DAY_WIDTH : DAY_WIDTH;
   const rangeEnd = addDays(
     rangeStart,
-    VISIBLE_DAYS - 1
+    visibleDays - 1
   );
 
   const dates = Array.from(
-    { length: VISIBLE_DAYS },
+    { length: visibleDays },
     (_, index) => addDays(rangeStart, index)
   );
 
   const today = todayIso();
-  const timelineWidth = DAY_WIDTH * VISIBLE_DAYS;
+  const timelineWidth = dayWidth * visibleDays;
 
   const load = useCallback(async () => {
     try {
@@ -341,6 +377,24 @@ export default function SprintsManager({
 
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (view !== "GANTT" || loading || hasPositionedTimeline.current) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const timeline = timelineScrollRef.current;
+      if (!timeline) return;
+
+      const todayIndex = diffDays(todayIso(), rangeStart);
+      const target = todayIndex * dayWidth + dayWidth / 2 - timeline.clientWidth / 2;
+      timeline.scrollLeft = Math.max(0, Math.min(target, timeline.scrollWidth - timeline.clientWidth));
+      hasPositionedTimeline.current = true;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [dayWidth, loading, rangeStart, view]);
 
   async function api(
     method: "POST" | "PATCH" | "DELETE",
@@ -521,7 +575,8 @@ export default function SprintsManager({
 
     const next = calculateDrag(
       current,
-      event.clientX
+      event.clientX,
+      dayWidth,
     );
 
     const updated = {
@@ -550,7 +605,8 @@ export default function SprintsManager({
 
     const next = calculateDrag(
       current,
-      event.clientX
+      event.clientX,
+      dayWidth,
     );
 
     const task = tasks.find(
@@ -830,7 +886,11 @@ export default function SprintsManager({
         )
       );
       setEndingSprint(null);
-      setExpandedSprint(sprint.id);
+      setExpandedSprints((current) =>
+        current.includes(sprint.id)
+          ? current
+          : [...current, sprint.id]
+      );
       setNotice("اسپرینت پایان یافت و گزارش نهایی آن ثبت شد.");
     });
   }
@@ -922,6 +982,16 @@ export default function SprintsManager({
     [tasks, selectedSprint]
   );
 
+  const activeSprints = useMemo(
+    () => sprints.filter((sprint) => sprint.status === "ACTIVE"),
+    [sprints]
+  );
+
+  const activeSprintById = useMemo(
+    () => new Map(activeSprints.map((sprint) => [sprint.id, sprint])),
+    [activeSprints]
+  );
+
   const orderedTasks = useMemo(
     () =>
       [...displayedTasks].sort((a, b) =>
@@ -951,6 +1021,37 @@ export default function SprintsManager({
 
   const todayIndex = diffDays(today, rangeStart);
 
+  function runSprintSearch(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+
+    const query = sprintSearchInput.trim().toLocaleLowerCase("fa-IR");
+    setSprintSearch(query);
+    setSelectedTaskId("");
+
+    if (!query) {
+      setExpandedSprints([]);
+      setSearchMatchedSprintIds([]);
+      return;
+    }
+
+    const matchedSprintIds =
+      sprints
+        .filter((sprint) =>
+          tasks.some(
+            (task) =>
+              task.sprintId === sprint.id &&
+              (task.title.toLocaleLowerCase("fa-IR").includes(query) ||
+                (task.assignee?.name ?? "")
+                  .toLocaleLowerCase("fa-IR")
+                  .includes(query))
+          )
+        )
+        .map((sprint) => sprint.id);
+
+    setSearchMatchedSprintIds(matchedSprintIds);
+    setExpandedSprints(matchedSprintIds);
+  }
+
   return (
     <div
       dir="rtl"
@@ -964,20 +1065,21 @@ export default function SprintsManager({
               size={20}
               className="text-emerald-600"
             />
-            زمان‌بندی وظایف
+            {view === "GANTT" ? "گانت چارت وظایف" : "مدیریت اسپرینت‌ها"}
           </h2>
 
           <p
             className="mt-1 text-xs leading-6"
             style={{ color: "var(--muted)" }}
           >
-            هر نوار، زمان‌بندی یک تسک واقعی است؛
-            دایره کنار آن وضعیت فعلی تسک را
-            نشان می‌دهد.
+            {view === "GANTT"
+              ? "هر نوار، بازه زمانی یک تسک واقعی را نشان می‌دهد و دایره کنار آن وضعیت فعلی تسک را مشخص می‌کند."
+              : "اسپرینت‌ها را ایجاد، برنامه‌ریزی، شروع و پایان دهید و تسک‌ها را به آن‌ها اضافه کنید."}
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <PageGuide guide={pageGuides[view === "GANTT" ? "gantt" : "sprints"]} />
           <button
             type="button"
             disabled={busy}
@@ -988,8 +1090,7 @@ export default function SprintsManager({
             به‌روزرسانی
           </button>
 
-          {canManage && (
-            <>
+          {canManage && view === "SPRINTS" && (
               <button
                 type="button"
                 disabled={busy}
@@ -999,7 +1100,9 @@ export default function SprintsManager({
                 <Plus size={17} />
                 اسپرینت جدید
               </button>
+          )}
 
+          {canManage && view === "GANTT" && (
               <button
                 type="button"
                 onClick={() => {
@@ -1010,7 +1113,6 @@ export default function SprintsManager({
                 <Plus size={17} />
                 تسک جدید
               </button>
-            </>
           )}
         </div>
       </div>
@@ -1033,6 +1135,7 @@ export default function SprintsManager({
         </p>
       )}
 
+      {view === "GANTT" && <>
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat
           label="تسک‌های قابل مشاهده"
@@ -1067,6 +1170,11 @@ export default function SprintsManager({
               {persianDate(rangeStart)}
               {" تا "}
               {persianDate(rangeEnd)}
+              {view === "GANTT" && (
+                <span className="mr-2 text-emerald-700">
+                  (۳۵ روز گذشته تا ۳۴ روز آینده)
+                </span>
+              )}
             </p>
           </div>
 
@@ -1147,6 +1255,39 @@ export default function SprintsManager({
               </span>
             )
           )}
+
+          {activeSprints.length > 0 && (
+            <>
+              <span className="h-5 w-px bg-slate-200" aria-hidden="true" />
+              <span className="self-center text-xs font-bold text-slate-600">
+                اسپرینت‌های فعال:
+              </span>
+              {activeSprints.map((sprint) => {
+                const color = colorForSprint(sprint.id);
+                const selected = selectedSprint === sprint.id;
+
+                return (
+                  <button
+                    key={sprint.id}
+                    type="button"
+                    onClick={() => setSelectedSprint(selected ? "ALL" : sprint.id)}
+                    title={selected ? "نمایش همهٔ تسک‌ها" : `نمایش تسک‌های ${sprint.name}`}
+                    className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                      selected
+                        ? "border-slate-400 bg-slate-100 text-slate-800"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span
+                      className="size-2.5 rounded-full"
+                      style={{ backgroundColor: color }}
+                    />
+                    {sprint.name}
+                  </button>
+                );
+              })}
+            </>
+          )}
         </div>
 
         {loading ? (
@@ -1159,53 +1300,76 @@ export default function SprintsManager({
           </div>
         ) : (
           <div
-            className="grid"
+            className="grid max-h-[min(68vh,720px)] overflow-y-auto"
             style={{
               gridTemplateColumns:
-                "minmax(170px, 240px) minmax(0, 1fr)",
+                "minmax(220px, 320px) minmax(0, 1fr)",
             }}
           >
             {/* Task names */}
             <div className="border-l border-emerald-100 bg-white">
-              <div className="flex h-[76px] items-center border-b border-emerald-100 px-3 text-xs font-bold">
+              <div className="flex h-[88px] items-center border-b border-emerald-100 px-4 text-sm font-bold">
                 نام تسک و مسئول
               </div>
 
-              {orderedTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex h-[78px] items-center justify-between gap-2 border-b border-emerald-100 px-3"
-                >
-                  <div className="min-w-0">
-                    <p
-                      className="truncate text-xs font-bold"
-                      title={task.title}
-                    >
-                      {task.title}
-                    </p>
+              {orderedTasks.map((task) => {
+                const activeSprint = task.sprintId
+                  ? activeSprintById.get(task.sprintId)
+                  : undefined;
 
-                    <p
-                      className="mt-2 truncate text-[11px]"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {task.assignee?.name ??
-                        "بدون مسئول"}
-                    </p>
+                return (
+                  <div
+                    key={task.id}
+                    className="flex h-[90px] items-center justify-between gap-3 border-b border-emerald-100 px-4"
+                  >
+                    <div className="min-w-0">
+                      <p
+                        className="truncate text-xs font-bold"
+                        title={task.title}
+                      >
+                        {task.title}
+                      </p>
+
+                      {activeSprint && (
+                        <span
+                          className="mt-1 inline-flex max-w-full items-center gap-1.5 truncate rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={{
+                            color: colorForSprint(activeSprint.id),
+                            backgroundColor: `${colorForSprint(activeSprint.id)}18`,
+                          }}
+                          title={`اسپرینت فعال: ${activeSprint.name}`}
+                        >
+                          <span
+                            className="size-1.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: colorForSprint(activeSprint.id) }}
+                          />
+                          <span className="truncate">{activeSprint.name}</span>
+                        </span>
+                      )}
+
+                      <p
+                        className={`${activeSprint ? "mt-1" : "mt-2"} truncate text-[11px]`}
+                        style={{ color: "var(--muted)" }}
+                      >
+                        {task.assignee?.name ??
+                          "بدون مسئول"}
+                      </p>
+                    </div>
+
+                    {canManage && (
+                      <button
+                        type="button"
+                        title="تنظیم تاریخ تسک"
+                        aria-label={`تنظیم تاریخ ${task.title}`}
+                        onClick={() => openTaskDates(task)}
+                        className="shrink-0 rounded-lg border border-emerald-100 px-2 py-1.5 text-[11px] text-emerald-700 hover:bg-emerald-50"
+                      >
+                        تاریخ
+                      </button>
+                    )}
                   </div>
-
-                  {canManage && (
-                    <button
-                      type="button"
-                      title="تنظیم تاریخ تسک"
-                      aria-label={`تنظیم تاریخ ${task.title}`}
-                      onClick={() => openTaskDates(task)}
-                      className="shrink-0 rounded-lg border border-emerald-100 px-2 py-1.5 text-[11px] text-emerald-700 hover:bg-emerald-50"
-                    >
-                      تاریخ
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
 
               {orderedTasks.length === 0 && (
                 <p className="p-5 text-xs text-slate-500">
@@ -1216,11 +1380,12 @@ export default function SprintsManager({
 
             {/* Calendar */}
             <div
+              ref={timelineScrollRef}
               className="min-w-0 overflow-x-auto"
               dir="ltr"
             >
               <div style={{ width: timelineWidth }}>
-                <div className="flex h-[76px] border-b border-emerald-100">
+                <div className="flex h-[88px] border-b border-emerald-100">
                   {dates.map((date, index) => {
                     const month = persianDate(date, {
                       year: "numeric",
@@ -1243,7 +1408,7 @@ export default function SprintsManager({
                             ? "bg-emerald-50"
                             : ""
                         }`}
-                        style={{ width: DAY_WIDTH }}
+                        style={{ width: dayWidth }}
                       >
                         {newMonth && (
                           <span
@@ -1271,6 +1436,9 @@ export default function SprintsManager({
                 </div>
 
                 {orderedTasks.map((task) => {
+                  const activeSprint = task.sprintId
+                    ? activeSprintById.get(task.sprintId)
+                    : undefined;
                   const currentDrag =
                     drag?.taskId === task.id
                       ? drag
@@ -1307,27 +1475,27 @@ export default function SprintsManager({
 
                   const visible =
                     scheduled &&
-                    startIndex < VISIBLE_DAYS &&
+                    startIndex < visibleDays &&
                     startIndex + duration > 0;
 
                   return (
                     <div
                       key={task.id}
-                      className="relative h-[78px] border-b border-emerald-100"
+                      className="relative h-[90px] border-b border-emerald-100"
                       style={{
                         backgroundImage:
                           "linear-gradient(to right, var(--border) 1px, transparent 1px)",
-                        backgroundSize: `${DAY_WIDTH}px 100%`,
+                        backgroundSize: `${dayWidth}px 100%`,
                       }}
                     >
                       {todayIndex >= 0 &&
-                        todayIndex < VISIBLE_DAYS && (
+                        todayIndex < visibleDays && (
                           <div
                             className="pointer-events-none absolute inset-y-0 z-[1] w-[2px] bg-emerald-500/40"
                             style={{
                               left:
-                                todayIndex * DAY_WIDTH +
-                                DAY_WIDTH / 2,
+                                todayIndex * dayWidth +
+                                dayWidth / 2,
                             }}
                           />
                         )}
@@ -1338,7 +1506,7 @@ export default function SprintsManager({
                             className="absolute top-[25px] z-[3] flex size-6 items-center justify-center rounded-full border-[3px] border-white shadow-sm"
                             style={{
                               left:
-                                startIndex * DAY_WIDTH - 29,
+                                startIndex * dayWidth - 29,
                               backgroundColor:
                                 statusColors[task.status],
                             }}
@@ -1362,10 +1530,8 @@ export default function SprintsManager({
                                 : "cursor-default"
                             }`}
                             style={{
-                              left:
-                                startIndex * DAY_WIDTH,
-                              width:
-                                duration * DAY_WIDTH,
+                              left: startIndex * dayWidth,
+                              width: duration * dayWidth,
                               backgroundColor:
                                 statusColors[task.status],
                               touchAction: "none",
@@ -1376,7 +1542,10 @@ export default function SprintsManager({
                             title={
                               `${task.title}\n` +
                               `${persianDate(startDate!)} تا ${persianDate(dueDate!)}\n` +
-                              `وضعیت: ${statusLabels[task.status]}`
+                              `وضعیت: ${statusLabels[task.status]}` +
+                              (activeSprint
+                                ? `\nاسپرینت فعال: ${activeSprint.name}`
+                                : "")
                             }
                             onPointerDown={(event) => {
                               const target =
@@ -1476,15 +1645,29 @@ export default function SprintsManager({
         حرکت تقویم استفاده کنید.
       </p>
 
-      <section className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm sm:p-4">
+      </>}
+
+      {view === "SPRINTS" && <section className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm sm:p-4">
         <h3 className="text-sm font-extrabold">
           مدیریت وظایف و اسپرینت‌ها
         </h3>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-50/60 p-2.5">
           <p className="text-xs text-emerald-800">برای جلوگیری از شلوغی، تسک‌ها را جست‌وجو کنید و فقط اسپرینت موردنظر را باز کنید.</p>
-          <input value={sprintSearch} onChange={(event) => setSprintSearch(event.target.value)} placeholder="جست‌وجو در تسک‌ها..." className="w-full max-w-xs rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs" />
+          <form onSubmit={runSprintSearch} className="flex w-full max-w-md gap-2">
+            <input value={sprintSearchInput} onChange={(event) => setSprintSearchInput(event.target.value)} placeholder="جست‌وجو در عنوان یا مسئول تسک..." className="min-w-0 flex-1 rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs" />
+            <button type="submit" className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">
+              <Search size={14} />
+              جست‌وجو
+            </button>
+          </form>
         </div>
+
+        {sprintSearch && searchMatchedSprintIds.length === 0 && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            تسکی مطابق «{sprintSearchInput.trim()}» در هیچ اسپرینتی پیدا نشد.
+          </p>
+        )}
 
         <div className="mt-3 space-y-2">
           {sprints.map((sprint) => {
@@ -1504,7 +1687,7 @@ export default function SprintsManager({
               canManage && sprint.status === "FUTURE";
 
             const expanded =
-              expandedSprint === sprint.id;
+              expandedSprints.includes(sprint.id);
 
             return (
               <div
@@ -1515,8 +1698,10 @@ export default function SprintsManager({
                   <button
                     type="button"
                     onClick={() => {
-                      setExpandedSprint(
-                        expanded ? null : sprint.id
+                      setExpandedSprints((current) =>
+                        current.includes(sprint.id)
+                          ? current.filter((id) => id !== sprint.id)
+                          : [...current, sprint.id]
                       );
                       setSelectedTaskId("");
                     }}
@@ -1637,8 +1822,9 @@ export default function SprintsManager({
 
                     {visibleSprintTasks.length === 0 ? (
                       <p className="text-sm text-slate-500">
-                        هنوز تسکی به این اسپرینت
-                        اضافه نشده است.
+                        {sprintSearch
+                          ? "تسکی مطابق جست‌وجو در این اسپرینت پیدا نشد."
+                          : "هنوز تسکی به این اسپرینت اضافه نشده است."}
                       </p>
                     ) : (
                       visibleSprintTasks.slice(0, 20).map((task) => (
@@ -1743,6 +1929,7 @@ export default function SprintsManager({
           )}
         </div>
       </section>
+      }
 
       {/* Task details */}
       {editingTask && (
@@ -1941,6 +2128,7 @@ export default function SprintsManager({
           sprint={
             sprintEditor === "CREATE" ? null : sprintEditor
           }
+          existingSprints={sprints}
           busy={busy}
           onClose={() => setSprintEditor(null)}
           onSubmit={saveSprint}
@@ -1951,7 +2139,7 @@ export default function SprintsManager({
         <SprintEndModal
           sprint={endingSprint}
           tasks={tasks.filter((task) => task.sprintId === endingSprint.id)}
-          futureSprints={sprints.filter((sprint) => sprint.status === "FUTURE")}
+          destinationSprints={sprints.filter((sprint) => sprint.id !== endingSprint.id && (sprint.status === "FUTURE" || sprint.status === "ACTIVE"))}
           busy={busy}
           onClose={() => setEndingSprint(null)}
           onConfirm={(unfinishedDestinationSprintId) =>

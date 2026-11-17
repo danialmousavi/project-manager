@@ -348,7 +348,7 @@ describe("authorization and input validation through real route handlers", () =>
     expect(await db.task.findUnique({ where: { id: remaining.id } })).toMatchObject({ milestoneId: null });
   });
 
-  it("starts one future sprint and preserves its planned-task snapshot", async () => {
+  it("starts multiple future sprints and preserves each planned-task snapshot", async () => {
     const admin = await userFactory(db, "ADMIN");
     const manager = await userFactory(db, "MANAGER");
     const project = await projectFactory(db, admin.id, manager.id);
@@ -409,14 +409,23 @@ describe("authorization and input validation through real route handlers", () =>
       ],
     });
 
-    const another = await sprintFactory(db, project.id);
+    const another = await db.sprint.create({
+      data: {
+        name: "Sprint two",
+        projectId: project.id,
+        status: "FUTURE",
+        startDate: new Date("2026-11-19T00:00:00.000Z"),
+        endDate: new Date("2026-12-03T00:00:00.000Z"),
+      },
+    });
     expect((await sprintRoute.PATCH(
       request("PATCH", `projects/${project.id}/sprints`, {
         action: "START",
         sprintId: another.id,
       }),
       context(project.id)
-    )).status).toBe(409);
+    )).status).toBe(200);
+    expect(await db.sprint.findUnique({ where: { id: another.id } })).toMatchObject({ status: "ACTIVE" });
   });
 
   it("ends an active sprint, preserves its outcome, and returns unfinished work", async () => {
@@ -425,6 +434,9 @@ describe("authorization and input validation through real route handlers", () =>
     const project = await projectFactory(db, admin.id, manager.id);
     const active = await db.sprint.create({
       data: { name: "Active sprint", projectId: project.id, status: "ACTIVE" },
+    });
+    const destination = await db.sprint.create({
+      data: { name: "Second active sprint", projectId: project.id, status: "ACTIVE" },
     });
     const done = await taskFactory(db, project.id, admin.id, {
       sprintId: active.id,
@@ -442,7 +454,7 @@ describe("authorization and input validation through real route handlers", () =>
       request("PATCH", `projects/${project.id}/sprints`, {
         action: "END",
         sprintId: active.id,
-        unfinishedDestinationSprintId: null,
+        unfinishedDestinationSprintId: destination.id,
       }),
       context(project.id)
     );
@@ -450,13 +462,13 @@ describe("authorization and input validation through real route handlers", () =>
     expect(response.status).toBe(200);
     expect(await db.sprint.findUnique({ where: { id: active.id } })).toMatchObject({ status: "COMPLETED" });
     expect(await db.task.findUnique({ where: { id: done.id } })).toMatchObject({ sprintId: active.id, status: "DONE" });
-    expect(await db.task.findUnique({ where: { id: unfinished.id } })).toMatchObject({ sprintId: null, status: "IN_PROGRESS" });
+    expect(await db.task.findUnique({ where: { id: unfinished.id } })).toMatchObject({ sprintId: destination.id, status: "IN_PROGRESS" });
     expect(await db.sprintEndSnapshot.findUnique({ where: { sprintId: active.id } })).toMatchObject({
       completedTaskCount: 1,
       incompleteTaskCount: 1,
       completedStoryPoints: 5,
       incompleteStoryPoints: 3,
-      movedToSprintId: null,
+      movedToSprintId: destination.id,
     });
     await db.task.update({ where: { id: done.id }, data: { storyPoints: 13 } });
     expect(await db.sprintEndSnapshot.findUnique({ where: { sprintId: active.id } })).toMatchObject({

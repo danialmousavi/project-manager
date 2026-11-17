@@ -16,6 +16,8 @@ import {
 
 import { getCurrentUser } from "@/lib/auth";
 import { getDashboardData } from "@/lib/dashboard-data";
+import { pageGuides } from "@/lib/page-guides";
+import PageGuide from "@/components/ui/page-guide";
 
 const roles = {
   ADMIN: "مدیر اصلی",
@@ -115,15 +117,18 @@ async function Content() {
               نمای امروز · {roles[user.role]} · {dateLabel(data.today)}
             </p>
           </div>
-          <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-white text-emerald-700 shadow-sm">
-              <Target aria-hidden="true" size={18} />
-            </div>
-            <div>
-              <p className="text-[11px] text-emerald-800">تمرکز امروز</p>
-              <p className="mt-0.5 text-sm font-bold text-emerald-950">
-                {number(data.metrics.openTasks)} وظیفه باز
-              </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <PageGuide guide={pageGuides.dashboard} />
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-white text-emerald-700 shadow-sm">
+                <Target aria-hidden="true" size={18} />
+              </div>
+              <div>
+                <p className="text-[11px] text-emerald-800">تمرکز امروز</p>
+                <p className="mt-0.5 text-sm font-bold text-emerald-950">
+                  {number(data.metrics.openTasks)} وظیفه باز
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -316,7 +321,7 @@ async function Content() {
                 return (
                   <li key={task.id}>
                     <Link
-                      href={`/projects/${task.projectId}/sprints`}
+                      href={`/projects/${task.projectId}/gantt`}
                       className="group block rounded-2xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-emerald-200 hover:bg-emerald-50/50"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">

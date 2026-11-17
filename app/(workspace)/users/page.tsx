@@ -8,7 +8,9 @@ import {
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { pageGuides } from "@/lib/page-guides";
 import UsersManager from "@/components/users/users-manager";
+import PageGuide from "@/components/ui/page-guide";
 
 export default function UsersPage() {
   return (
@@ -56,20 +58,23 @@ async function UsersContent() {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-          <ShieldCheck size={21} aria-hidden="true" />
-        </div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <ShieldCheck size={21} aria-hidden="true" />
+          </div>
 
-        <div>
-          <h1 className="text-xl font-extrabold sm:text-2xl">
-            مدیریت کاربران
-          </h1>
+          <div>
+            <h1 className="text-xl font-extrabold sm:text-2xl">
+              مدیریت کاربران
+            </h1>
 
-          <p className="mt-0.5 text-sm text-[var(--muted)]">
-            ساخت حساب کاربری، تعیین نقش و مدیریت اطلاعات کاربران
-          </p>
+            <p className="mt-0.5 text-sm text-[var(--muted)]">
+              ساخت حساب کاربری، تعیین نقش و مدیریت اطلاعات کاربران
+            </p>
+          </div>
         </div>
+        <PageGuide guide={pageGuides.users} />
       </div>
 
       <UsersManager initialUsers={serializedUsers} />

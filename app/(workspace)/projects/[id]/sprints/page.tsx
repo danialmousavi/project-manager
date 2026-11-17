@@ -73,6 +73,7 @@ async function SprintsContent({ params }: Props) {
       actorRole={actor.role}
       canManage={access.canManage}
       canDelete={actor.role === "ADMIN"}
+      view="SPRINTS"
     />
   );
 }
@@ -84,7 +85,7 @@ function Loading() {
         size={23}
         className="animate-spin text-emerald-600"
       />
-      در حال بارگذاری وظایف...
+      در حال بارگذاری اسپرینت‌ها...
     </div>
   );
 }
