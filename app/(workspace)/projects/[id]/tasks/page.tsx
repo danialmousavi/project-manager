@@ -80,6 +80,7 @@ async function TasksContent({ params }: Props) {
         members={project.members}
         canManage={access.canManage}
         actorRole={actor.role}
+        actorId={actor.id}
       />
     </div>
   );

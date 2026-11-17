@@ -82,6 +82,7 @@ type Props = {
   projectId: string;
   projectName: string;
   actorRole: Role;
+  actorId: string;
   canManage: boolean;
   members: Member[];
 };
@@ -196,6 +197,7 @@ export default function TaskListView({
   projectId,
   projectName,
   actorRole,
+  actorId,
   canManage,
   members,
 }: Props) {
@@ -650,6 +652,7 @@ export default function TaskListView({
           members={members}
           canManage={canManage}
           actorRole={actorRole}
+          actorId={actorId}
         />
       ) : (
         <>
