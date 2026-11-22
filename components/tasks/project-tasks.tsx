@@ -109,10 +109,11 @@ type TaskDependency = {
   };
 };
 
-type TaskDetail = {
+type TaskDetail = Pick<Task, "id" | "title" | "description" | "type" | "storyPoints" | "rank" | "acceptanceCriteria" | "priority" | "status" | "assignee" | "sprint" | "startDate" | "dueDate" | "createdAt" | "updatedAt"> & {
+  createdBy: { id: string; name: string };
   epic: { id: string; name: string } | null;
   milestone: { id: string; title: string } | null;
-  parentTask: { id: string; title: string } | null;
+  parentTask: { id: string; title: string; type: TaskType } | null;
   subtasks: {
     id: string;
     title: string;
@@ -451,6 +452,7 @@ export default function ProjectTasks({
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [taskDetail, setTaskDetail] = useState<TaskDetail | null>(null);
@@ -462,6 +464,7 @@ export default function ProjectTasks({
   const [dependencyTaskId, setDependencyTaskId] = useState("");
   const taskCardTriggers = useRef(new Map<string, HTMLButtonElement>());
   const detailsCloseButton = useRef<HTMLButtonElement>(null);
+  const detailRequest = useRef(0);
 
   const activeTask = tasks.find((task) => task.id === activeTaskId);
 
@@ -524,6 +527,7 @@ export default function ProjectTasks({
 
   const closeDetails = useCallback(() => {
     const taskId = activeTaskId;
+    detailRequest.current += 1;
     setActiveTaskId(null);
 
     if (taskId) {
@@ -576,6 +580,7 @@ export default function ProjectTasks({
       return;
     }
 
+    const requestId = ++detailRequest.current;
     setActiveTaskId(task.id);
     setNewAssigneeId(task.assigneeId ?? "");
     setAssignmentNote("");
@@ -585,6 +590,7 @@ export default function ProjectTasks({
     setDependencyTaskId("");
     setCommentText("");
     setDetailLoading(true);
+    setDetailError("");
     setError("");
 
     try {
@@ -608,14 +614,15 @@ export default function ProjectTasks({
         }
       }
 
+      if (requestId !== detailRequest.current) return;
       setTaskDetail(payloads[0].task ?? null);
       setComments(payloads[1].comments ?? []);
 
       setHistory(payloads[2].history ?? []);
     } catch (error) {
-      setError(messageOf(error));
+      if (requestId === detailRequest.current) setDetailError(messageOf(error));
     } finally {
-      setDetailLoading(false);
+      if (requestId === detailRequest.current) setDetailLoading(false);
     }
   }
 
@@ -1182,8 +1189,8 @@ export default function ProjectTasks({
                             >
                               <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-5">
                                 <div className="min-w-0">
-                                  <p className="text-xs font-bold text-emerald-700">جزئیات وظیفه · فقط‌خواندنی</p>
-                                  <h3 id={`task-details-${task.id}`} className="mt-1 truncate text-lg font-extrabold text-slate-950">{task.title}</h3>
+                                  <p className="text-xs font-bold text-emerald-700">اطلاعات وظیفه</p>
+                                  <h3 id={`task-details-${task.id}`} className="mt-1 break-words text-lg font-extrabold leading-7 text-slate-950">{taskDetail?.title ?? task.title}</h3>
                                 </div>
                                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                                   {canChangeTaskStatus && (
@@ -1208,18 +1215,6 @@ export default function ProjectTasks({
                                       )}
                                     </select>
                                   )}
-                                  {canManage && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingTask(task);
-                                      }}
-                                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
-                                    >
-                                      <Pencil size={15} />
-                                      ویرایش
-                                    </button>
-                                  )}
                                   <button ref={detailsCloseButton} type="button" onClick={closeDetails} className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" aria-label="بستن جزئیات وظیفه">
                                     <X size={20} />
                                   </button>
@@ -1233,49 +1228,68 @@ export default function ProjectTasks({
                                   className="animate-spin text-emerald-600"
                                 />
                               </div>
+                            ) : detailError ? (
+                              <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{detailError}</div>
                             ) : (
-                              <div className="grid items-start gap-3 lg:grid-cols-2">
+                              <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                                 <div className="grid min-w-0 gap-3">
-                                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                    <h4 className="font-bold text-slate-900">
-                                      جزئیات وظیفه
-                                    </h4>
-
-                                    <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600">
-                                      {task.description ||
-                                        "توضیحی ثبت نشده است."}
+                                  <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                                      <div>
+                                        <h4 className="text-sm font-extrabold text-slate-900">اطلاعات وظیفه</h4>
+                                        <p className="mt-1 text-xs text-slate-500">مشخصات و زمان‌بندی این وظیفه</p>
+                                      </div>
+                                      {canManage && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingTask(taskDetail ? { ...task, ...taskDetail } : task)}
+                                          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                                        >
+                                          <Pencil size={16} />
+                                          ویرایش وظیفه
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className={`rounded-lg px-2.5 py-1 text-xs font-bold ${statusColors[(taskDetail ?? task).status]}`}>{statusLabels[(taskDetail ?? task).status]}</span>
+                                      <span className={`rounded-lg px-2.5 py-1 text-xs font-bold ${priorityColors[(taskDetail ?? task).priority]}`}>اولویت {(priorityLabels[(taskDetail ?? task).priority])}</span>
+                                      <span className={`rounded-lg px-2.5 py-1 text-xs font-bold ${taskTypeColors[(taskDetail ?? task).type]}`}>{taskTypeLabels[(taskDetail ?? task).type]}</span>
+                                    </div>
+                                    <h4 className="mt-5 text-sm font-extrabold text-slate-900">توضیحات</h4>
+                                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-slate-600">
+                                      {(taskDetail ?? task).description || "توضیحی ثبت نشده است."}
                                     </p>
 
-                                    <dl className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-                                      <div className="rounded-lg bg-white px-3 py-2">
-                                        <dt className="text-slate-400">
-                                          نوع کار
-                                        </dt>
-                                        <dd className="mt-1 font-semibold text-slate-700">
-                                          {taskTypeLabels[task.type]}
-                                        </dd>
-                                      </div>
-                                      <div className="rounded-lg bg-white px-3 py-2">
-                                        <dt className="text-slate-400">
-                                          Story Points / Backlog Rank
-                                        </dt>
-                                        <dd className="mt-1 font-semibold text-slate-700">
-                                          {task.storyPoints === null
-                                            ? "بدون برآورد"
-                                            : `${task.storyPoints.toLocaleString("fa-IR")} SP`}
-                                          {" · "}
-                                          {task.rank.toLocaleString("fa-IR")}
-                                        </dd>
-                                      </div>
+                                    <h4 className="mt-5 border-t border-slate-100 pt-4 text-sm font-extrabold text-slate-900">اطلاعات و زمان‌بندی</h4>
+                                    <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                                      {[
+                                        ["مسئول", (taskDetail ?? task).assignee?.name || "تعیین نشده"],
+                                        ["ایجادکننده", taskDetail?.createdBy.name || "نامشخص"],
+                                        ["تاریخ شروع", (taskDetail ?? task).startDate ? isoToJalali((taskDetail ?? task).startDate!) : "تعیین نشده"],
+                                        ["مهلت انجام", (taskDetail ?? task).dueDate ? isoToJalali((taskDetail ?? task).dueDate!) : "تعیین نشده"],
+                                        ["اسپرینت", (taskDetail ?? task).sprint?.name || "بک‌لاگ"],
+                                        ["نقطه عطف", (taskDetail ?? task).milestone?.title || "تعیین نشده"],
+                                        ["اپیک", (taskDetail ?? task).epic?.name || "تعیین نشده"],
+                                        ["وظیفه والد", (taskDetail ?? task).parentTask?.title || "ندارد"],
+                                        ["امتیاز داستان", (taskDetail ?? task).storyPoints === null ? "بدون برآورد" : (taskDetail ?? task).storyPoints!.toLocaleString("fa-IR")],
+                                        ["ترتیب بک‌لاگ", (taskDetail ?? task).rank.toLocaleString("fa-IR")],
+                                        ["تاریخ ایجاد", isoToJalali((taskDetail ?? task).createdAt)],
+                                        ["آخرین تغییر", isoToJalali((taskDetail ?? task).updatedAt)],
+                                      ].map(([label, value]) => (
+                                        <div key={label} className="min-w-0 rounded-xl bg-slate-50 px-3 py-2.5">
+                                          <dt className="text-xs text-slate-500">{label}</dt>
+                                          <dd className="mt-1 break-words text-sm font-semibold leading-6 text-slate-800">{value}</dd>
+                                        </div>
+                                      ))}
                                     </dl>
 
-                                    {task.acceptanceCriteria && (
+                                    {(taskDetail ?? task).acceptanceCriteria && (
                                       <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/50 p-3">
                                         <h5 className="text-xs font-bold text-violet-800">
                                           معیارهای پذیرش
                                         </h5>
                                         <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-violet-950">
-                                          {task.acceptanceCriteria}
+                                          {(taskDetail ?? task).acceptanceCriteria}
                                         </p>
                                       </div>
                                     )}
@@ -1451,11 +1465,6 @@ export default function ProjectTasks({
                                       </div>
                                     )}
 
-                                    {task.startDate && (
-                                      <p className="mt-3 text-xs text-slate-500">
-                                        شروع: {isoToJalali(task.startDate)}
-                                      </p>
-                                    )}
                                   </div>
 
                                   {canManage && !taskDetailsReadOnly && (

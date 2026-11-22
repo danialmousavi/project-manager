@@ -179,6 +179,8 @@ export async function GET(
         select: { id: true, title: true, type: true, status: true, storyPoints: true, assigneeId: true },
       },
       assignee: { select: { id: true, name: true } },
+      createdBy: { select: { id: true, name: true } },
+      sprint: { select: { id: true, name: true, status: true } },
       startDate: true, dueDate: true, createdAt: true, updatedAt: true,
     },
   });
