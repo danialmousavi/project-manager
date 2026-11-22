@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   ListFilter,
   ListTodo,
+  Mail,
   UsersRound,
 } from "lucide-react";
 
@@ -25,6 +26,7 @@ const projectTabs = [
   { suffix: "/kanban", label: "برد کانبان", icon: Columns3 },
   { suffix: "/epics", label: "اپیک‌ها", icon: FolderTree },
   { suffix: "/milestones", label: "مایلستون‌ها", icon: Flag },
+  { suffix: "/letters", label: "نامه‌نگاری", icon: Mail },
 ];
 
 export default function AppNav({

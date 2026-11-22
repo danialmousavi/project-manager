@@ -76,6 +76,7 @@ enum LoginAttemptScope {
 }
 
 enum NotificationType {
+  LETTER_RECEIVED
   TASK_ASSIGNED
   TASK_UPDATED
   TASK_DUE_SOON
@@ -117,6 +118,8 @@ model User {
   progressUpdates    ProgressHistory[]
   deletedTasks       Task[]            @relation("TaskDeletedBy")
   notifications      Notification[]
+  sentLetters        Letter[] @relation("LetterSender")
+  receivedLetters    LetterRecipient[]
 
   @@index([role])
 }
@@ -146,6 +149,7 @@ model Project {
   tasks           Task[]
   progressHistory ProgressHistory[]
   notifications   Notification[]
+  letters         Letter[]
 
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -496,4 +500,31 @@ model Notification {
   @@index([userId, readAt, createdAt])
   @@index([projectId, createdAt])
   @@index([type, createdAt])
+}
+
+model Letter {
+  id String @id @default(uuid())
+  projectId String
+  senderId String
+  subject String
+  body String
+  createdAt DateTime @default(now())
+  replyToId String?
+  replyTo Letter? @relation("LetterReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies Letter[] @relation("LetterReplies")
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sender User @relation("LetterSender", fields: [senderId], references: [id], onDelete: Restrict)
+  recipients LetterRecipient[]
+  @@index([projectId, createdAt])
+  @@index([replyToId])
+}
+
+model LetterRecipient {
+  letterId String
+  userId String
+  readAt DateTime?
+  letter Letter @relation(fields: [letterId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@id([letterId, userId])
+  @@index([userId, readAt])
 }
