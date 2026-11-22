@@ -1,0 +1,21 @@
+
+> project-manager@0.1.0 dev
+> next dev
+
+▲ Next.js 16.4.5 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.10.103:3000
+- Environments: .env
+✓ Ready in 1247ms
+⚠ Warning: Next.js ignored package-lock.json in C:\Users\USER because it is outside the current Git repository (C:\Users\USER\Desktop\project-manager).
+ To use this directory, set `turbopack.root` in your Next.js config.
+
+✓ Running next.config.ts took 93ms
+Creating turbopack project { dir: 'C:\\Users\\USER\\Desktop\\project-manager', testMode: true }
+- Cache Components enabled
+- Partial Prefetching enabled
+- Experiments (use with caution):
+  ✓ agentFeedback
+
+ GET / 200 in 917ms (next.js: 377ms, application-code: 541ms)
+[?25h
