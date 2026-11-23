@@ -12,6 +12,7 @@ import {
 } from "@/lib/iranian-identity";
 import { isAllowedOrigin } from "@/lib/security/origin";
 import { hashPassword } from "@/lib/password";
+import { canManageCompany, getCompanyAccess } from "@/lib/company-access";
 
 const createUserSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -19,7 +20,7 @@ const createUserSchema = z.object({
   password: z.string().min(10).max(128),
   role: z.enum(["ADMIN", "EMPLOYEE"]),
   companyId: z.preprocess((value) => value === "" ? undefined : value, z.uuid().optional()),
-  companyRole: z.enum(["OWNER", "ADMIN", "PROJECT_MANAGER", "EXPERT", "CONTROLLER"]).optional(),
+  companyRole: z.enum(["ADMIN", "PROJECT_MANAGER", "EXPERT", "CONTROLLER"]).optional(),
   nationalId: z.string().trim().transform(normalizeNationalId)
     .refine((value) => value === "" || isValidNationalId(value), "کد ملی معتبر نیست")
     .optional(),
@@ -38,13 +39,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { message: "ابتدا وارد حساب شوید" },
       { status: 401 }
-    );
-  }
-
-  if (currentUser.role !== "ADMIN") {
-    return NextResponse.json(
-      { message: "دسترسی غیرمجاز" },
-      { status: 403 }
     );
   }
 
@@ -67,6 +61,12 @@ export async function POST(request: NextRequest) {
       },
       { status: 400 }
     );
+  }
+
+  if (currentUser.role !== "ADMIN") {
+    if (!parsed.data.companyId || parsed.data.role === "ADMIN") return NextResponse.json({ message: "کاربر باید در یکی از شرکت‌های شما ایجاد شود." }, { status: 403 });
+    const access = await getCompanyAccess(currentUser, parsed.data.companyId);
+    if (!access || !canManageCompany(access)) return NextResponse.json({ message: "دسترسی مدیریت این شرکت را ندارید." }, { status: 403 });
   }
 
   try {

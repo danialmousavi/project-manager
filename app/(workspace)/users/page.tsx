@@ -8,6 +8,8 @@ import {
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getWorkspaceAccess } from "@/lib/workspace-access";
+import { canManageCompanyRole } from "@/lib/access-policy";
 import { pageGuides } from "@/lib/page-guides";
 import UsersManager from "@/components/users/users-manager";
 import PageGuide from "@/components/ui/page-guide";
@@ -31,11 +33,14 @@ async function UsersContent() {
     redirect("/login");
   }
 
-  if (currentUser.role !== "ADMIN") {
+  const workspace = await getWorkspaceAccess(currentUser);
+  const managedCompanyIds = workspace.companyMemberships.filter((membership) => canManageCompanyRole(membership.role)).map((membership) => membership.companyId);
+  if (currentUser.role !== "ADMIN" && managedCompanyIds.length === 0) {
     redirect("/dashboard");
   }
 
   const users = await prisma.user.findMany({
+    where: currentUser.role === "ADMIN" ? {} : { companyMemberships: { some: { companyId: { in: managedCompanyIds } } } },
     orderBy: {
       createdAt: "desc",
     },
@@ -73,7 +78,7 @@ async function UsersContent() {
     ...user,
     createdAt: user.createdAt.toISOString(),
   }));
-  const companies = await prisma.company.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  const companies = await prisma.company.findMany({ where: { status: "ACTIVE", ...(currentUser.role === "ADMIN" ? {} : { id: { in: managedCompanyIds } }) }, orderBy: { name: "asc" }, select: { id: true, name: true } });
 
   return (
     <>
@@ -96,7 +101,7 @@ async function UsersContent() {
         <PageGuide guide={pageGuides.users} />
       </div>
 
-      <UsersManager initialUsers={serializedUsers} companies={companies} />
+      <UsersManager initialUsers={serializedUsers} companies={companies} canCreatePlatformAdmin={currentUser.role === "ADMIN"} />
     </>
   );
 }

@@ -55,6 +55,7 @@ type UserItem = {
 type Props = {
   initialUsers: UserItem[];
   companies: { id: string; name: string }[];
+  canCreatePlatformAdmin: boolean;
 };
 
 type UserChanges = {
@@ -84,7 +85,9 @@ const inputClass =
 export default function UsersManager({
   initialUsers,
   companies,
+  canCreatePlatformAdmin,
 }: Props) {
+  const defaultCompanyId = companies.length === 1 ? companies[0].id : "";
   const [users, setUsers] = useState(initialUsers);
 
   const [search, setSearch] = useState("");
@@ -109,7 +112,7 @@ export default function UsersManager({
     phone: "",
     password: "",
     role: "EMPLOYEE" as UserRole,
-    companyId: "",
+    companyId: defaultCompanyId,
     companyRole: "EXPERT" as CompanyMemberRole,
   });
 
@@ -183,7 +186,7 @@ export default function UsersManager({
         nationalId: "",
         phone: "",
         password: "",
-        role: "EMPLOYEE", companyId: "", companyRole: "EXPERT",
+        role: "EMPLOYEE", companyId: defaultCompanyId, companyRole: "EXPERT",
       });
 
       setShowCreateForm(false);
@@ -441,9 +444,7 @@ export default function UsersManager({
                   <option value="EMPLOYEE">
                     کاربر شرکتی
                   </option>
-                  <option value="ADMIN">
-                    مدیر اصلی
-                  </option>
+                  {canCreatePlatformAdmin && <option value="ADMIN">مدیر اصلی</option>}
                 </select>
               </Field>
               {form.role === "EMPLOYEE" && <>
@@ -455,7 +456,7 @@ export default function UsersManager({
                 </Field>
                 {form.companyId && <Field label="نقش در شرکت">
                   <select className={inputClass} value={form.companyRole} onChange={(event) => setForm({ ...form, companyRole: event.target.value as CompanyMemberRole })}>
-                    {(Object.keys(companyRoleLabels) as CompanyMemberRole[]).map((role) => <option key={role} value={role}>{companyRoleLabels[role]}</option>)}
+                    {(Object.keys(companyRoleLabels) as CompanyMemberRole[]).filter((role) => role !== "OWNER").map((role) => <option key={role} value={role}>{companyRoleLabels[role]}</option>)}
                   </select>
                 </Field>}
               </>}

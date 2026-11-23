@@ -83,11 +83,9 @@ export default function AppNav({
       ? [
           {
             label: "مدیریت شرکت",
-            links: manageableCompanies.map((company) => ({
-              href: `/companies/${company.id}/members`,
-              label: company.name,
-              icon: Building2,
-            })),
+            links: [
+              { href: "/users", label: "کاربران", icon: UsersRound },
+            ],
           },
         ]
       : []),
