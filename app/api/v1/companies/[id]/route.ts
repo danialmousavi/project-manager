@@ -49,7 +49,7 @@ export async function PATCH(request: NextRequest, context: Context) {
           status: true,
           createdAt: true,
           members: { where: { role: "OWNER", isActive: true }, select: { user: { select: { id: true, name: true, email: true } } } },
-          _count: { select: { members: true, projects: true } },
+          _count: { select: { members: true, projects: { where: { archivedAt: null } } } },
         },
       });
     });
