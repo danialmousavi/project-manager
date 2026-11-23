@@ -158,7 +158,9 @@ export async function PUT(
         const valid =
           companyMembers.length === allIds.length &&
           managerIds.every(
-            (userId) => roles.get(userId) === "PROJECT_MANAGER"
+            (userId) => roles.get(userId) === "PROJECT_MANAGER" ||
+              (currentManagers.includes(userId) &&
+                (roles.get(userId) === "OWNER" || roles.get(userId) === "ADMIN"))
           ) &&
           memberIds.every(
             (userId) => roles.get(userId) === "EXPERT"

@@ -318,6 +318,25 @@ describe("authorization and input validation through real route handlers", () =>
     expect(await db.notification.count({ where: { userId: admin.id } })).toBe(0);
   });
 
+  it("keeps an existing company owner as project manager when adding an expert", async () => {
+    const owner = await userFactory(db, "ADMIN");
+    const manager = await userFactory(db, "MANAGER");
+    const expert = await userFactory(db);
+    const project = await projectFactory(db, owner.id, manager.id);
+    await db.projectMember.create({ data: { projectId: project.id, userId: owner.id, role: "MANAGER" } });
+    await db.companyMember.create({ data: { companyId: project.companyId, userId: expert.id, role: "EXPERT" } });
+    actor = owner;
+
+    const response = await membersRoute.PUT(request("PUT", `projects/${project.id}/members`, {
+      managerIds: [manager.id, owner.id], memberIds: [expert.id], controllerIds: [],
+    }), context(project.id));
+
+    expect(response.status).toBe(200);
+    expect(await db.projectMember.findMany({ where: { projectId: project.id }, select: { userId: true, role: true } })).toEqual(expect.arrayContaining([
+      { userId: owner.id, role: "MANAGER" }, { userId: expert.id, role: "MEMBER" },
+    ]));
+  });
+
   it("rejects unauthenticated requests and invalid Origin", async () => {
     expect((await projectsRoute.POST(request("POST", "projects", {}))).status).toBe(401);
     const admin = await userFactory(db, "ADMIN");
