@@ -31,7 +31,13 @@ async function main() {
     await tx.session.deleteMany();
     await tx.loginAttempt.deleteMany();
     await tx.project.deleteMany();
+    await tx.companyMember.deleteMany();
     await tx.user.deleteMany();
+    const company = await tx.company.upsert({
+      where: { id: "00000000-0000-4000-8000-000000000000" },
+      update: { name: "سازمان پیش‌فرض", status: "ACTIVE" },
+      create: { id: "00000000-0000-4000-8000-000000000000", name: "سازمان پیش‌فرض" },
+    });
     const admin = await tx.user.create({ data: { name: "مدیر سیستم", email: adminEmail, passwordHash: adminHash, role: "ADMIN" } });
     const people = await Promise.all([
       ["نگار احمدی", "negar@example.com", "MANAGER"], ["امیر رضایی", "amir@example.com", "MANAGER"],
@@ -40,11 +46,26 @@ async function main() {
       ["پریسا کاظمی", "parisa@example.com", "CONTROLLER"], ["کیان مرادی", "kian@example.com", "EMPLOYEE"],
     ].map(([name, email, role]) => tx.user.create({ data: { name, email, role: role as "MANAGER" | "EMPLOYEE" | "CONTROLLER", passwordHash: demoHash } })));
 
+    await tx.companyMember.createMany({
+      data: [
+        { companyId: company.id, userId: admin.id, role: "OWNER" },
+        ...people.map((person) => ({
+          companyId: company.id,
+          userId: person.id,
+          role: (person.role === "MANAGER"
+            ? "PROJECT_MANAGER"
+            : person.role === "CONTROLLER"
+              ? "CONTROLLER"
+              : "EXPERT") as "PROJECT_MANAGER" | "CONTROLLER" | "EXPERT",
+        })),
+      ],
+    });
+
     for (let p = 0; p < projects.length; p++) {
       const spec = projects[p];
       const manager = people[p % 2];
       const team = [manager, people[2 + p % 4], people[2 + (p + 1) % 4], people[6], people[7]];
-      const project = await tx.project.create({ data: { name: spec.name, description: spec.description, status: spec.status, priority: spec.priority, startDate: day(spec.start), dueDate: day(spec.due), createdById: admin.id, createdAt: day(spec.start - 4), members: { create: team.map((person, i) => ({ userId: person.id, role: i === 0 ? "MANAGER" : i === 3 ? "CONTROLLER" : "MEMBER", joinedAt: day(spec.start - 2) })) } } });
+      const project = await tx.project.create({ data: { name: spec.name, description: spec.description, status: spec.status, priority: spec.priority, startDate: day(spec.start), dueDate: day(spec.due), companyId: company.id, createdById: admin.id, createdAt: day(spec.start - 4), members: { create: team.map((person, i) => ({ userId: person.id, role: i === 0 ? "MANAGER" : i === 3 ? "CONTROLLER" : "MEMBER", joinedAt: day(spec.start - 2) })) } } });
       const epics = await Promise.all(spec.epics.map((name) => tx.epic.create({ data: { name, description: `مجموعه فعالیت‌های مرتبط با ${name} در پروژه ${spec.name}.`, projectId: project.id, createdById: manager.id } })));
       const finished = spec.status === "COMPLETED";
       const planned = spec.status === "PLANNED";

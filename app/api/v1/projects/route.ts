@@ -88,6 +88,23 @@ export async function POST(request: NextRequest) {
   const ids = [...managerIds, ...memberIds, ...controllerIds];
 
   try {
+    const companyMembership = await prisma.companyMember.findFirst({
+      where: {
+        userId: actor.id,
+        isActive: true,
+        company: { status: "ACTIVE" },
+      },
+      orderBy: { joinedAt: "asc" },
+      select: { companyId: true },
+    });
+
+    if (!companyMembership) {
+      return NextResponse.json(
+        { message: "حساب مدیر اصلی به هیچ شرکت فعالی متصل نیست." },
+        { status: 409 }
+      );
+    }
+
     const users = await prisma.user.findMany({
       where: {
         id: { in: ids },
@@ -131,6 +148,7 @@ export async function POST(request: NextRequest) {
         progress: 0,
         startDate: toDate(data.startDate),
         dueDate: toDate(data.dueDate),
+        companyId: companyMembership.companyId,
         createdById: actor.id,
         members: {
           create: [

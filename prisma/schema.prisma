@@ -18,6 +18,19 @@ enum UserRole {
   CONTROLLER
 }
 
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum CompanyMemberRole {
+  OWNER
+  ADMIN
+  PROJECT_MANAGER
+  EXPERT
+  CONTROLLER
+}
+
 enum ProjectStatus {
   DRAFT
   PLANNED
@@ -120,8 +133,43 @@ model User {
   notifications      Notification[]
   sentLetters        Letter[] @relation("LetterSender")
   receivedLetters    LetterRecipient[]
+  companyMemberships CompanyMember[]
 
   @@index([role])
+}
+
+// ==================================
+// COMPANIES
+// ==================================
+
+model Company {
+  id     String        @id @default(uuid())
+  name   String        @unique
+  status CompanyStatus @default(ACTIVE)
+
+  members  CompanyMember[]
+  projects Project[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model CompanyMember {
+  id        String            @id @default(uuid())
+  companyId String
+  userId    String
+  role      CompanyMemberRole @default(EXPERT)
+  isActive  Boolean           @default(true)
+  joinedAt  DateTime          @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, userId])
+  @@index([userId, isActive])
+  @@index([companyId, role, isActive])
 }
 
 // ==================================
@@ -142,6 +190,9 @@ model Project {
   createdById String
   createdBy   User   @relation("ProjectCreator", fields: [createdById], references: [id])
 
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
   members         ProjectMember[]
   sprints         Sprint[]
   epics           Epic[]
@@ -158,6 +209,7 @@ model Project {
   @@index([status])
   @@index([dueDate])
   @@index([archivedAt])
+  @@index([companyId, archivedAt])
 }
 
 // ==================================

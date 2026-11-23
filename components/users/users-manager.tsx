@@ -23,6 +23,22 @@ import {
 } from "lucide-react";
 
 type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
+type CompanyMemberRole =
+  | "OWNER"
+  | "ADMIN"
+  | "PROJECT_MANAGER"
+  | "EXPERT"
+  | "CONTROLLER";
+
+type CompanyMembership = {
+  role: CompanyMemberRole;
+  isActive: boolean;
+  company: {
+    id: string;
+    name: string;
+    status: "ACTIVE" | "SUSPENDED";
+  };
+};
 
 type UserItem = {
   id: string;
@@ -33,6 +49,7 @@ type UserItem = {
   role: UserRole;
   isActive: boolean;
   createdAt: string;
+  companyMemberships: CompanyMembership[];
 };
 
 type Props = {
@@ -40,17 +57,9 @@ type Props = {
 };
 
 type UserChanges = {
-  role?: "MANAGER" | "EMPLOYEE" | "CONTROLLER";
   isActive?: boolean;
   nationalId?: string;
   phone?: string;
-};
-
-const roleLabels: Record<UserRole, string> = {
-  ADMIN: "مدیر اصلی",
-  MANAGER: "مدیر پروژه",
-  EMPLOYEE: "کارشناس عملیاتی",
-  CONTROLLER: "ناظر کنترل پروژه",
 };
 
 const roleClasses: Record<UserRole, string> = {
@@ -58,6 +67,14 @@ const roleClasses: Record<UserRole, string> = {
   MANAGER: "bg-blue-50 text-blue-700",
   EMPLOYEE: "bg-slate-100 text-slate-600",
   CONTROLLER: "bg-amber-50 text-amber-700",
+};
+
+const companyRoleLabels: Record<CompanyMemberRole, string> = {
+  OWNER: "مالک شرکت",
+  ADMIN: "مدیر شرکت",
+  PROJECT_MANAGER: "مدیر پروژه",
+  EXPERT: "کارشناس",
+  CONTROLLER: "ناظر کنترل پروژه",
 };
 
 const inputClass =
@@ -69,8 +86,6 @@ export default function UsersManager({
   const [users, setUsers] = useState(initialUsers);
 
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("ALL");
-
   const [showCreateForm, setShowCreateForm] =
     useState(false);
 
@@ -103,18 +118,20 @@ export default function UsersManager({
       (user.nationalId ?? "").includes(query) ||
       (user.phone ?? "").includes(query);
 
-    const matchesRole =
-      roleFilter === "ALL" || user.role === roleFilter;
-
-    return matchesSearch && matchesRole;
+    return matchesSearch;
   });
 
   const activeCount = users.filter(
     (user) => user.isActive
   ).length;
 
-  const managersCount = users.filter(
-    (user) => user.role === "MANAGER"
+  const managersCount = users.filter((user) =>
+    user.companyMemberships.some(
+      (membership) =>
+        membership.role === "PROJECT_MANAGER" &&
+        membership.isActive &&
+        membership.company.status === "ACTIVE"
+    )
   ).length;
 
   async function createUser(
@@ -265,7 +282,7 @@ export default function UsersManager({
         />
 
         <StatCard
-          title="مدیران پروژه"
+          title="مدیران پروژهٔ شرکت‌ها"
           value={managersCount}
           icon={<Shield size={21} />}
         />
@@ -406,7 +423,7 @@ export default function UsersManager({
                 />
               </Field>
 
-              <Field label="نقش کاربر">
+              <Field label="نقش پایهٔ سامانه">
                 <select
                   className={inputClass}
                   value={form.role}
@@ -434,7 +451,7 @@ export default function UsersManager({
             </div>
 
             <p className="mt-4 text-xs leading-6 text-slate-500">
-              کد ملی اختیاری است؛ در صورت ورود باید معتبر و یکتا باشد. شماره موبایل معتبر و رمز عبور حداقل ۱۰ کاراکتر است.
+              کد ملی اختیاری است؛ در صورت ورود باید معتبر و یکتا باشد. نقش در شرکت‌ها از صفحهٔ همان شرکت تعیین می‌شود.
             </p>
 
             <div className="mt-5 flex justify-end">
@@ -480,7 +497,7 @@ export default function UsersManager({
           </div>
         )}
 
-        {/* Search and filters */}
+        {/* Search */}
         <div className="flex flex-col gap-3 p-5 sm:flex-row sm:p-6">
           <div className="relative flex-1">
             <Search
@@ -499,20 +516,6 @@ export default function UsersManager({
             />
           </div>
 
-          <select
-            className={`${inputClass} sm:w-44`}
-            value={roleFilter}
-            onChange={(event) =>
-              setRoleFilter(event.target.value)
-            }
-            aria-label="فیلتر نقش"
-          >
-            <option value="ALL">همه نقش‌ها</option>
-            <option value="ADMIN">مدیر اصلی</option>
-            <option value="MANAGER">مدیر پروژه</option>
-            <option value="EMPLOYEE">کارشناس عملیاتی</option>
-            <option value="CONTROLLER">ناظر کنترل پروژه</option>
-          </select>
         </div>
 
         {/* Table */}
@@ -524,7 +527,7 @@ export default function UsersManager({
                   کاربر
                 </th>
                 <th className="px-6 py-4 font-medium">
-                  نقش
+                  نقش در شرکت‌ها
                 </th>
                 <th className="px-6 py-4 font-medium">
                   وضعیت
@@ -583,11 +586,53 @@ export default function UsersManager({
                     </td>
 
                     <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex rounded-lg px-3 py-1.5 text-xs font-medium ${roleClasses[user.role]}`}
-                      >
-                        {roleLabels[user.role]}
-                      </span>
+                      <div className="space-y-2">
+                        {user.role === "ADMIN" && (
+                          <span
+                            className={`inline-flex rounded-lg px-3 py-1.5 text-xs font-medium ${roleClasses.ADMIN}`}
+                          >
+                            مدیر اصلی سامانه
+                          </span>
+                        )}
+
+                        {user.companyMemberships.map((membership) => {
+                          const isMembershipActive =
+                            membership.isActive &&
+                            membership.company.status === "ACTIVE";
+
+                          return (
+                            <div
+                              key={membership.company.id}
+                              className="flex flex-wrap items-center gap-1.5 text-xs"
+                            >
+                              <span className="font-medium text-slate-700">
+                                {membership.company.name}
+                              </span>
+                              <span
+                                className={`rounded-md px-2 py-1 font-medium ${
+                                  isMembershipActive
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "bg-slate-100 text-slate-500"
+                                }`}
+                              >
+                                {companyRoleLabels[membership.role]}
+                              </span>
+                              {!isMembershipActive && (
+                                <span className="text-slate-400">
+                                  غیرفعال
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {user.role !== "ADMIN" &&
+                          user.companyMemberships.length === 0 && (
+                            <span className="text-xs text-slate-400">
+                              بدون عضویت شرکت
+                            </span>
+                          )}
+                      </div>
                     </td>
 
                     <td className="px-6 py-4">
@@ -634,31 +679,6 @@ export default function UsersManager({
 
                         {!isAdmin && (
                           <>
-                            <select
-                              aria-label={`نقش ${user.name}`}
-                              disabled={Boolean(busyUserId)}
-                              value={user.role}
-                              onChange={(event) =>
-                                changeUser(user, {
-                                  role: event.target.value as
-                                    | "MANAGER"
-                                    | "EMPLOYEE"
-                                    | "CONTROLLER",
-                                })
-                              }
-                              className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs outline-none focus:border-emerald-500 disabled:opacity-50"
-                            >
-                              <option value="EMPLOYEE">
-                                کارشناس عملیاتی
-                              </option>
-                              <option value="MANAGER">
-                                مدیر پروژه
-                              </option>
-                              <option value="CONTROLLER">
-                                ناظر کنترل پروژه
-                              </option>
-                            </select>
-
                             <button
                               type="button"
                               disabled={Boolean(busyUserId)}
@@ -915,7 +935,9 @@ function EditUserModal({
                   </p>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    {roleLabels[user.role]}
+                    {user.role === "ADMIN"
+                      ? "مدیر اصلی سامانه"
+                      : "نقش‌های شرکتی در فهرست کاربران نمایش داده می‌شوند."}
                   </p>
                 </div>
               </div>

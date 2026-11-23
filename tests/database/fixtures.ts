@@ -21,9 +21,14 @@ export async function projectFactory(
   managerId: string,
   memberIds: string[] = []
 ) {
+  const company = await db.company.create({
+    data: { name: `Audit company ${randomUUID()}` },
+  });
+
   return db.project.create({
     data: {
       name: `Audit project ${randomUUID()}`,
+      companyId: company.id,
       createdById: creatorId,
       members: {
         create: [

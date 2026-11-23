@@ -100,6 +100,8 @@ beforeEach(async () => {
   await db.sprint.deleteMany();
   await db.projectMember.deleteMany();
   await db.project.deleteMany();
+  await db.companyMember.deleteMany();
+  await db.company.deleteMany();
   await db.session.deleteMany();
   await db.loginAttempt.deleteMany();
   await db.user.deleteMany();

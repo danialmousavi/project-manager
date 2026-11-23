@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   CalendarRange,
+  Building2,
   ChevronDown,
   Columns3,
   Flag,
@@ -54,7 +55,10 @@ export default function AppNav({
       ? [
           {
             label: "مدیریت سازمان",
-            links: [{ href: "/users", label: "کاربران", icon: UsersRound }],
+            links: [
+              { href: "/companies", label: "شرکت‌ها", icon: Building2 },
+              { href: "/users", label: "کاربران", icon: UsersRound },
+            ],
           },
         ]
       : []),

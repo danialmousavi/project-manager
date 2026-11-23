@@ -48,6 +48,24 @@ async function UsersContent() {
       role: true,
       isActive: true,
       createdAt: true,
+      companyMemberships: {
+        orderBy: {
+          company: {
+            name: "asc",
+          },
+        },
+        select: {
+          role: true,
+          isActive: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              status: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -70,7 +88,7 @@ async function UsersContent() {
             </h1>
 
             <p className="mt-0.5 text-sm text-[var(--muted)]">
-              ساخت حساب کاربری، تعیین نقش و مدیریت اطلاعات کاربران
+              ساخت حساب کاربری و مشاهدهٔ نقش‌های واقعی کاربران در شرکت‌ها
             </p>
           </div>
         </div>

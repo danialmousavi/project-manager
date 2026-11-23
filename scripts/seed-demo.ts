@@ -21,6 +21,7 @@ const prisma = new PrismaClient({
 const demoPassword = process.env.DEMO_PASSWORD || "Demo123!";
 
 const ids = {
+  defaultCompany: "00000000-0000-4000-8000-000000000000",
   admin: "11111111-1111-4111-8111-111111111111",
   manager: "22222222-2222-4222-8222-222222222222",
   employee: "33333333-3333-4333-8333-333333333333",
@@ -90,6 +91,12 @@ const dates = {
 
 async function main() {
   const passwordHash = await hashPassword(demoPassword);
+
+  await prisma.company.upsert({
+    where: { id: ids.defaultCompany },
+    update: { name: "سازمان پیش‌فرض", status: "ACTIVE" },
+    create: { id: ids.defaultCompany, name: "سازمان پیش‌فرض" },
+  });
 
   await prisma.user.upsert({
     where: { id: ids.admin },
@@ -186,6 +193,20 @@ async function main() {
     },
   });
 
+  for (const [userId, role] of [
+    [ids.admin, "OWNER"],
+    [ids.manager, "PROJECT_MANAGER"],
+    [ids.employee, "EXPERT"],
+    [ids.reviewer, "EXPERT"],
+    [ids.controller, "CONTROLLER"],
+  ] as const) {
+    await prisma.companyMember.upsert({
+      where: { companyId_userId: { companyId: ids.defaultCompany, userId } },
+      update: { role, isActive: true },
+      create: { companyId: ids.defaultCompany, userId, role },
+    });
+  }
+
   await prisma.project.upsert({
     where: { id: ids.platformProject },
     update: {
@@ -196,6 +217,7 @@ async function main() {
       startDate: dates.projectStart,
       dueDate: dates.platformDue,
       progress: 68,
+      companyId: ids.defaultCompany,
       createdById: ids.admin,
       archivedAt: null,
     },
@@ -208,6 +230,7 @@ async function main() {
       startDate: dates.projectStart,
       dueDate: dates.platformDue,
       progress: 68,
+      companyId: ids.defaultCompany,
       createdById: ids.admin,
     },
   });
@@ -222,6 +245,7 @@ async function main() {
       startDate: dates.mobileStart,
       dueDate: dates.mobileDue,
       progress: 18,
+      companyId: ids.defaultCompany,
       createdById: ids.admin,
       archivedAt: null,
     },
@@ -234,6 +258,7 @@ async function main() {
       startDate: dates.mobileStart,
       dueDate: dates.mobileDue,
       progress: 18,
+      companyId: ids.defaultCompany,
       createdById: ids.admin,
     },
   });

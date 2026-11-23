@@ -49,6 +49,18 @@ async function main() {
     },
   });
 
+  const company = await prisma.company.upsert({
+    where: { id: "00000000-0000-4000-8000-000000000000" },
+    update: { name: "سازمان پیش‌فرض", status: "ACTIVE" },
+    create: { id: "00000000-0000-4000-8000-000000000000", name: "سازمان پیش‌فرض" },
+  });
+
+  await prisma.companyMember.upsert({
+    where: { companyId_userId: { companyId: company.id, userId: admin.id } },
+    update: { role: "OWNER", isActive: true },
+    create: { companyId: company.id, userId: admin.id, role: "OWNER" },
+  });
+
   console.log("Admin user created/updated:", admin);
 
   if (generatedPassword) {
