@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Users,
+  Building2,
   X,
 } from "lucide-react";
 
@@ -37,6 +38,10 @@ type Project = {
   priority: Priority;
   progress: number;
   createdAt: string;
+  company: {
+    id: string;
+    name: string;
+  };
   members: {
     role: "MANAGER" | "MEMBER" | "CONTROLLER";
     user: {
@@ -46,9 +51,16 @@ type Project = {
   }[];
 };
 
+type CreateCompany = {
+  id: string;
+  name: string;
+};
+
 type Props = {
   initialProjects: Project[];
   canCreate: boolean;
+  createCompanies: CreateCompany[];
+  canFilterByCompany: boolean;
 };
 
 const statusLabels: Record<ProjectStatus, string> = {
@@ -89,11 +101,14 @@ const inputClass =
 export default function ProjectsManager({
   initialProjects,
   canCreate,
+  createCompanies,
+  canFilterByCompany,
 }: Props) {
   const [projects, setProjects] = useState(initialProjects);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "ALL">("ALL");
+  const [companyFilter, setCompanyFilter] = useState("ALL");
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -103,6 +118,9 @@ export default function ProjectsManager({
   const [description, setDescription] = useState("");
   const [priority, setPriority] =
     useState<Priority>("MEDIUM");
+  const [companyId, setCompanyId] = useState(
+    createCompanies.length === 1 ? createCompanies[0].id : ""
+  );
 
   const [managers, setManagers] = useState<
     SelectableUser[]
@@ -121,16 +139,26 @@ export default function ProjectsManager({
     string | null
   >(null);
 
+  const companyOptions = Array.from(
+    new Map(
+      projects.map((project) => [project.company.id, project.company]),
+    ).values(),
+  ).sort((first, second) => first.name.localeCompare(second.name, "fa"));
+
   const filteredProjects = projects.filter(
     (project) =>
       project.name.toLocaleLowerCase("fa-IR").includes(search.trim().toLocaleLowerCase("fa-IR")) &&
-      (statusFilter === "ALL" || project.status === statusFilter)
+      (statusFilter === "ALL" || project.status === statusFilter) &&
+      (!canFilterByCompany || companyFilter === "ALL" || project.company.id === companyFilter)
   );
 
   function resetForm() {
     setName("");
     setDescription("");
     setPriority("MEDIUM");
+    setCompanyId(
+      createCompanies.length === 1 ? createCompanies[0].id : ""
+    );
     setManagers([]);
     setEmployees([]);
     setControllers([]);
@@ -147,6 +175,11 @@ export default function ProjectsManager({
 
     if (managers.length === 0) {
       setError("حداقل یک مدیر پروژه انتخاب کنید.");
+      return;
+    }
+
+    if (!companyId) {
+      setError("شرکت پروژه را انتخاب کنید.");
       return;
     }
 
@@ -173,6 +206,7 @@ export default function ProjectsManager({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          companyId,
           name,
           description,
           priority,
@@ -200,6 +234,10 @@ export default function ProjectsManager({
         status: "PLANNED",
         progress: 0,
         createdAt: new Date().toISOString(),
+        company: {
+          id: companyId,
+          name: createCompanies.find((company) => company.id === companyId)?.name ?? "شرکت",
+        },
         members: [
           ...managers.map((user) => ({
             role: "MANAGER" as const,
@@ -328,6 +366,31 @@ export default function ProjectsManager({
             {error && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
 
             <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="شرکت">
+                <select
+                  className={inputClass}
+                  value={companyId}
+                  required
+                  onChange={(event) => {
+                    setCompanyId(event.target.value);
+                    setManagers([]);
+                    setEmployees([]);
+                    setControllers([]);
+                  }}
+                >
+                  {createCompanies.length > 1 && (
+                    <option value="" disabled>
+                      انتخاب شرکت
+                    </option>
+                  )}
+                  {createCompanies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
               <Field label="نام پروژه">
                 <input
                   autoFocus
@@ -395,31 +458,36 @@ export default function ProjectsManager({
               <UserMultiSelect
                 label="مدیران پروژه"
                 role="MANAGER"
+                companyId={companyId || undefined}
                 selected={managers}
                 onChange={setManagers}
                 placeholder="انتخاب مدیران پروژه..."
+                disabled={!companyId}
               />
 
               <UserMultiSelect
                 label="کارشناسان عملیاتی پروژه"
                 role="EMPLOYEE"
+                companyId={companyId || undefined}
                 selected={employees}
                 onChange={setEmployees}
                 placeholder="انتخاب کارمندان پروژه..."
+                disabled={!companyId}
               />
 
               <UserMultiSelect
                 label="ناظران کنترل پروژه"
                 role="CONTROLLER"
+                companyId={companyId || undefined}
                 selected={controllers}
                 onChange={setControllers}
                 placeholder="انتخاب ناظران کنترل پروژه..."
+                disabled={!companyId}
               />
             </div>
 
             <p className="text-xs leading-5 text-[var(--muted)]">
-              حداقل یک مدیر پروژه الزامی است. جست‌وجوی
-              کاربران از سمت سرور انجام می‌شود.
+              حداقل یک مدیر پروژه الزامی است. فقط اعضای دارای نقش مناسب در شرکت انتخاب‌شده نمایش داده می‌شوند.
             </p>
 
             <div className="flex justify-end border-t border-[var(--border)] pt-3">
@@ -458,7 +526,7 @@ export default function ProjectsManager({
         )}
 
         <div className="p-4 sm:p-5">
-          <div className="mb-4 grid gap-2.5 rounded-xl bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
+          <div className={`mb-4 grid gap-2.5 rounded-xl bg-slate-50 p-3 sm:items-end ${canFilterByCompany ? "sm:grid-cols-[minmax(0,1fr)_12rem_12rem]" : "sm:grid-cols-[minmax(0,1fr)_12rem]"}`}>
             <div className="min-w-0 flex-1">
               <label htmlFor="project-search" className="mb-1 block text-xs font-semibold text-slate-700">جست‌وجوی پروژه</label>
               <div className="relative">
@@ -473,6 +541,15 @@ export default function ProjectsManager({
                 {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </div>
+            {canFilterByCompany && (
+              <div>
+                <label htmlFor="project-company-filter" className="mb-1 block text-xs font-semibold text-slate-700">شرکت</label>
+                <select id="project-company-filter" className={inputClass} value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)}>
+                  <option value="ALL">همه شرکت‌ها</option>
+                  {companyOptions.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                </select>
+              </div>
+            )}
           </div>
 
           {filteredProjects.length === 0 ? (
@@ -483,11 +560,11 @@ export default function ProjectsManager({
                 className="mx-auto text-[var(--muted)]"
               />
               <p className="mt-2 text-sm text-[var(--muted)]">
-                {search || statusFilter !== "ALL"
+                {search || statusFilter !== "ALL" || companyFilter !== "ALL"
                   ? "پروژه‌ای با این فیلترها پیدا نشد."
                   : "هنوز پروژه‌ای ثبت نشده است."}
               </p>
-              {(search || statusFilter !== "ALL") && <button type="button" onClick={() => { setSearch(""); setStatusFilter("ALL"); }} className="mt-3 min-h-11 rounded-lg px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">پاک کردن فیلترها</button>}
+              {(search || statusFilter !== "ALL" || companyFilter !== "ALL") && <button type="button" onClick={() => { setSearch(""); setStatusFilter("ALL"); setCompanyFilter("ALL"); }} className="mt-3 min-h-11 rounded-lg px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">پاک کردن فیلترها</button>}
             </div>
           ) : (
             <div className="grid gap-2.5 lg:grid-cols-2 2xl:grid-cols-3">
@@ -513,6 +590,7 @@ export default function ProjectsManager({
                     {project.description && <p className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--muted)]">{project.description}</p>}
 
                     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-[var(--muted)]">
+                      <span className="inline-flex items-center gap-1 font-medium text-slate-700"><Building2 aria-hidden="true" size={14} />{project.company.name}</span>
                       <span className={`rounded-md px-2 py-1 text-[11px] font-bold ${statusColors[project.status]}`}>{statusLabels[project.status]}</span>
                       <span className="inline-flex items-center gap-1"><Users aria-hidden="true" size={14} />{project.members.length.toLocaleString("fa-IR")} عضو</span>
                       <span className="min-w-0 break-words">مدیر: {managersOfProject.map((member) => member.user.name).join("، ") || "تعیین نشده"}</span>

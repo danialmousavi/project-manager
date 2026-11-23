@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
-import { canEditProject } from "@/lib/project-access";
 import { prisma } from "@/lib/prisma";
 import { syncProjectProgressCache } from "@/lib/project-progress";
 import { isAllowedOrigin } from "@/lib/security/origin";
+import { getTaskProjectAccess } from "@/lib/task-access";
 
 type Context = {
   params: Promise<{ id: string }>;
@@ -48,7 +48,9 @@ export async function POST(
     );
   }
 
-  if (!(await canEditProject(actor, id))) {
+  const access = await getTaskProjectAccess(actor, id);
+
+  if (!access?.canChangeStatus) {
     return NextResponse.json(
       { message: "اجازه ثبت پیشرفت ندارید" },
       { status: 403 }
@@ -71,16 +73,6 @@ export async function POST(
         where: {
           id,
           archivedAt: null,
-          ...(actor.role === "ADMIN"
-            ? {}
-            : {
-                members: {
-                  some: {
-                    userId: actor.id,
-                    role: "MANAGER",
-                  },
-                },
-              }),
         },
         select: { id: true },
       });

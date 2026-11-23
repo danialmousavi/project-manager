@@ -39,7 +39,6 @@ import {
   TaskFormModal,
   type FormValues,
   type Member,
-  type Role,
 } from "@/components/tasks/project-tasks";
 
 type TaskStatus =
@@ -83,7 +82,6 @@ type TaskDetail = {
 type Props = {
   projectId: string;
   members: Member[];
-  actorRole: Role;
   canManage: boolean;
   canDelete: boolean;
   view: "GANTT" | "SPRINTS";
@@ -260,7 +258,6 @@ function calculateDrag(
 export default function SprintsManager({
   projectId,
   members,
-  actorRole,
   canManage,
   canDelete,
   view,
@@ -1010,11 +1007,8 @@ export default function SprintsManager({
 
   const assignees = members.filter(
     (member) =>
-      (member.role === "MEMBER" &&
-        member.user.role === "EMPLOYEE") ||
-      (actorRole === "ADMIN" &&
-        member.role === "MANAGER" &&
-        member.user.role === "MANAGER")
+      (member.role === "MEMBER" && member.user.companyRole === "EXPERT") ||
+      (member.role === "MANAGER" && member.user.companyRole === "PROJECT_MANAGER")
   );
 
   const completedCount = displayedTasks.filter(

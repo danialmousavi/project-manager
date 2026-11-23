@@ -7,18 +7,16 @@ import AppNav from "@/components/layout/app-nav";
 import LogoutButton from "@/components/layout/logout-button";
 import NotificationMenu from "@/components/layout/notification-menu";
 
-type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
-
-const roleLabels: Record<Role, string> = {
-  ADMIN: "مدیر اصلی",
-  MANAGER: "مدیر پروژه",
-  EMPLOYEE: "کارشناس عملیاتی",
-  CONTROLLER: "ناظر کنترل پروژه",
+type WorkspaceUser = {
+  name: string;
+  roleLabel: string;
+  isPlatformAdmin: boolean;
+  manageableCompanies: { id: string; name: string }[];
 };
 
-export default function WorkspaceShell({ children, user, projects, initialUnreadCount }: { children: ReactNode; user: { name: string; role: Role }; projects: { id: string; name: string }[]; initialUnreadCount: number }) {
+export default function WorkspaceShell({ children, user, projects, initialUnreadCount }: { children: ReactNode; user: WorkspaceUser; projects: { id: string; name: string; company: { id: string; name: string } }[]; initialUnreadCount: number }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const navigation = <AppNav role={user.role} projects={projects} variant="sidebar" onNavigate={() => setMenuOpen(false)} />;
+  const navigation = <AppNav isPlatformAdmin={user.isPlatformAdmin} manageableCompanies={user.manageableCompanies} projects={projects} variant="sidebar" onNavigate={() => setMenuOpen(false)} />;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -47,7 +45,7 @@ export default function WorkspaceShell({ children, user, projects, initialUnread
       <div className="min-w-0">
         <header className="sticky top-0 z-40 flex min-h-16 items-center justify-between gap-3 border-b border-[var(--border)] bg-white/95 px-4 backdrop-blur-md sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3"><button type="button" aria-label="بازکردن منو" aria-controls="mobile-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)} className="rounded-xl border border-[var(--border)] p-2 text-[var(--muted)] hover:bg-emerald-50 lg:hidden"><Menu size={20} /></button><div className="min-w-0"><p className="truncate text-sm font-extrabold text-[var(--foreground)]">سامانه مدیریت پروژه</p><p className="hidden text-xs text-[var(--muted)] sm:block">فضای کاری تیم</p></div></div>
-          <div className="flex items-center gap-3"><NotificationMenu initialUnreadCount={initialUnreadCount} /><div className="hidden text-left sm:block"><p className="max-w-40 truncate text-xs font-bold text-[var(--foreground)]" title={user.name}>{user.name}</p><p className="text-[11px] text-[var(--muted)]">{roleLabels[user.role]}</p></div><LogoutButton /></div>
+          <div className="flex items-center gap-3"><NotificationMenu initialUnreadCount={initialUnreadCount} /><div className="hidden text-left sm:block"><p className="max-w-40 truncate text-xs font-bold text-[var(--foreground)]" title={user.name}>{user.name}</p><p className="text-[11px] text-[var(--muted)]">{user.roleLabel}</p></div><LogoutButton /></div>
         </header>
         <div>{children}</div>
       </div>
@@ -59,6 +57,6 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
   return <div className={`flex items-center gap-3 ${compact ? "" : "border-b border-[var(--border)] px-5 py-5"}`}><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><PanelsTopLeft size={20} /></span><div><p className="text-sm font-extrabold text-[var(--foreground)]">مدیریت پروژه</p><p className="mt-0.5 text-[11px] text-[var(--muted)]">Workspace</p></div></div>;
 }
 
-function SidebarUser({ user }: { user: { name: string; role: Role } }) {
-  return <div className="border-t border-[var(--border)] p-4"><div className="rounded-xl bg-emerald-50 px-3 py-2"><p className="truncate text-xs font-bold text-emerald-950" title={user.name}>{user.name}</p><p className="mt-0.5 text-[11px] text-emerald-700">{roleLabels[user.role]}</p></div></div>;
+function SidebarUser({ user }: { user: WorkspaceUser }) {
+  return <div className="border-t border-[var(--border)] p-4"><div className="rounded-xl bg-emerald-50 px-3 py-2"><p className="truncate text-xs font-bold text-emerald-950" title={user.name}>{user.name}</p><p className="mt-0.5 text-[11px] text-emerald-700">{user.roleLabel}</p></div></div>;
 }

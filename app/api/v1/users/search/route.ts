@@ -3,13 +3,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
+import { canCreateCompanyProject, getCompanyAccess } from "@/lib/company-access";
 import { prisma } from "@/lib/prisma";
+import { getTaskProjectAccess } from "@/lib/task-access";
 
 const querySchema = z.object({
   role: z.enum(["MANAGER", "EMPLOYEE", "CONTROLLER"]),
   q: z.string().trim().max(100).default(""),
   projectId: z.uuid().optional(),
+  companyId: z.uuid().optional(),
+}).refine((value) => value.projectId || value.companyId, {
+  message: "شرکت یا پروژه الزامی است",
 });
+
+const companyRoleByProjectRole = {
+  MANAGER: "PROJECT_MANAGER",
+  EMPLOYEE: "EXPERT",
+  CONTROLLER: "CONTROLLER",
+} as const;
 
 export async function GET(request: NextRequest) {
   const actor = await getCurrentUser();
@@ -27,6 +38,9 @@ export async function GET(request: NextRequest) {
     projectId:
       request.nextUrl.searchParams.get("projectId") ??
       undefined,
+    companyId:
+      request.nextUrl.searchParams.get("companyId") ??
+      undefined,
   });
 
   if (!parsed.success) {
@@ -36,41 +50,32 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { role, q, projectId } = parsed.data;
+  const { role, q, projectId, companyId: requestedCompanyId } = parsed.data;
+  let companyId = requestedCompanyId;
 
-  // Admin can search users for creating a project.
-  // Managers may search only when managing their project.
-  if (actor.role !== "ADMIN") {
-    if (actor.role !== "MANAGER" || !projectId) {
+  if (projectId) {
+    const access = await getTaskProjectAccess(actor, projectId);
+    const project = access?.canManage
+      ? await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { companyId: true },
+        })
+      : null;
+
+    if (!project) {
       return NextResponse.json(
-        { message: "دسترسی غیرمجاز" },
+        { message: "دسترسی به این پروژه مجاز نیست" },
         { status: 403 }
       );
     }
-  }
 
-  if (projectId) {
-    const hasAccess = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        archivedAt: null,
-        ...(actor.role === "ADMIN"
-          ? {}
-          : {
-              members: {
-                some: {
-                  userId: actor.id,
-                  role: "MANAGER",
-                },
-              },
-            }),
-      },
-      select: { id: true },
-    });
+    companyId = project.companyId;
+  } else if (companyId) {
+    const access = await getCompanyAccess(actor, companyId);
 
-    if (!hasAccess) {
+    if (!access || !canCreateCompanyProject(access)) {
       return NextResponse.json(
-        { message: "دسترسی به این پروژه مجاز نیست" },
+        { message: "دسترسی به شرکت مجاز نیست" },
         { status: 403 }
       );
     }
@@ -79,7 +84,14 @@ export async function GET(request: NextRequest) {
   const users = await prisma.user.findMany({
     where: {
       isActive: true,
-      role,
+      companyMemberships: {
+        some: {
+          companyId,
+          isActive: true,
+          role: companyRoleByProjectRole[role],
+          company: { status: "ACTIVE" },
+        },
+      },
       ...(q
         ? {
             OR: [

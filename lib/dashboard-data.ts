@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { calculateProjectProgress, type TaskStatusCount } from "@/lib/project-progress";
 import { TASK_CHANGE_PREFIX } from "@/lib/task-change-history";
 import { ASSIGNMENT_PREFIX } from "@/lib/task-assignment-history";
-import { canViewAllProjects, type AppRole } from "@/lib/role-access";
+import type { AppRole } from "@/lib/role-access";
+import { getWorkspaceAccess } from "@/lib/workspace-access";
 
 type DashboardActor = { id: string; role: AppRole };
 
@@ -24,11 +25,27 @@ export async function getDashboardData(actor: DashboardActor) {
   const today = todayInTehran();
   const tomorrow = new Date(today.getTime() + 86400000);
   const nextWeek = new Date(today.getTime() + 7 * 86400000);
+  const workspaceAccess = await getWorkspaceAccess(actor);
+  const managedCompanyIds = workspaceAccess.companyMemberships
+    .filter((membership) =>
+      membership.role === "OWNER" || membership.role === "ADMIN"
+    )
+    .map((membership) => membership.companyId);
+  const visibleProjectsWhere: Prisma.ProjectWhereInput = workspaceAccess.isPlatformAdmin
+    ? {}
+    : {
+        OR: [
+          { members: { some: { userId: actor.id } } },
+          ...(managedCompanyIds.length > 0
+            ? [{ companyId: { in: managedCompanyIds } }]
+            : []),
+        ],
+      };
 
   const projects = await prisma.project.findMany({
     where: {
       archivedAt: null,
-      ...(canViewAllProjects(actor.role) ? {} : { members: { some: { userId: actor.id } } }),
+      ...visibleProjectsWhere,
     },
     select: {
       id: true,
@@ -36,26 +53,34 @@ export async function getDashboardData(actor: DashboardActor) {
       status: true,
       priority: true,
       dueDate: true,
+      companyId: true,
       members: { where: { userId: actor.id }, select: { role: true } },
     },
     orderBy: { updatedAt: "desc" },
   });
 
   const ids = projects.map((project) => project.id);
-  const managedIds = actor.role === "ADMIN"
+  const managedIds = workspaceAccess.isPlatformAdmin
     ? ids
     : projects.filter((project) =>
-      (actor.role === "MANAGER" && project.members.some((member) => member.role === "MANAGER")) ||
-      actor.role === "CONTROLLER"
+      managedCompanyIds.includes(project.companyId) ||
+      (
+        project.members.some((member) => member.role === "MANAGER") &&
+        workspaceAccess.companyMemberships.some(
+          (membership) =>
+            membership.companyId === project.companyId &&
+            membership.role === "PROJECT_MANAGER"
+        )
+      )
     ).map((project) => project.id);
 
-  // The task-level permission matches the existing task API: admins and
-  // project managers see team work; other members see their assignments.
+  // Company owners/admins and project managers see team work only in the
+  // projects they manage. Other members see their own assigned work.
   const taskWhere: Prisma.TaskWhereInput = {
     projectId: { in: ids },
     deletedAt: null,
     project: { archivedAt: null },
-    ...(canViewAllProjects(actor.role) ? {} : {
+    ...(workspaceAccess.isPlatformAdmin ? {} : {
       OR: [
         { projectId: { in: managedIds } },
         { assigneeId: actor.id },
@@ -112,12 +137,12 @@ export async function getDashboardData(actor: DashboardActor) {
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
-    actor.role === "EMPLOYEE" ? Promise.resolve([]) : prisma.task.groupBy({
+    managedIds.length === 0 ? Promise.resolve([]) : prisma.task.groupBy({
       by: ["assigneeId"],
       where: { projectId: { in: managedIds }, deletedAt: null, status: { not: "DONE" } },
       _count: { _all: true },
     }),
-    actor.role === "EMPLOYEE" ? Promise.resolve([]) : prisma.task.groupBy({
+    managedIds.length === 0 ? Promise.resolve([]) : prisma.task.groupBy({
       by: ["assigneeId"],
       where: { projectId: { in: managedIds }, deletedAt: null, status: { not: "DONE" }, dueDate: { lt: today } },
       _count: { _all: true },
@@ -142,6 +167,8 @@ export async function getDashboardData(actor: DashboardActor) {
   return {
     today,
     tomorrow,
+    roleLabel: workspaceAccess.primaryRoleLabel,
+    canManageTeam: managedIds.length > 0,
     metrics: { projects: projects.length, openTasks, overdueTasks, dueSoonTasks, reviewTasks },
     projects: projects.map((project) => ({
       id: project.id,

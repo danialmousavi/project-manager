@@ -17,12 +17,18 @@ const createUserSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.email().trim().toLowerCase(),
   password: z.string().min(10).max(128),
-  role: z.enum(["ADMIN", "MANAGER", "EMPLOYEE", "CONTROLLER"]),
+  role: z.enum(["ADMIN", "EMPLOYEE"]),
+  companyId: z.preprocess((value) => value === "" ? undefined : value, z.uuid().optional()),
+  companyRole: z.enum(["OWNER", "ADMIN", "PROJECT_MANAGER", "EXPERT", "CONTROLLER"]).optional(),
   nationalId: z.string().trim().transform(normalizeNationalId)
     .refine((value) => value === "" || isValidNationalId(value), "کد ملی معتبر نیست")
     .optional(),
   phone: z.string().transform(normalizePhone)
     .refine(isValidIranianMobile, "شماره موبایل معتبر نیست"),
+}).superRefine((value, context) => {
+  if (value.companyId && !value.companyRole) context.addIssue({ code: "custom", message: "نقش شرکتی الزامی است." });
+  if (!value.companyId && value.companyRole) context.addIssue({ code: "custom", message: "نقش شرکتی بدون انتخاب شرکت معتبر نیست." });
+  if (value.role === "ADMIN" && (value.companyId || value.companyRole)) context.addIssue({ code: "custom", message: "مدیر اصلی به شرکت وابسته نیست." });
 });
 
 export async function POST(request: NextRequest) {
@@ -64,19 +70,24 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { name, email, password, role, nationalId, phone } =
+    const { name, email, password, role, companyId, companyRole, nationalId, phone } =
       parsed.data;
 
     const passwordHash = await hashPassword(password);
 
-    const user = await prisma.user.create({
-      data: {
+    const user = await prisma.$transaction(async (tx) => {
+      if (companyId) {
+        const company = await tx.company.findFirst({ where: { id: companyId, status: "ACTIVE" }, select: { id: true } });
+        if (!company) throw new Error("COMPANY_NOT_FOUND");
+      }
+      return tx.user.create({ data: {
         name,
         email,
         nationalId: nationalId || null,
         phone,
         passwordHash,
-        role,
+        role: role === "ADMIN" ? "ADMIN" : "EMPLOYEE",
+        ...(companyId && companyRole ? { companyMemberships: { create: { companyId, role: companyRole } } } : {}),
       },
       select: {
         id: true,
@@ -86,8 +97,9 @@ export async function POST(request: NextRequest) {
         phone: true,
         role: true,
         isActive: true,
-        createdAt: true,
+        createdAt: true, companyMemberships: { select: { role: true, isActive: true, company: { select: { id: true, name: true, status: true } } } },
       },
+      });
     });
 
     return NextResponse.json(
@@ -99,6 +111,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "COMPANY_NOT_FOUND") return NextResponse.json({ message: "شرکت انتخاب‌شده فعال نیست یا وجود ندارد." }, { status: 400 });
     if (
       typeof error === "object" &&
       error !== null &&

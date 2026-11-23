@@ -4,7 +4,6 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
-import { isProjectController } from "@/lib/role-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
 
 type Context = { params: Promise<{ id: string }> };
@@ -103,7 +102,7 @@ export async function GET(_request: NextRequest, context: Context) {
   if (!projectId) return fail("شناسه پروژه معتبر نیست.", 400);
   if (!access) return fail("اجازه مشاهده پروژه را ندارید.", 403);
 
-  const canViewAll = access.canManage || isProjectController(actor.role);
+  const canViewAll = access.canViewAllTasks;
   const visibleTaskFilter = {
     deletedAt: null,
     ...(canViewAll ? {} : { assigneeId: actor.id }),

@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
 import { notifyProjectMembersAdded } from "@/lib/project-notifications";
 
@@ -46,6 +47,15 @@ export async function PUT(
     );
   }
 
+  const access = await getTaskProjectAccess(actor, id);
+
+  if (!access?.canManage) {
+    return NextResponse.json(
+      { message: "اجازه مدیریت اعضای پروژه را ندارید." },
+      { status: 403 }
+    );
+  }
+
   const parsed = schema.safeParse(
     await request.json().catch(() => null)
   );
@@ -82,6 +92,7 @@ export async function PUT(
           where: { id, archivedAt: null },
           select: {
             name: true,
+            companyId: true,
             members: {
               select: {
                 userId: true,
@@ -103,13 +114,7 @@ export async function PUT(
           .sort();
         const controllerIds = requestedControllerIds ?? currentControllers;
 
-        if (actor.role !== "ADMIN") {
-          const allowed =
-            actor.role === "MANAGER" &&
-            currentManagers.includes(actor.id);
-
-          if (!allowed) throw new Error("FORBIDDEN");
-
+        if (!access.canManageSettings) {
           if (
             JSON.stringify([...managerIds].sort()) !==
             JSON.stringify(currentManagers)
@@ -133,28 +138,30 @@ export async function PUT(
         const allIds = [...managerIds, ...memberIds, ...controllerIds];
         const previousMemberIds = project.members.map((member) => member.userId);
 
-        const users = await tx.user.findMany({
+        const companyMembers = await tx.companyMember.findMany({
           where: {
-            id: { in: allIds },
             isActive: true,
+            companyId: project.companyId,
+            userId: { in: allIds },
+            user: { isActive: true },
           },
           select: {
-            id: true,
             role: true,
+            userId: true,
           },
         });
 
         const roles = new Map(
-          users.map((user) => [user.id, user.role])
+          companyMembers.map((member) => [member.userId, member.role])
         );
 
         const valid =
-          users.length === allIds.length &&
+          companyMembers.length === allIds.length &&
           managerIds.every(
-            (userId) => roles.get(userId) === "MANAGER"
+            (userId) => roles.get(userId) === "PROJECT_MANAGER"
           ) &&
           memberIds.every(
-            (userId) => roles.get(userId) === "EMPLOYEE"
+            (userId) => roles.get(userId) === "EXPERT"
           ) &&
           controllerIds.every(
             (userId) => roles.get(userId) === "CONTROLLER"
@@ -180,7 +187,7 @@ export async function PUT(
         await tx.projectMember.deleteMany({
           where: {
             projectId: id,
-            ...(actor.role === "ADMIN"
+            ...(access.canManageSettings
               ? {}
               : { role: "MEMBER" }),
           },
@@ -188,7 +195,7 @@ export async function PUT(
 
         await tx.projectMember.createMany({
           data: [
-            ...(actor.role === "ADMIN"
+            ...(access.canManageSettings
               ? managerIds.map((userId) => ({
                   projectId: id,
                   userId,
@@ -200,7 +207,7 @@ export async function PUT(
               userId,
               role: "MEMBER" as const,
             })),
-            ...(actor.role === "ADMIN"
+            ...(access.canManageSettings
               ? controllerIds.map((userId) => ({
                   projectId: id,
                   userId,
@@ -239,9 +246,9 @@ export async function PUT(
       NOT_FOUND: "پروژه یافت نشد.",
       FORBIDDEN: "اجازه مدیریت اعضای پروژه را ندارید.",
       MANAGER_CHANGE_FORBIDDEN:
-        "فقط مدیر اصلی می‌تواند مدیران پروژه را تغییر دهد.",
+        "فقط مدیر اصلی یا مدیر شرکت می‌تواند مدیران پروژه را تغییر دهد.",
       CONTROLLER_CHANGE_FORBIDDEN:
-        "فقط مدیر اصلی می‌تواند ناظران کنترل پروژه را تغییر دهد.",
+        "فقط مدیر اصلی یا مدیر شرکت می‌تواند ناظران کنترل پروژه را تغییر دهد.",
       NO_MANAGER: "حداقل یک مدیر پروژه الزامی است.",
       INVALID_MEMBERS:
         "کاربران انتخاب‌شده معتبر نیستند.",

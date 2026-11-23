@@ -73,6 +73,7 @@ async function UsersContent() {
     ...user,
     createdAt: user.createdAt.toISOString(),
   }));
+  const companies = await prisma.company.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } });
 
   return (
     <>
@@ -95,7 +96,7 @@ async function UsersContent() {
         <PageGuide guide={pageGuides.users} />
       </div>
 
-      <UsersManager initialUsers={serializedUsers} />
+      <UsersManager initialUsers={serializedUsers} companies={companies} />
     </>
   );
 }

@@ -13,7 +13,6 @@ import {
   calculateProjectProgress,
   type TaskStatusCount,
 } from "@/lib/project-progress";
-import { canViewAllProjects } from "@/lib/role-access";
 import { pageGuides } from "@/lib/page-guides";
 
 import ProjectsManager from "@/components/projects/projects-manager";
@@ -42,17 +41,48 @@ async function ProjectsContent() {
     redirect("/login");
   }
 
+  const createCompanies = user.role === "ADMIN"
+    ? await prisma.company.findMany({
+        where: { status: "ACTIVE" },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : await prisma.companyMember.findMany({
+        where: {
+          userId: user.id,
+          isActive: true,
+          role: { in: ["OWNER", "ADMIN", "PROJECT_MANAGER"] },
+          company: { status: "ACTIVE" },
+        },
+        select: {
+          company: {
+            select: { id: true, name: true },
+          },
+        },
+        orderBy: { company: { name: "asc" } },
+      }).then((memberships) => memberships.map((membership) => membership.company));
+
   const projects = await prisma.project.findMany({
     where: {
       archivedAt: null,
-      ...(canViewAllProjects(user.role)
+      ...(user.role === "ADMIN"
         ? {}
         : {
-            members: {
-              some: {
-                userId: user.id,
+            OR: [
+              { members: { some: { userId: user.id } } },
+              {
+                company: {
+                  status: "ACTIVE",
+                  members: {
+                    some: {
+                      userId: user.id,
+                      isActive: true,
+                      role: { in: ["OWNER", "ADMIN"] },
+                    },
+                  },
+                },
               },
-            },
+            ],
           }),
     },
     orderBy: {
@@ -65,6 +95,12 @@ async function ProjectsContent() {
       status: true,
       priority: true,
       createdAt: true,
+      company: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
 
       members: {
         select: {
@@ -167,7 +203,9 @@ async function ProjectsContent() {
 
       <ProjectsManager
         initialProjects={serializedProjects}
-        canCreate={user.role === "ADMIN"}
+        canCreate={createCompanies.length > 0}
+        createCompanies={createCompanies}
+        canFilterByCompany={user.role === "ADMIN"}
       />
     </>
   );

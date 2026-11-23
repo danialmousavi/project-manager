@@ -38,10 +38,21 @@ async function GanttContent({ params }: Props) {
     where: { id, archivedAt: null },
     select: {
       id: true,
+      companyId: true,
       members: {
         select: {
           role: true,
-          user: { select: { id: true, name: true, role: true } },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+              companyMemberships: {
+                where: { isActive: true },
+                select: { companyId: true, role: true },
+              },
+            },
+          },
         },
       },
     },
@@ -51,10 +62,19 @@ async function GanttContent({ params }: Props) {
   return (
     <SprintsManager
       projectId={project.id}
-      members={project.members}
-      actorRole={actor.role}
+      members={project.members.map((member) => ({
+        role: member.role,
+        user: {
+          id: member.user.id,
+          name: member.user.name,
+          role: member.user.role,
+          companyRole: member.user.companyMemberships.find(
+            (membership) => membership.companyId === project.companyId,
+          )?.role ?? null,
+        },
+      }))}
       canManage={access.canManage}
-      canDelete={actor.role === "ADMIN"}
+      canDelete={access.canManage}
       view="GANTT"
     />
   );

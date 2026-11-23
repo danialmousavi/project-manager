@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
-import { isProjectController, type AppRole } from "@/lib/role-access";
+import type { AppRole } from "@/lib/role-access";
 import { notifyTaskCommented } from "@/lib/task-notifications";
 
 import {
@@ -53,7 +53,8 @@ async function accessibleTask(
 
   return {
     task,
-    canComment: access.canManage || task.assigneeId === actor.id,
+    isProjectController: access.isProjectController,
+    canComment: !access.isProjectController && (access.canManage || task.assigneeId === actor.id),
   };
 }
 
@@ -152,13 +153,6 @@ export async function POST(
     );
   }
 
-  if (isProjectController(actor.role)) {
-    return NextResponse.json(
-      { message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." },
-      { status: 403 }
-    );
-  }
-
   const { id } = await context.params;
 
   if (!z.uuid().safeParse(id).success) {
@@ -169,6 +163,12 @@ export async function POST(
   }
 
   const permitted = await accessibleTask(actor, id);
+  if (permitted?.isProjectController) {
+    return NextResponse.json(
+      { message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." },
+      { status: 403 }
+    );
+  }
   if (!permitted?.canComment) {
     return NextResponse.json(
       { message: "اجازه ثبت کامنت ندارید." },

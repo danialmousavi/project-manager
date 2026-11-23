@@ -28,6 +28,7 @@ type Props = {
   selected: SelectableUser[];
   onChange: (users: SelectableUser[]) => void;
   projectId?: string;
+  companyId?: string;
   placeholder?: string;
   disabled?: boolean;
 };
@@ -38,6 +39,7 @@ export default function UserMultiSelect({
   selected,
   onChange,
   projectId,
+  companyId,
   placeholder = "انتخاب کاربران...",
   disabled = false,
 }: Props) {
@@ -111,6 +113,10 @@ export default function UserMultiSelect({
         params.set("projectId", projectId);
       }
 
+      if (companyId) {
+        params.set("companyId", companyId);
+      }
+
       try {
         const response = await fetch(
           `/api/v1/users/search?${params.toString()}`,
@@ -152,7 +158,7 @@ export default function UserMultiSelect({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [open, query, role, projectId]);
+  }, [open, query, role, projectId, companyId]);
 
   function toggleUser(user: SelectableUser) {
     if (selected.some((item) => item.id === user.id)) {

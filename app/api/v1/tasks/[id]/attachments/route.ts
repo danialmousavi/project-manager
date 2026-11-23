@@ -4,7 +4,6 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isProjectController } from "@/lib/role-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
 import {
   createAttachmentStorageKey,
@@ -34,7 +33,12 @@ async function taskAccess(actor: NonNullable<Awaited<ReturnType<typeof getCurren
   const access = await getTaskProjectAccess(actor, task.projectId);
   if (!access) return null;
 
-  return { task, canManage: access.canManage, canUpload: access.canManage || task.assigneeId === actor.id };
+  return {
+    task,
+    canManage: access.canManage,
+    isProjectController: access.isProjectController,
+    canUpload: !access.isProjectController && (access.canManage || task.assigneeId === actor.id),
+  };
 }
 
 function attachmentResponse(attachment: {
@@ -84,10 +88,10 @@ export async function GET(_request: NextRequest, context: Context) {
 
   return NextResponse.json({
     success: true,
-    canUpload: permitted.canUpload && !isProjectController(actor.role),
+    canUpload: permitted.canUpload,
     attachments: attachments.map((attachment) => attachmentResponse(
       attachment,
-      !isProjectController(actor.role) && (
+      !permitted.isProjectController && (
         permitted.canManage || (
           permitted.task.assigneeId === actor.id &&
           attachment.uploadedBy.id === actor.id
@@ -101,12 +105,11 @@ export async function POST(request: NextRequest, context: Context) {
   const actor = await getCurrentUser();
   if (!actor) return NextResponse.json({ message: "ابتدا وارد حساب شوید." }, { status: 401 });
   if (!isAllowedOrigin(request)) return NextResponse.json({ message: "درخواست نامعتبر است." }, { status: 403 });
-  if (isProjectController(actor.role)) return NextResponse.json({ message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." }, { status: 403 });
-
   const { id } = await context.params;
   if (!z.uuid().safeParse(id).success) return NextResponse.json({ message: "شناسه تسک نامعتبر است." }, { status: 400 });
 
   const permitted = await taskAccess(actor, id);
+  if (permitted?.isProjectController) return NextResponse.json({ message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." }, { status: 403 });
   if (!permitted?.canUpload) return NextResponse.json({ message: "اجازه بارگذاری فایل را ندارید." }, { status: 403 });
 
   const formData = await request.formData().catch(() => null);

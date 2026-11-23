@@ -1,6 +1,10 @@
 import "server-only";
 
-import type { CompanyMemberRole } from "@/generated/prisma/client";
+import {
+  canCreateCompanyProjectRole,
+  canManageCompanyRole,
+  type EffectiveRole,
+} from "@/lib/access-policy";
 import { prisma } from "@/lib/prisma";
 import type { AppRole } from "@/lib/role-access";
 
@@ -11,7 +15,7 @@ export type CompanyActor = {
 
 export type CompanyAccess = {
   companyId: string;
-  role: CompanyMemberRole | "PLATFORM_ADMIN";
+  role: EffectiveRole;
   isPlatformAdmin: boolean;
 };
 
@@ -50,9 +54,9 @@ export async function getCompanyAccess(
 }
 
 export function canManageCompany(access: CompanyAccess) {
-  return access.isPlatformAdmin || access.role === "OWNER" || access.role === "ADMIN";
+  return canManageCompanyRole(access.role);
 }
 
 export function canCreateCompanyProject(access: CompanyAccess) {
-  return canManageCompany(access) || access.role === "PROJECT_MANAGER";
+  return canCreateCompanyProjectRole(access.role);
 }

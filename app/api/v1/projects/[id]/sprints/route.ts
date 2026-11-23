@@ -225,7 +225,7 @@ export async function GET(
         success: true,
         canManage: access.canManage,
         actorId: actor.id,
-        canDelete: actor.role === "ADMIN",
+        canDelete: access.canManage,
         sprints: sprints.map((sprint) => ({
           ...sprint,
           startDate: asIso(sprint.startDate),
@@ -849,12 +849,9 @@ export async function DELETE(
     return fail("شناسه پروژه نامعتبر است.", 400);
   }
 
-  if (
-    actor.role !== "ADMIN" ||
-    !access?.canManage
-  ) {
+  if (!access?.canManage) {
     return fail(
-      "فقط مدیر اصلی می‌تواند اسپرینت را حذف کند.",
+      "اجازه حذف اسپرینت را ندارید.",
       403
     );
   }

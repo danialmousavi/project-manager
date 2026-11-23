@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isProjectController } from "@/lib/role-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
 import { deleteAttachmentObject } from "@/lib/task-attachments";
 import { getTaskProjectAccess } from "@/lib/task-access";
@@ -19,8 +18,6 @@ export async function PATCH(request: NextRequest, context: Context) {
   const actor = await getCurrentUser();
   if (!actor) return NextResponse.json({ message: "ابتدا وارد حساب شوید." }, { status: 401 });
   if (!isAllowedOrigin(request)) return NextResponse.json({ message: "درخواست نامعتبر است." }, { status: 403 });
-  if (isProjectController(actor.role)) return NextResponse.json({ message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." }, { status: 403 });
-
   const { id } = await context.params;
   if (!z.uuid().safeParse(id).success) return NextResponse.json({ message: "شناسه پیوست نامعتبر است." }, { status: 400 });
 
@@ -34,6 +31,7 @@ export async function PATCH(request: NextRequest, context: Context) {
   if (!attachment || attachment.task.deletedAt) return NextResponse.json({ message: "پیوست پیدا نشد." }, { status: 404 });
 
   const access = await getTaskProjectAccess(actor, attachment.task.projectId);
+  if (access?.isProjectController) return NextResponse.json({ message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." }, { status: 403 });
   const canEdit = access && (
     access.canManage || (
       attachment.task.assigneeId === actor.id &&
@@ -58,8 +56,6 @@ export async function DELETE(request: NextRequest, context: Context) {
   const actor = await getCurrentUser();
   if (!actor) return NextResponse.json({ message: "ابتدا وارد حساب شوید." }, { status: 401 });
   if (!isAllowedOrigin(request)) return NextResponse.json({ message: "درخواست نامعتبر است." }, { status: 403 });
-  if (isProjectController(actor.role)) return NextResponse.json({ message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." }, { status: 403 });
-
   const { id } = await context.params;
   if (!z.uuid().safeParse(id).success) return NextResponse.json({ message: "شناسه پیوست نامعتبر است." }, { status: 400 });
 
@@ -70,6 +66,7 @@ export async function DELETE(request: NextRequest, context: Context) {
   if (!attachment || attachment.task.deletedAt) return NextResponse.json({ message: "پیوست پیدا نشد." }, { status: 404 });
 
   const access = await getTaskProjectAccess(actor, attachment.task.projectId);
+  if (access?.isProjectController) return NextResponse.json({ message: "ناظر کنترل پروژه فقط دسترسی مشاهده دارد." }, { status: 403 });
   const canDelete = access && (
     access.canManage || (
       attachment.task.assigneeId === actor.id &&

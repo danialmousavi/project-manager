@@ -438,6 +438,7 @@ export async function PATCH(
             parentTaskId: true,
             priority: true,
             status: true,
+            project: { select: { companyId: true } },
             startDate: true,
             dueDate: true,
             sprintId: true,
@@ -466,16 +467,16 @@ export async function PATCH(
                 user: {
                   isActive: true,
                 },
-                ...(actor.role === "ADMIN"
-                  ? {}
-                  : { role: "MEMBER" }),
               },
               select: {
                 role: true,
                 user: {
                   select: {
                     name: true,
-                    role: true,
+                    companyMemberships: {
+                      where: { isActive: true },
+                      select: { companyId: true, role: true },
+                    },
                   },
                 },
               },
@@ -485,9 +486,15 @@ export async function PATCH(
             member &&
             (
               (member.role === "MANAGER" &&
-                member.user.role === "MANAGER") ||
+                member.user.companyMemberships.some((membership) =>
+                  membership.companyId === current.project.companyId &&
+                  membership.role === "PROJECT_MANAGER"
+                )) ||
               (member.role === "MEMBER" &&
-                member.user.role === "EMPLOYEE")
+                member.user.companyMemberships.some((membership) =>
+                  membership.companyId === current.project.companyId &&
+                  membership.role === "EXPERT"
+                ))
             );
 
           if (!allowed) {
@@ -745,9 +752,32 @@ export async function DELETE(
     );
   }
 
-  if (actor.role !== "ADMIN") {
+  const { id } = await context.params;
+
+  if (!z.uuid().safeParse(id).success) {
     return NextResponse.json(
-      { message: "فقط مدیر اصلی می‌تواند تسک را حذف کند." },
+      { message: "شناسه تسک نامعتبر است." },
+      { status: 400 }
+    );
+  }
+
+  const task = await prisma.task.findFirst({
+    where: { id, deletedAt: null, project: { archivedAt: null } },
+    select: { projectId: true },
+  });
+
+  if (!task) {
+    return NextResponse.json(
+      { message: "تسک یافت نشد." },
+      { status: 404 }
+    );
+  }
+
+  const access = await getTaskProjectAccess(actor, task.projectId);
+
+  if (!access?.canManage) {
+    return NextResponse.json(
+      { message: "اجازه حذف تسک را ندارید." },
       { status: 403 }
     );
   }
@@ -756,15 +786,6 @@ export async function DELETE(
     return NextResponse.json(
       { message: "درخواست نامعتبر است." },
       { status: 403 }
-    );
-  }
-
-  const { id } = await context.params;
-
-  if (!z.uuid().safeParse(id).success) {
-    return NextResponse.json(
-      { message: "شناسه تسک نامعتبر است." },
-      { status: 400 }
     );
   }
 

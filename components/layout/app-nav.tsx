@@ -31,19 +31,36 @@ const projectTabs = [
 ];
 
 export default function AppNav({
-  role,
+  isPlatformAdmin,
+  manageableCompanies,
   projects,
   variant = "horizontal",
   onNavigate,
 }: {
-  role: "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
-  projects: { id: string; name: string }[];
+  isPlatformAdmin: boolean;
+  manageableCompanies: { id: string; name: string }[];
+  projects: { id: string; name: string; company: { id: string; name: string } }[];
   variant?: "horizontal" | "sidebar";
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({});
+  const projectsByCompany = projects.reduce<Record<string, { id: string; name: string; projects: typeof projects }>>(
+    (groups, project) => {
+      const group = groups[project.company.id] ?? {
+        id: project.company.id,
+        name: project.company.name,
+        projects: [],
+      };
+      group.projects.push(project);
+      groups[project.company.id] = group;
+      return groups;
+    },
+    {},
+  );
+  const companyGroups = Object.values(projectsByCompany);
   const sections = [
     {
       label: "فضای کاری",
@@ -51,7 +68,7 @@ export default function AppNav({
         { href: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
       ],
     },
-    ...(role === "ADMIN"
+    ...(isPlatformAdmin
       ? [
           {
             label: "مدیریت سازمان",
@@ -59,6 +76,18 @@ export default function AppNav({
               { href: "/companies", label: "شرکت‌ها", icon: Building2 },
               { href: "/users", label: "کاربران", icon: UsersRound },
             ],
+          },
+        ]
+      : []),
+    ...(!isPlatformAdmin && manageableCompanies.length > 0
+      ? [
+          {
+            label: "مدیریت شرکت",
+            links: manageableCompanies.map((company) => ({
+              href: `/companies/${company.id}/members`,
+              label: company.name,
+              icon: Building2,
+            })),
           },
         ]
       : []),
@@ -135,6 +164,56 @@ export default function AppNav({
           <div id="sidebar-project-list" className="mr-4 max-h-60 space-y-0.5 overflow-y-auto border-r border-[var(--border)] py-1 pr-2 [scrollbar-width:thin]">
             {projects.length === 0 ? (
               <p className="px-2 py-1 text-[11px] leading-5 text-[var(--muted)]">پروژه‌ای برای نمایش ندارید.</p>
+            ) : isPlatformAdmin ? (
+              <>
+                <p className="px-2 pb-1 pt-1 text-[10px] font-extrabold tracking-wide text-[var(--muted)]">
+                  شرکت‌ها
+                </p>
+                {companyGroups.map((company) => {
+                const companyHasActiveProject = company.projects.some((project) => {
+                  const href = `/projects/${project.id}`;
+                  return pathname === href || pathname.startsWith(`${href}/`);
+                });
+                const companyOpen = expandedCompanies[company.id] ?? companyHasActiveProject;
+                const companyNavigationId = `company-projects-${company.id}`;
+
+                return (
+                  <div key={company.id} className="py-0.5">
+                    <button
+                      type="button"
+                      aria-expanded={companyOpen}
+                      aria-controls={companyNavigationId}
+                      onClick={() => setExpandedCompanies((current) => ({
+                        ...current,
+                        [company.id]: !(current[company.id] ?? companyHasActiveProject),
+                      }))}
+                      className="flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2 text-right text-xs font-bold text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700"
+                    >
+                      <span className="min-w-0 truncate">{company.name}</span>
+                      <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-[var(--muted)]">
+                        {company.projects.length.toLocaleString("fa-IR")}
+                        <ChevronDown size={14} className={`transition-transform ${companyOpen ? "rotate-0" : "-rotate-90"}`} />
+                      </span>
+                    </button>
+
+                    {companyOpen && (
+                      <div id={companyNavigationId} className="mr-2 space-y-0.5 border-r border-emerald-200 pr-2">
+                        {company.projects.map((project) => (
+                          <ProjectNavigation
+                            key={project.id}
+                            project={project}
+                            pathname={pathname}
+                            expandedProjects={expandedProjects}
+                            setExpandedProjects={setExpandedProjects}
+                            onNavigate={onNavigate}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+                })}
+              </>
             ) : (
               projects.map((project) => {
                 const href = `/projects/${project.id}`;
@@ -201,5 +280,46 @@ export default function AppNav({
         )}
       </div>
     </nav>
+  );
+}
+
+function ProjectNavigation({
+  project,
+  pathname,
+  expandedProjects,
+  setExpandedProjects,
+  onNavigate,
+}: {
+  project: { id: string; name: string };
+  pathname: string;
+  expandedProjects: Record<string, boolean>;
+  setExpandedProjects: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  onNavigate?: () => void;
+}) {
+  const href = `/projects/${project.id}`;
+  const active = pathname === href || pathname.startsWith(`${href}/`);
+  const projectOpen = expandedProjects[project.id] ?? active;
+  const projectNavigationId = `project-navigation-${project.id}`;
+
+  return (
+    <div>
+      <div className={`flex min-h-9 items-center rounded-lg text-xs font-semibold transition-colors ${active ? "bg-emerald-50 text-emerald-800" : "text-[var(--muted)] hover:bg-slate-50 hover:text-emerald-700"}`}>
+        <Link href={href} onClick={onNavigate} aria-current={active ? "page" : undefined} title={project.name} className="min-w-0 flex-1 truncate px-2 py-2">
+          {project.name}
+        </Link>
+        <button type="button" aria-label={`${projectOpen ? "بستن" : "باز کردن"} زیرمنوی ${project.name}`} aria-expanded={projectOpen} aria-controls={projectNavigationId} onClick={() => setExpandedProjects((current) => ({ ...current, [project.id]: !(current[project.id] ?? active) }))} className="m-1 rounded-md p-1 text-current/70 hover:bg-white/70 hover:text-emerald-700">
+          <ChevronDown aria-hidden="true" size={14} className={`transition-transform duration-200 ${projectOpen ? "rotate-0" : "-rotate-90"}`} />
+        </button>
+      </div>
+      {projectOpen && (
+        <div id={projectNavigationId} className="mr-3 mt-1 space-y-0.5 border-r border-emerald-200 pr-2">
+          {projectTabs.map(({ suffix, label, icon: Icon }) => {
+            const tabHref = `${href}${suffix}`;
+            const tabActive = pathname === tabHref;
+            return <Link key={tabHref} href={tabHref} onClick={onNavigate} aria-current={tabActive ? "page" : undefined} className={`flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold transition-colors ${tabActive ? "bg-emerald-600 text-white" : "text-[var(--muted)] hover:bg-emerald-50 hover:text-emerald-700"}`}><Icon aria-hidden="true" size={13} />{label}</Link>;
+          })}
+        </div>
+      )}
+    </div>
   );
 }

@@ -73,4 +73,27 @@ describe("dashboard visibility and accuracy", () => {
     expect(data.projects[0].overdue).toBe(1);
     expect(data.workload).toEqual([expect.objectContaining({ id: employee.id, count: 1, overdue: 1 })]);
   });
+
+  it("scopes an owner dashboard to every project in their company only", async () => {
+    const owner = await userFactory(db, "EMPLOYEE");
+    const projectManager = await userFactory(db, "MANAGER");
+    const otherAdmin = await userFactory(db, "ADMIN");
+    const otherManager = await userFactory(db, "MANAGER");
+    const companyProject = await projectFactory(db, owner.id, projectManager.id);
+    const foreignProject = await projectFactory(db, otherAdmin.id, otherManager.id);
+    const visibleTask = await taskFactory(db, companyProject.id, owner.id, { assigneeId: projectManager.id });
+    const hiddenTask = await taskFactory(db, foreignProject.id, otherAdmin.id, { assigneeId: otherManager.id });
+
+    const data = await getDashboardData(owner);
+
+    expect(data.roleLabel).toBe("مالک شرکت");
+    expect(data.canManageTeam).toBe(true);
+    expect(data.metrics.projects).toBe(1);
+    expect(data.metrics.openTasks).toBe(1);
+    expect(data.projects.map((project) => project.id)).toEqual([companyProject.id]);
+    expect(data.workload).toEqual([expect.objectContaining({ id: projectManager.id, count: 1 })]);
+    expect(data.myTasks).not.toContainEqual(expect.objectContaining({ id: visibleTask.id }));
+    expect(data.projects).not.toContainEqual(expect.objectContaining({ id: foreignProject.id }));
+    expect(hiddenTask.id).toBeTruthy();
+  });
 });

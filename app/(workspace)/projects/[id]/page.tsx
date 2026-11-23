@@ -12,7 +12,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateProjectProgress } from "@/lib/project-progress";
-import { canViewAllProjects } from "@/lib/role-access";
+import { getTaskProjectAccess } from "@/lib/task-access";
 import ProjectDetails from "@/components/projects/project-details";
 
 type Props = {
@@ -56,19 +56,16 @@ async function Content({ params }: Props) {
     notFound();
   }
 
+  const access = await getTaskProjectAccess(user, id);
+
+  if (!access) {
+    notFound();
+  }
+
   const project = await prisma.project.findFirst({
     where: {
       id,
       archivedAt: null,
-      ...(canViewAllProjects(user.role)
-        ? {}
-        : {
-            members: {
-              some: {
-                userId: user.id,
-              },
-            },
-          }),
     },
     select: {
       id: true,
@@ -105,17 +102,6 @@ async function Content({ params }: Props) {
   if (!project) {
     notFound();
   }
-
-  const canManage =
-    user.role === "ADMIN" ||
-    (
-      user.role === "MANAGER" &&
-      project.members.some(
-        (member) =>
-          member.user.id === user.id &&
-          member.role === "MANAGER"
-      )
-    );
 
   // Count ALL project tasks regardless of the viewer's role
   // or the sprint each task belongs to.
@@ -170,8 +156,8 @@ async function Content({ params }: Props) {
       <ProjectDetails
         project={serializedProject}
         taskStats={taskStats}
-        canEdit={canManage}
-        actorRole={user.role}
+        canEdit={access.canChangeStatus}
+        canManageSettings={access.canManageSettings}
       />
     </>
   );

@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
+import { canCreateCompanyProject, getCompanyAccess } from "@/lib/company-access";
 import { prisma } from "@/lib/prisma";
 import { isAllowedOrigin } from "@/lib/security/origin";
 
 const schema = z.object({
+  companyId: z.uuid(),
   name: z.string().trim().min(3).max(150),
   description: z.string().trim().max(3000),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
@@ -30,13 +32,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { message: "ابتدا وارد حساب شوید." },
       { status: 401 }
-    );
-  }
-
-  if (actor.role !== "ADMIN") {
-    return NextResponse.json(
-      { message: "فقط مدیر اصلی می‌تواند پروژه ایجاد کند." },
-      { status: 403 }
     );
   }
 
@@ -88,45 +83,58 @@ export async function POST(request: NextRequest) {
   const ids = [...managerIds, ...memberIds, ...controllerIds];
 
   try {
-    const companyMembership = await prisma.companyMember.findFirst({
-      where: {
-        userId: actor.id,
-        isActive: true,
-        company: { status: "ACTIVE" },
-      },
-      orderBy: { joinedAt: "asc" },
-      select: { companyId: true },
+    const company = await prisma.company.findUnique({
+      where: { id: data.companyId },
+      select: { status: true },
     });
 
-    if (!companyMembership) {
+    if (!company) {
       return NextResponse.json(
-        { message: "حساب مدیر اصلی به هیچ شرکت فعالی متصل نیست." },
+        { message: "شرکت انتخاب‌شده پیدا نشد." },
+        { status: 404 }
+      );
+    }
+
+    if (company.status !== "ACTIVE") {
+      return NextResponse.json(
+        { message: "برای شرکت تعلیق‌شده نمی‌توان پروژه ایجاد کرد." },
         { status: 409 }
       );
     }
 
-    const users = await prisma.user.findMany({
+    const access = await getCompanyAccess(actor, data.companyId);
+
+    if (!access || !canCreateCompanyProject(access)) {
+      return NextResponse.json(
+        { message: "اجازه ایجاد پروژه برای این شرکت را ندارید." },
+        { status: 403 }
+      );
+    }
+
+    const companyMembers = await prisma.companyMember.findMany({
       where: {
-        id: { in: ids },
         isActive: true,
+        companyId: data.companyId,
+        userId: { in: ids },
+        user: { isActive: true },
       },
       select: {
-        id: true,
         role: true,
+        userId: true,
       },
     });
 
     const roles = new Map(
-      users.map((user) => [user.id, user.role])
+      companyMembers.map((member) => [member.userId, member.role])
     );
 
     const valid =
-      users.length === ids.length &&
+      companyMembers.length === ids.length &&
       managerIds.every(
-        (id) => roles.get(id) === "MANAGER"
+        (id) => roles.get(id) === "PROJECT_MANAGER"
       ) &&
       memberIds.every(
-        (id) => roles.get(id) === "EMPLOYEE"
+        (id) => roles.get(id) === "EXPERT"
       ) &&
       controllerIds.every(
         (id) => roles.get(id) === "CONTROLLER"
@@ -134,7 +142,7 @@ export async function POST(request: NextRequest) {
 
     if (!valid) {
       return NextResponse.json(
-        { message: "مدیران یا کارمندان انتخاب‌شده معتبر نیستند." },
+        { message: "اعضای انتخاب‌شده باید نقش متناسب و عضویت فعال در همین شرکت داشته باشند." },
         { status: 400 }
       );
     }
@@ -148,10 +156,13 @@ export async function POST(request: NextRequest) {
         progress: 0,
         startDate: toDate(data.startDate),
         dueDate: toDate(data.dueDate),
-        companyId: companyMembership.companyId,
+        companyId: data.companyId,
         createdById: actor.id,
         members: {
           create: [
+            ...(!access.isPlatformAdmin && !managerIds.includes(actor.id)
+              ? [{ userId: actor.id, role: "MANAGER" as const }]
+              : []),
             ...managerIds.map((userId) => ({
               userId,
               role: "MANAGER" as const,

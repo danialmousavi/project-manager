@@ -269,16 +269,17 @@ export async function POST(
               projectId: id,
               userId: data.assigneeId,
               user: { isActive: true },
-              ...(actor.role === "ADMIN"
-                ? {}
-                : { role: "MEMBER" }),
             },
             select: {
               role: true,
+              project: { select: { companyId: true } },
               user: {
                 select: {
                   name: true,
-                  role: true,
+                  companyMemberships: {
+                    where: { isActive: true },
+                    select: { companyId: true, role: true },
+                  },
                 },
               },
             },
@@ -288,9 +289,15 @@ export async function POST(
           member &&
           (
             (member.role === "MANAGER" &&
-              member.user.role === "MANAGER") ||
+              member.user.companyMemberships.some((membership) =>
+                membership.companyId === member.project.companyId &&
+                membership.role === "PROJECT_MANAGER"
+              )) ||
             (member.role === "MEMBER" &&
-              member.user.role === "EMPLOYEE")
+              member.user.companyMemberships.some((membership) =>
+                membership.companyId === member.project.companyId &&
+                membership.role === "EXPERT"
+              ))
           );
 
         if (!valid) {

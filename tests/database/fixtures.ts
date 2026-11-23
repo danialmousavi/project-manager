@@ -25,6 +25,25 @@ export async function projectFactory(
     data: { name: `Audit company ${randomUUID()}` },
   });
 
+  const users = await db.user.findMany({
+    where: { id: { in: [...new Set([creatorId, managerId, ...memberIds])] } },
+    select: { id: true, role: true },
+  });
+
+  await db.companyMember.createMany({
+    data: users.map((user) => ({
+      companyId: company.id,
+      userId: user.id,
+      role: user.id === creatorId
+        ? "OWNER" as const
+        : user.role === "MANAGER"
+          ? "PROJECT_MANAGER" as const
+          : user.role === "CONTROLLER"
+            ? "CONTROLLER" as const
+            : "EXPERT" as const,
+    })),
+  });
+
   return db.project.create({
     data: {
       name: `Audit project ${randomUUID()}`,

@@ -52,6 +52,7 @@ async function TasksContent({ params }: Props) {
     },
     select: {
       id: true,
+      companyId: true,
       members: {
         select: {
           role: true,
@@ -60,6 +61,10 @@ async function TasksContent({ params }: Props) {
               id: true,
               name: true,
               role: true,
+              companyMemberships: {
+                where: { isActive: true },
+                select: { companyId: true, role: true },
+              },
             },
           },
         },
@@ -82,9 +87,18 @@ async function TasksContent({ params }: Props) {
 
       <ProjectTasks
         projectId={project.id}
-        members={project.members}
+        members={project.members.map((member) => ({
+          role: member.role,
+          user: {
+            id: member.user.id,
+            name: member.user.name,
+            role: member.user.role,
+            companyRole: member.user.companyMemberships.find(
+              (membership) => membership.companyId === project.companyId,
+            )?.role ?? null,
+          },
+        }))}
         canManage={access.canManage}
-        actorRole={actor.role}
         actorId={actor.id}
       />
     </div>

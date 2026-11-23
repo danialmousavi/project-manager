@@ -19,12 +19,6 @@ import { getDashboardData } from "@/lib/dashboard-data";
 import { pageGuides } from "@/lib/page-guides";
 import PageGuide from "@/components/ui/page-guide";
 
-const roles = {
-  ADMIN: "مدیر اصلی",
-  MANAGER: "مدیر پروژه",
-  EMPLOYEE: "کارشناس عملیاتی",
-  CONTROLLER: "ناظر کنترل پروژه",
-};
 const statuses = {
   TODO: "در انتظار",
   IN_PROGRESS: "در حال انجام",
@@ -68,7 +62,7 @@ async function Content() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const data = await getDashboardData(user);
-  const isManager = user.role !== "EMPLOYEE";
+  const isManager = data.canManageTeam;
   const metrics = [
     {
       label: "پروژه‌های در دسترس",
@@ -77,11 +71,7 @@ async function Content() {
     },
     {
       label:
-        user.role === "ADMIN"
-          ? "وظایف باز تیم"
-          : user.role === "MANAGER"
-            ? "وظایف باز قابل پیگیری"
-            : "وظایف باز من",
+        data.canManageTeam ? "وظایف باز قابل پیگیری" : "وظایف باز من",
       value: data.metrics.openTasks,
       icon: ListTodo,
     },
@@ -114,7 +104,7 @@ async function Content() {
               سلام، {user.name}
             </h1>
             <p className="mt-1 text-xs text-[var(--muted)] sm:text-sm">
-              نمای امروز · {roles[user.role]} · {dateLabel(data.today)}
+              نمای امروز · {data.roleLabel} · {dateLabel(data.today)}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">

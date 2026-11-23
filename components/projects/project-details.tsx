@@ -35,7 +35,7 @@ import PersianDatePicker from "@/components/ui/persian-date-picker";
 import PageGuide from "@/components/ui/page-guide";
 import { pageGuides } from "@/lib/page-guides";
 
-type Role = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
+type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "CONTROLLER";
 
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 
@@ -58,7 +58,7 @@ type Member = {
   user: {
     id: string;
     name: string;
-    role: Role;
+    role: UserRole;
   };
 };
 
@@ -85,7 +85,7 @@ type Props = {
   project: Project;
   taskStats: TaskStats;
   canEdit: boolean;
-  actorRole: Role;
+  canManageSettings: boolean;
 };
 
 const statusLabels: Record<Status, string> = {
@@ -137,11 +137,11 @@ export default function ProjectDetails({
   project,
   taskStats,
   canEdit,
-  actorRole,
+  canManageSettings,
 }: Props) {
   const router = useRouter();
 
-  const isAdmin = actorRole === "ADMIN";
+  const canManageProjectSettings = canManageSettings;
 
   const [name, setName] = useState(project.name);
 
@@ -368,7 +368,7 @@ export default function ProjectDetails({
     if (!canEdit || busy) return;
 
     if (
-      isAdmin &&
+      canManageProjectSettings &&
       startDate &&
       dueDate &&
       startDate > dueDate
@@ -387,7 +387,7 @@ export default function ProjectDetails({
       await sendRequest(
         `/api/v1/projects/${project.id}`,
         "PATCH",
-        isAdmin
+        canManageProjectSettings
           ? {
               name,
               description,
@@ -540,10 +540,10 @@ export default function ProjectDetails({
                 <ChevronDown aria-hidden="true" size={18} className="mr-auto text-[var(--muted)] transition-transform group-open:rotate-180" />
               </summary>
 
-            {!isAdmin && (
+            {!canManageProjectSettings && (
               <p className="mt-1 text-xs leading-6 text-slate-500">
                 نام، توضیحات، اولویت و تاریخ‌های
-                پروژه فقط توسط مدیر اصلی تنظیم
+                پروژه فقط توسط مدیر اصلی یا مدیر شرکت تنظیم
                 می‌شوند.
                 {canEdit
                   ? " شما می‌توانید وضعیت پروژه را تغییر دهید."
@@ -559,7 +559,7 @@ export default function ProjectDetails({
                 <input
                   className={inputClass}
                   value={name}
-                  disabled={!isAdmin}
+                  disabled={!canManageProjectSettings}
                   required
                   minLength={3}
                   maxLength={150}
@@ -574,7 +574,7 @@ export default function ProjectDetails({
                   className={inputClass}
                   rows={2}
                   maxLength={3000}
-                  disabled={!isAdmin}
+                  disabled={!canManageProjectSettings}
                   value={description}
                   onChange={(event) =>
                     setDescription(
@@ -612,7 +612,7 @@ export default function ProjectDetails({
                   <select
                     className={inputClass}
                     value={priority}
-                    disabled={!isAdmin}
+                    disabled={!canManageProjectSettings}
                     onChange={(event) =>
                       setPriority(
                         event.target.value as Priority
@@ -633,11 +633,11 @@ export default function ProjectDetails({
               </Field>
 
               <div>
-                <PersianDatePicker label="تاریخ شروع" value={startDate} onChange={setStartDate} disabled={!isAdmin} />
+                <PersianDatePicker label="تاریخ شروع" value={startDate} onChange={setStartDate} disabled={!canManageProjectSettings} />
               </div>
 
               <div>
-                <PersianDatePicker label="تاریخ پایان" value={dueDate} onChange={setDueDate} disabled={!isAdmin} />
+                <PersianDatePicker label="تاریخ پایان" value={dueDate} onChange={setDueDate} disabled={!canManageProjectSettings} />
               </div>
 
               {canEdit && (
@@ -655,7 +655,7 @@ export default function ProjectDetails({
                     <Save size={17} />
                   )}
 
-                  {isAdmin
+                  {canManageProjectSettings
                     ? "ذخیره اطلاعات"
                     : "ثبت وضعیت پروژه"}
                 </button>
@@ -684,7 +684,7 @@ export default function ProjectDetails({
               </summary>
             {canEdit ? (
               <div className="mt-3 grid gap-3">
-                {isAdmin ? (
+                {canManageProjectSettings ? (
                   <UserMultiSelect
                     label="مدیران پروژه"
                     role="MANAGER"
@@ -715,7 +715,7 @@ export default function ProjectDetails({
                   onChange={setEmployees}
                 />
 
-                {isAdmin && (
+                {canManageProjectSettings && (
                   <UserMultiSelect
                     label="ناظران کنترل پروژه"
                     role="CONTROLLER"

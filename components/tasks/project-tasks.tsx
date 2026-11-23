@@ -48,6 +48,7 @@ export type Member = {
     id: string;
     name: string;
     role: Role;
+    companyRole?: "OWNER" | "ADMIN" | "PROJECT_MANAGER" | "EXPERT" | "CONTROLLER" | null;
   };
 };
 
@@ -168,7 +169,7 @@ type Props = {
   projectId: string;
   members: Member[];
   canManage: boolean;
-  actorRole: Role;
+  actorRole?: Role;
   actorId: string;
 };
 
@@ -424,7 +425,6 @@ export default function ProjectTasks({
   projectId,
   members,
   canManage,
-  actorRole,
   actorId,
 }: Props) {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -469,11 +469,20 @@ export default function ProjectTasks({
   const activeTask = tasks.find((task) => task.id === activeTaskId);
 
   const assignees = members.filter(
-    (member) =>
-      (member.role === "MEMBER" && member.user.role === "EMPLOYEE") ||
-      (actorRole === "ADMIN" &&
-        member.role === "MANAGER" &&
-        member.user.role === "MANAGER"),
+    (member) => {
+      if (member.user.companyRole !== undefined) {
+        return (
+          (member.role === "MEMBER" && member.user.companyRole === "EXPERT") ||
+          (member.role === "MANAGER" &&
+            member.user.companyRole === "PROJECT_MANAGER")
+        );
+      }
+
+      return (
+        (member.role === "MEMBER" && member.user.role === "EMPLOYEE") ||
+        (member.role === "MANAGER" && member.user.role === "MANAGER")
+      );
+    },
   );
 
   const loadTasks = useCallback(async () => {
@@ -745,7 +754,7 @@ export default function ProjectTasks({
   }
 
   async function removeTask() {
-    if (!deleteId || busy || actorRole !== "ADMIN") {
+    if (!deleteId || busy || !canManage) {
       return;
     }
 

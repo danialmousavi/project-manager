@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canEditProject } from "@/lib/project-access";
+import { getTaskProjectAccess } from "@/lib/task-access";
 import { isAllowedOrigin } from "@/lib/security/origin";
 
 type Context = {
@@ -65,7 +65,9 @@ export async function PATCH(
     );
   }
 
-  if (!(await canEditProject(actor, id))) {
+  const access = await getTaskProjectAccess(actor, id);
+
+  if (!access?.canChangeStatus) {
     return NextResponse.json(
       { message: "دسترسی به این پروژه مجاز نیست." },
       { status: 403 }
@@ -74,7 +76,7 @@ export async function PATCH(
 
   const body = await request.json().catch(() => null);
 
-  if (actor.role === "MANAGER") {
+  if (!access.canManageSettings) {
     const parsed = statusSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -91,12 +93,6 @@ export async function PATCH(
       where: {
         id,
         archivedAt: null,
-        members: {
-          some: {
-            userId: actor.id,
-            role: "MANAGER",
-          },
-        },
       },
       data: {
         status: parsed.data.status,
@@ -112,13 +108,6 @@ export async function PATCH(
             : "دسترسی مجاز نیست.",
       },
       { status: result.count === 1 ? 200 : 403 }
-    );
-  }
-
-  if (actor.role !== "ADMIN") {
-    return NextResponse.json(
-      { message: "دسترسی غیرمجاز." },
-      { status: 403 }
     );
   }
 

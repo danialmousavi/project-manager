@@ -290,6 +290,17 @@ describe("authorization and input validation through real route handlers", () =>
     const manager = await userFactory(db, "MANAGER");
     const newMember = await userFactory(db);
     const project = await projectFactory(db, admin.id, manager.id);
+    const projectCompany = await db.project.findUniqueOrThrow({
+      where: { id: project.id },
+      select: { companyId: true },
+    });
+    await db.companyMember.create({
+      data: {
+        companyId: projectCompany.companyId,
+        userId: newMember.id,
+        role: "EXPERT",
+      },
+    });
     actor = admin;
 
     expect((await membersRoute.PUT(

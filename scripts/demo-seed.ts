@@ -33,39 +33,72 @@ async function main() {
     await tx.project.deleteMany();
     await tx.companyMember.deleteMany();
     await tx.user.deleteMany();
-    const company = await tx.company.upsert({
-      where: { id: "00000000-0000-4000-8000-000000000000" },
-      update: { name: "سازمان پیش‌فرض", status: "ACTIVE" },
-      create: { id: "00000000-0000-4000-8000-000000000000", name: "سازمان پیش‌فرض" },
-    });
+    await tx.company.deleteMany();
     const admin = await tx.user.create({ data: { name: "مدیر سیستم", email: adminEmail, passwordHash: adminHash, role: "ADMIN" } });
     const people = await Promise.all([
       ["نگار احمدی", "negar@example.com", "MANAGER"], ["امیر رضایی", "amir@example.com", "MANAGER"],
-      ["سارا محمدی", "sara@example.com", "EMPLOYEE"], ["علی کریمی", "ali@example.com", "EMPLOYEE"],
-      ["مریم حسینی", "maryam@example.com", "EMPLOYEE"], ["محمد نادری", "mohammad@example.com", "EMPLOYEE"],
-      ["پریسا کاظمی", "parisa@example.com", "CONTROLLER"], ["کیان مرادی", "kian@example.com", "EMPLOYEE"],
+      ["سارا محمدی", "sara@example.com", "MANAGER"], ["علی کریمی", "ali@example.com", "EMPLOYEE"],
+      ["مریم حسینی", "maryam@example.com", "EMPLOYEE"], ["پریسا کاظمی", "parisa@example.com", "CONTROLLER"],
+      ["محمد نادری", "mohammad@example.com", "MANAGER"], ["کیان مرادی", "kian@example.com", "MANAGER"],
+      ["نیلوفر موسوی", "niloufar@example.com", "MANAGER"], ["رضا کریمی", "reza@example.com", "EMPLOYEE"],
+      ["الهام رضوی", "elham@example.com", "EMPLOYEE"], ["کامران نوری", "kamran@example.com", "CONTROLLER"],
+      ["سمیرا کاظمی", "samira@example.com", "MANAGER"], ["پویا عزیزی", "pooya@example.com", "MANAGER"],
+      ["احسان شریفی", "ehsan@example.com", "MANAGER"], ["لیلا احمدی", "leila@example.com", "EMPLOYEE"],
+      ["حمید خالقی", "hamid@example.com", "EMPLOYEE"], ["فرهاد محسنی", "farhad@example.com", "CONTROLLER"],
     ].map(([name, email, role]) => tx.user.create({ data: { name, email, role: role as "MANAGER" | "EMPLOYEE" | "CONTROLLER", passwordHash: demoHash } })));
+
+    const companySpecs = [
+      {
+        name: "فناوری آریا",
+        ownerIndex: 0,
+        managerIndex: 2,
+        expertIndexes: [3, 4],
+        controllerIndex: 5,
+        members: [[0, "OWNER"], [1, "ADMIN"], [2, "PROJECT_MANAGER"], [3, "EXPERT"], [4, "EXPERT"], [5, "CONTROLLER"]] as const,
+      },
+      {
+        name: "بازرگانی سپهر",
+        ownerIndex: 6,
+        managerIndex: 8,
+        expertIndexes: [9, 10],
+        controllerIndex: 11,
+        members: [[6, "OWNER"], [7, "ADMIN"], [8, "PROJECT_MANAGER"], [9, "EXPERT"], [10, "EXPERT"], [11, "CONTROLLER"]] as const,
+      },
+      {
+        name: "سلامت آفتاب",
+        ownerIndex: 12,
+        managerIndex: 14,
+        expertIndexes: [15, 16],
+        controllerIndex: 17,
+        members: [[12, "OWNER"], [13, "ADMIN"], [14, "PROJECT_MANAGER"], [15, "EXPERT"], [16, "EXPERT"], [17, "CONTROLLER"]] as const,
+      },
+    ];
+
+    const companies = await Promise.all(companySpecs.map((spec) =>
+      tx.company.create({ data: { name: spec.name, status: "ACTIVE" } }),
+    ));
 
     await tx.companyMember.createMany({
       data: [
-        { companyId: company.id, userId: admin.id, role: "OWNER" },
-        ...people.map((person) => ({
-          companyId: company.id,
-          userId: person.id,
-          role: (person.role === "MANAGER"
-            ? "PROJECT_MANAGER"
-            : person.role === "CONTROLLER"
-              ? "CONTROLLER"
-              : "EXPERT") as "PROJECT_MANAGER" | "CONTROLLER" | "EXPERT",
-        })),
+        ...companySpecs.flatMap((spec, companyIndex) =>
+          spec.members.map(([personIndex, role]) => ({
+            companyId: companies[companyIndex].id,
+            userId: people[personIndex].id,
+            role,
+          })),
+        ),
       ],
     });
 
     for (let p = 0; p < projects.length; p++) {
       const spec = projects[p];
-      const manager = people[p % 2];
-      const team = [manager, people[2 + p % 4], people[2 + (p + 1) % 4], people[6], people[7]];
-      const project = await tx.project.create({ data: { name: spec.name, description: spec.description, status: spec.status, priority: spec.priority, startDate: day(spec.start), dueDate: day(spec.due), companyId: company.id, createdById: admin.id, createdAt: day(spec.start - 4), members: { create: team.map((person, i) => ({ userId: person.id, role: i === 0 ? "MANAGER" : i === 3 ? "CONTROLLER" : "MEMBER", joinedAt: day(spec.start - 2) })) } } });
+      const companyIndex = p % companySpecs.length;
+      const companySpec = companySpecs[companyIndex];
+      const manager = people[companySpec.managerIndex];
+      const experts = companySpec.expertIndexes.map((index) => people[index]);
+      const controller = people[companySpec.controllerIndex];
+      const team = [manager, ...experts, controller];
+      const project = await tx.project.create({ data: { name: spec.name, description: spec.description, status: spec.status, priority: spec.priority, startDate: day(spec.start), dueDate: day(spec.due), companyId: companies[companyIndex].id, createdById: people[companySpec.ownerIndex].id, createdAt: day(spec.start - 4), members: { create: team.map((person, i) => ({ userId: person.id, role: i === 0 ? "MANAGER" : i === team.length - 1 ? "CONTROLLER" : "MEMBER", joinedAt: day(spec.start - 2) })) } } });
       const epics = await Promise.all(spec.epics.map((name) => tx.epic.create({ data: { name, description: `مجموعه فعالیت‌های مرتبط با ${name} در پروژه ${spec.name}.`, projectId: project.id, createdById: manager.id } })));
       const finished = spec.status === "COMPLETED";
       const planned = spec.status === "PLANNED";
@@ -80,7 +113,7 @@ async function main() {
       const createdTasks = [];
       for (let i = 0; i < spec.tasks.length; i++) {
         const status = finished ? "DONE" : planned ? "TODO" : (["DONE", "DONE", "IN_PROGRESS", "IN_PROGRESS", "IN_REVIEW", "TODO", "TODO", "TODO"] as const)[i];
-        const task = await tx.task.create({ data: { title: spec.tasks[i], description: `این فعالیت در چارچوب پروژه ${spec.name} انجام می‌شود. خروجی پس از بازبینی تیم برای تحویل آماده خواهد شد.`, acceptanceCriteria: "خروجی بررسی شده، سناریوهای اصلی آزمون شوند و نتیجه در اختیار تیم قرار گیرد.", type: i === 5 ? "BUG" : i % 3 === 0 ? "STORY" : "TASK", storyPoints: [3, 5, 2, 8, 3, 2, 5, 1][i], rank: i * 1000, position: i * 1000, priority: i === 5 ? "HIGH" : i % 3 === 0 ? "HIGH" : "MEDIUM", status, projectId: project.id, sprintId: sprints[i < 2 ? 0 : 1].id, epicId: epics[i % 2].id, milestoneId: milestones[i < 2 ? 0 : 1].id, assigneeId: team[1 + i % 4].id, createdById: manager.id, startDate: day(planned ? 8 + i : -32 + i * 3), dueDate: day(finished ? -35 + i * 2 : planned ? 20 + i * 4 : -3 + i * 3), createdAt: day(spec.start + i) } });
+        const task = await tx.task.create({ data: { title: spec.tasks[i], description: `این فعالیت در چارچوب پروژه ${spec.name} انجام می‌شود. خروجی پس از بازبینی تیم برای تحویل آماده خواهد شد.`, acceptanceCriteria: "خروجی بررسی شده، سناریوهای اصلی آزمون شوند و نتیجه در اختیار تیم قرار گیرد.", type: i === 5 ? "BUG" : i % 3 === 0 ? "STORY" : "TASK", storyPoints: [3, 5, 2, 8, 3, 2, 5, 1][i], rank: i * 1000, position: i * 1000, priority: i === 5 ? "HIGH" : i % 3 === 0 ? "HIGH" : "MEDIUM", status, projectId: project.id, sprintId: sprints[i < 2 ? 0 : 1].id, epicId: epics[i % 2].id, milestoneId: milestones[i < 2 ? 0 : 1].id, assigneeId: experts[i % experts.length].id, createdById: manager.id, startDate: day(planned ? 8 + i : -32 + i * 3), dueDate: day(finished ? -35 + i * 2 : planned ? 20 + i * 4 : -3 + i * 3), createdAt: day(spec.start + i) } });
         createdTasks.push(task);
         if (i < 4) await tx.taskComment.create({ data: { taskId: task.id, authorId: team[(i + 1) % team.length].id, content: ["جزئیات بررسی شد؛ لطفاً نتیجه را در جلسه تیم مرور کنیم.", "نسخه اولیه آماده است و برای بازبینی در اختیار تیم قرار گرفت.", "سناریوهای اصلی بررسی شدند؛ موارد باقی‌مانده در حال پیگیری است.", "با توجه به بازخورد تیم، اصلاحات لازم در این مرحله اعمال می‌شود."][i], createdAt: day(-8 + i) } });
       }

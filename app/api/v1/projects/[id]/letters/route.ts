@@ -20,15 +20,17 @@ export async function GET(_request: NextRequest, context: Context) {
   const { actor, id, access } = await authorize(context);
   if (!actor) return fail("ابتدا وارد حساب شوید.", 401);
   if (!access) return fail("دسترسی به پروژه مجاز نیست.", 403);
+  const canViewAll = access.canViewAllTasks;
   const [letters, members] = await Promise.all([
-    prisma.letter.findMany({ where: { projectId: id, OR: [{ senderId: actor.id }, { recipients: { some: { userId: actor.id } } }] }, orderBy: { createdAt: "desc" }, take: 200, select: { id: true, subject: true, body: true, createdAt: true, replyToId: true, senderId: true, sender: { select: { name: true } }, recipients: { select: { userId: true, readAt: true, user: { select: { name: true } } } } } }),
+    prisma.letter.findMany({ where: { projectId: id, ...(canViewAll ? {} : { OR: [{ senderId: actor.id }, { recipients: { some: { userId: actor.id } } }] }) }, orderBy: { createdAt: "desc" }, take: 200, select: { id: true, subject: true, body: true, createdAt: true, replyToId: true, senderId: true, sender: { select: { name: true } }, recipients: { select: { userId: true, readAt: true, user: { select: { name: true } } } } } }),
     prisma.projectMember.findMany({ where: { projectId: id, userId: { not: actor.id }, user: { isActive: true } }, select: { user: { select: { id: true, name: true } } }, orderBy: { user: { name: "asc" } } }),
   ]);
-  return NextResponse.json({ letters, members: members.map((m) => m.user), actorId: actor.id }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ letters, members: members.map((m) => m.user), actorId: actor.id, canViewAll, canSend: !access.isProjectController }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: NextRequest, context: Context) {
   const { actor, id, access } = await authorize(context);
+  if (access?.isProjectController) return fail("Project controller is read-only.", 403);
   if (!actor) return fail("ابتدا وارد حساب شوید.", 401);
   if (!access) return fail("دسترسی به پروژه مجاز نیست.", 403);
   if (!isAllowedOrigin(request)) return fail("درخواست نامعتبر است.", 403);

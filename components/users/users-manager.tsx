@@ -54,6 +54,7 @@ type UserItem = {
 
 type Props = {
   initialUsers: UserItem[];
+  companies: { id: string; name: string }[];
 };
 
 type UserChanges = {
@@ -82,6 +83,7 @@ const inputClass =
 
 export default function UsersManager({
   initialUsers,
+  companies,
 }: Props) {
   const [users, setUsers] = useState(initialUsers);
 
@@ -107,6 +109,8 @@ export default function UsersManager({
     phone: "",
     password: "",
     role: "EMPLOYEE" as UserRole,
+    companyId: "",
+    companyRole: "EXPERT" as CompanyMemberRole,
   });
 
   const filteredUsers = users.filter((user) => {
@@ -152,7 +156,7 @@ export default function UsersManager({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(form.role === "EMPLOYEE" && !form.companyId ? { ...form, companyRole: undefined } : form),
       });
 
       const data = await response.json();
@@ -179,7 +183,7 @@ export default function UsersManager({
         nationalId: "",
         phone: "",
         password: "",
-        role: "EMPLOYEE",
+        role: "EMPLOYEE", companyId: "", companyRole: "EXPERT",
       });
 
       setShowCreateForm(false);
@@ -423,7 +427,7 @@ export default function UsersManager({
                 />
               </Field>
 
-              <Field label="نقش پایهٔ سامانه">
+              <Field label="نوع حساب">
                 <select
                   className={inputClass}
                   value={form.role}
@@ -435,19 +439,26 @@ export default function UsersManager({
                   }
                 >
                   <option value="EMPLOYEE">
-                    کارشناس عملیاتی
-                  </option>
-                  <option value="MANAGER">
-                    مدیر پروژه
-                  </option>
-                  <option value="CONTROLLER">
-                    ناظر کنترل پروژه
+                    کاربر شرکتی
                   </option>
                   <option value="ADMIN">
                     مدیر اصلی
                   </option>
                 </select>
               </Field>
+              {form.role === "EMPLOYEE" && <>
+                <Field label="شرکت">
+                  <select className={inputClass} value={form.companyId} onChange={(event) => setForm({ ...form, companyId: event.target.value, companyRole: event.target.value ? form.companyRole : "EXPERT" })}>
+                    <option value="">فعلاً بدون شرکت</option>
+                    {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                  </select>
+                </Field>
+                {form.companyId && <Field label="نقش در شرکت">
+                  <select className={inputClass} value={form.companyRole} onChange={(event) => setForm({ ...form, companyRole: event.target.value as CompanyMemberRole })}>
+                    {(Object.keys(companyRoleLabels) as CompanyMemberRole[]).map((role) => <option key={role} value={role}>{companyRoleLabels[role]}</option>)}
+                  </select>
+                </Field>}
+              </>}
             </div>
 
             <p className="mt-4 text-xs leading-6 text-slate-500">
